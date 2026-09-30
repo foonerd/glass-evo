@@ -1,0 +1,13 @@
+[package]
+name = "glass-evo"
+description = "The native face for Volumio players, on the device's own screen."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+face = { path = "../../crates/face" }
+
+[lints]
+workspace = true
