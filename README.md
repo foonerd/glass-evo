@@ -26,7 +26,7 @@ glass-evo is built on Glass's crates rather than beside them: the renderer, the 
 
 ## Status
 
-Scaffold: the workspace, the toolchain pin, the workshop check and CI. No release.
+0.1.0: the first face. Glass's display with a bar of controls over it (previous, play or pause, next, volume) and a clock when the player stands still, released as the component the Glass Manager installs. The switch that puts glass-evo on the screen ships with Glass 0.8.0; until then the kiosk stays as it is on every player.
 
 ## Building
 
