@@ -1,9 +1,10 @@
 //! The face: what glass-evo draws over Glass's display and does with the
-//! touches the theme's controls do not take. This is v0: a bar of controls
-//! at the foot of the picture (previous, play or pause, next, volume down
-//! and up) and a clock when the player stands still on a screen that is
-//! the display's own. Everything else the display does, the theme, the
-//! meters, the artwork, the never-empty screen, it does as before.
+//! touches the theme's controls do not take. Playing shows the theme and
+//! nothing else; a touch brings the bar of controls (previous, play or
+//! pause, next, volume down and up), which leaves by itself; stopped or
+//! paused shows the clock with the bar. Everything else the display does,
+//! the theme, the meters, the artwork, the never-empty screen, it does as
+//! before.
 
 use glass::face::{ui, Command, Frame, PointerKind, TextStyle};
 use glass::{Overlay, View};
@@ -36,6 +37,13 @@ const BUTTONS: [Button; 5] = [
 
 /// How far a volume button moves the volume, in points of a hundred.
 pub const VOLUME_STEP: u32 = 5;
+
+/// How long the bar takes to fade in or out.
+pub const FADE_MS: u64 = 200;
+/// How long the bar stays after the last touch while playing.
+pub const LINGER_MS: u64 = 4000;
+/// How long after playback begins the bar leaves.
+pub const AFTER_PLAY_MS: u64 = 2000;
 
 /// The bar's place on a picture: the foot, a tenth of the height and at
 /// least forty pixels, five buttons of equal width across it.
@@ -99,10 +107,109 @@ pub fn command_for(button: Button, volume: u32) -> Command {
     }
 }
 
-/// The face's state between frames: the commands not yet taken, and the
-/// button a finger is down on.
+/// Whether the bar is on the glass, and how much of it: playing, it is
+/// hidden until a touch and leaves by itself; not playing, it stays.
+/// Times are the display's clock in milliseconds.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Presence {
+    visible: bool,
+    changed_at: u64,
+    leave_at: Option<u64>,
+    playing: bool,
+}
+
+impl Presence {
+    /// As the face starts: the bar there until playback says otherwise.
+    pub fn new() -> Self {
+        Self {
+            visible: true,
+            changed_at: 0,
+            leave_at: None,
+            playing: false,
+        }
+    }
+
+    fn set(&mut self, visible: bool, now: u64) {
+        if self.visible != visible {
+            // A fade in the other direction starts where this one stands.
+            let done = now.saturating_sub(self.changed_at).min(FADE_MS);
+            self.changed_at = now.saturating_sub(FADE_MS - done);
+            self.visible = visible;
+        }
+    }
+
+    /// Every frame: playback beginning sends the bar away after a moment;
+    /// playback ending brings it back; a linger that ran out sends it away.
+    pub fn tick(&mut self, now: u64, playing: bool) {
+        if playing != self.playing {
+            self.playing = playing;
+            if playing {
+                self.leave_at = Some(now + AFTER_PLAY_MS);
+            } else {
+                self.leave_at = None;
+                self.set(true, now);
+            }
+        }
+        if self.playing {
+            if let Some(at) = self.leave_at {
+                if now >= at {
+                    self.leave_at = None;
+                    self.set(false, now);
+                }
+            }
+        }
+    }
+
+    /// A touch on the bar keeps it a while longer.
+    pub fn kept(&mut self, now: u64) {
+        if self.playing {
+            self.leave_at = Some(now + LINGER_MS);
+        }
+    }
+
+    /// A touch on the picture away from the bar: brings the bar when it is
+    /// away, sends it away when it is there and the player plays.
+    pub fn touched(&mut self, now: u64) {
+        if !self.playing {
+            return;
+        }
+        if self.visible {
+            self.leave_at = None;
+            self.set(false, now);
+        } else {
+            self.set(true, now);
+            self.leave_at = Some(now + LINGER_MS);
+        }
+    }
+
+    /// Whether the bar takes touches now.
+    pub fn visible(&self) -> bool {
+        self.visible
+    }
+
+    /// How much of the bar shows, 0 to 255, through its fade.
+    pub fn alpha(&self, now: u64) -> u8 {
+        let since = now.saturating_sub(self.changed_at).min(FADE_MS);
+        let up = (since * 255 / FADE_MS) as u8;
+        if self.visible {
+            up
+        } else {
+            255 - up
+        }
+    }
+}
+
+impl Default for Presence {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// The face's state between frames: the bar's presence, the commands not
+/// yet taken, and the button a finger is down on.
 #[derive(Default)]
 pub struct Face {
+    presence: Presence,
     pending: Vec<Command>,
     pressed: Option<Button>,
 }
@@ -121,10 +228,18 @@ impl Face {
     pub fn pending(&self) -> &[Command] {
         &self.pending
     }
+
+    /// The bar's presence, for a test to look at.
+    pub fn presence(&self) -> &Presence {
+        &self.presence
+    }
 }
 
-const INK: [u8; 4] = [235, 235, 240, 255];
-const INK_DIM: [u8; 4] = [235, 235, 240, 110];
+const INK: [u8; 3] = [235, 235, 240];
+
+fn scaled(a: u8, by: u8) -> u8 {
+    (a as u32 * by as u32 / 255) as u8
+}
 
 /// A filled triangle pointing right (or left), drawn row by row.
 fn triangle(frame: &mut Frame, x: i32, y: i32, w: u32, h: u32, right: bool, rgba: [u8; 4]) {
@@ -145,15 +260,16 @@ fn triangle(frame: &mut Frame, x: i32, y: i32, w: u32, h: u32, right: bool, rgba
 
 /// A button's glyph, drawn with fills: shapes, not fonts, so any theme's
 /// fonts do.
-fn glyph(frame: &mut Frame, button: Button, playing: bool, rect: (i32, i32, u32, u32)) {
+fn glyph(frame: &mut Frame, button: Button, playing: bool, rect: (i32, i32, u32, u32), alpha: u8) {
     let (x, y, w, h) = rect;
     let s = (h * 2 / 5).max(8); // the glyph's size
     let cx = x + w as i32 / 2;
     let cy = y + h as i32 / 2;
     let bar = (s / 5).max(2);
+    let ink = [INK[0], INK[1], INK[2], alpha];
     match button {
         Button::Previous => {
-            ui::fill(frame, cx - s as i32 / 2, cy - s as i32 / 2, bar, s, INK);
+            ui::fill(frame, cx - s as i32 / 2, cy - s as i32 / 2, bar, s, ink);
             triangle(
                 frame,
                 cx - s as i32 / 2 + bar as i32 + 1,
@@ -161,7 +277,7 @@ fn glyph(frame: &mut Frame, button: Button, playing: bool, rect: (i32, i32, u32,
                 s - bar - 1,
                 s,
                 false,
-                INK,
+                ink,
             );
         }
         Button::Toggle => {
@@ -173,9 +289,9 @@ fn glyph(frame: &mut Frame, button: Button, playing: bool, rect: (i32, i32, u32,
                     cy - s as i32 / 2,
                     bar,
                     s,
-                    INK,
+                    ink,
                 );
-                ui::fill(frame, cx + (gap / 2) as i32, cy - s as i32 / 2, bar, s, INK);
+                ui::fill(frame, cx + (gap / 2) as i32, cy - s as i32 / 2, bar, s, ink);
             } else {
                 triangle(
                     frame,
@@ -184,7 +300,7 @@ fn glyph(frame: &mut Frame, button: Button, playing: bool, rect: (i32, i32, u32,
                     s,
                     s,
                     true,
-                    INK,
+                    ink,
                 );
             }
         }
@@ -196,7 +312,7 @@ fn glyph(frame: &mut Frame, button: Button, playing: bool, rect: (i32, i32, u32,
                 s - bar - 1,
                 s,
                 true,
-                INK,
+                ink,
             );
             ui::fill(
                 frame,
@@ -204,15 +320,15 @@ fn glyph(frame: &mut Frame, button: Button, playing: bool, rect: (i32, i32, u32,
                 cy - s as i32 / 2,
                 bar,
                 s,
-                INK,
+                ink,
             );
         }
         Button::VolumeDown => {
-            ui::fill(frame, cx - s as i32 / 2, cy - bar as i32 / 2, s, bar, INK);
+            ui::fill(frame, cx - s as i32 / 2, cy - bar as i32 / 2, s, bar, ink);
         }
         Button::VolumeUp => {
-            ui::fill(frame, cx - s as i32 / 2, cy - bar as i32 / 2, s, bar, INK);
-            ui::fill(frame, cx - bar as i32 / 2, cy - s as i32 / 2, bar, s, INK);
+            ui::fill(frame, cx - s as i32 / 2, cy - bar as i32 / 2, s, bar, ink);
+            ui::fill(frame, cx - bar as i32 / 2, cy - s as i32 / 2, bar, s, ink);
         }
     }
 }
@@ -233,29 +349,50 @@ fn clock_text() -> String {
 
 impl Overlay for Face {
     fn draw(&mut self, frame: &mut Frame, view: &View) -> bool {
-        let bar = Bar::for_picture(view.width, view.height);
-        let status = view.input.metadata.status.as_str();
-        let playing = status == "play";
-        // The bar: frosted dark over the picture, a hairline above it.
-        ui::fill(frame, bar.x, bar.y, bar.w, bar.h, [10, 10, 12, 175]);
-        ui::fill(frame, bar.x, bar.y, bar.w, 1, [255, 255, 255, 36]);
-        for (i, button) in BUTTONS.iter().enumerate() {
-            let rect = bar.button_rect(i);
-            if self.pressed == Some(*button) {
-                ui::fill(frame, rect.0, rect.1, rect.2, rect.3, [255, 255, 255, 40]);
+        let playing = view.input.metadata.status == "play";
+        self.presence.tick(view.now_ms, playing);
+        let alpha = self.presence.alpha(view.now_ms);
+        let mut drawn = false;
+        if alpha > 0 {
+            let bar = Bar::for_picture(view.width, view.height);
+            // The bar: frosted dark over the picture, a hairline above it.
+            ui::fill(
+                frame,
+                bar.x,
+                bar.y,
+                bar.w,
+                bar.h,
+                [10, 10, 12, scaled(175, alpha)],
+            );
+            ui::fill(
+                frame,
+                bar.x,
+                bar.y,
+                bar.w,
+                1,
+                [255, 255, 255, scaled(36, alpha)],
+            );
+            for (i, button) in BUTTONS.iter().enumerate() {
+                let rect = bar.button_rect(i);
+                if self.pressed == Some(*button) {
+                    ui::fill(
+                        frame,
+                        rect.0,
+                        rect.1,
+                        rect.2,
+                        rect.3,
+                        [255, 255, 255, scaled(40, alpha)],
+                    );
+                }
+                glyph(frame, *button, playing, rect, alpha);
             }
-            glyph(frame, *button, playing, rect);
+            drawn = true;
         }
         // The clock: when the player stands still on the display's own screen.
         if view.ours && !playing {
+            let bar = Bar::for_picture(view.width, view.height);
             let size = (view.height / 5).max(24);
-            if let Some(line) = ui::line(
-                view.fonts,
-                TextStyle::Bold,
-                size,
-                [INK[0], INK[1], INK[2]],
-                &clock_text(),
-            ) {
+            if let Some(line) = ui::line(view.fonts, TextStyle::Bold, size, INK, &clock_text()) {
                 let x = (view.width.saturating_sub(line.width) / 2) as i32;
                 let y = (view
                     .height
@@ -270,18 +407,27 @@ impl Overlay for Face {
                     line.height + 12,
                     [10, 10, 12, 140],
                 );
-                ui::blit(frame, &line, x, y, INK_DIM[3].max(200));
+                ui::blit(frame, &line, x, y, 220);
+                drawn = true;
             }
         }
-        true
+        drawn
     }
 
     fn pointer(&mut self, kind: PointerKind, x: i32, y: i32, view: &View) -> bool {
+        let now = view.now_ms;
         let bar = Bar::for_picture(view.width, view.height);
-        let hit = bar.button_at(x, y);
+        let hit = if self.presence.visible() {
+            bar.button_at(x, y)
+        } else {
+            None
+        };
         match kind {
             PointerKind::Down => {
                 self.pressed = hit;
+                if hit.is_some() {
+                    self.presence.kept(now);
+                }
                 hit.is_some()
             }
             PointerKind::Move => hit.is_some() || self.pressed.is_some(),
@@ -290,9 +436,15 @@ impl Overlay for Face {
                 if let (Some(pressed), Some(under)) = (was, hit) {
                     if pressed == under {
                         self.act(pressed, view.input.metadata.volume);
+                        self.presence.kept(now);
                     }
                 }
-                was.is_some() || hit.is_some()
+                if was.is_some() || hit.is_some() {
+                    return true;
+                }
+                // A tap on the picture: the bar comes or goes; the theme sees the tap too.
+                self.presence.touched(now);
+                false
             }
         }
     }
@@ -370,6 +522,48 @@ mod tests {
     }
 
     #[test]
+    fn the_bar_leaves_when_playback_begins_and_comes_back_for_a_touch_while_playing() {
+        let mut p = Presence::new();
+        p.tick(1000, false);
+        assert!(p.visible(), "stopped: the bar stays");
+        assert_eq!(p.alpha(1000), 255);
+        p.tick(2000, true);
+        assert!(p.visible(), "playback began: the bar has a moment yet");
+        p.tick(2000 + AFTER_PLAY_MS, true);
+        assert!(!p.visible(), "then it leaves");
+        assert_eq!(p.alpha(2000 + AFTER_PLAY_MS + FADE_MS), 0, "faded out");
+        p.touched(10_000);
+        assert!(p.visible(), "a touch on the picture brings it");
+        assert_eq!(p.alpha(10_000 + FADE_MS / 2), 127, "half way in");
+        p.tick(10_000 + LINGER_MS - 1, true);
+        assert!(p.visible(), "it lingers");
+        p.kept(10_000 + LINGER_MS - 1);
+        p.tick(10_000 + LINGER_MS + 1, true);
+        assert!(p.visible(), "a touch on the bar keeps it longer");
+        p.tick(10_000 + 2 * LINGER_MS + 1, true);
+        assert!(!p.visible(), "and it leaves again");
+        p.touched(30_000);
+        p.touched(30_500);
+        assert!(!p.visible(), "a second tap on the picture sends it away");
+        p.tick(40_000, false);
+        assert!(p.visible(), "playback ended: the bar is back and stays");
+        p.touched(41_000);
+        assert!(p.visible(), "a tap while stopped changes nothing");
+    }
+
+    #[test]
+    fn a_fade_reversed_half_way_starts_where_it_stands() {
+        let mut p = Presence::new();
+        p.tick(0, true);
+        p.tick(AFTER_PLAY_MS, true); // leaves at AFTER_PLAY_MS
+        let mid = AFTER_PLAY_MS + FADE_MS / 2;
+        assert_eq!(p.alpha(mid), 128, "half way out");
+        p.touched(mid);
+        assert_eq!(p.alpha(mid), 127, "back in, from where it stood");
+        assert_eq!(p.alpha(mid + FADE_MS / 2), 255);
+    }
+
+    #[test]
     fn the_glyphs_and_the_clock_draw_inside_the_frame() {
         let mut frame = Frame {
             blend: Default::default(),
@@ -379,7 +573,7 @@ mod tests {
         };
         let bar = Bar::for_picture(320, 240);
         for (i, b) in BUTTONS.iter().enumerate() {
-            glyph(&mut frame, *b, i % 2 == 0, bar.button_rect(i));
+            glyph(&mut frame, *b, i % 2 == 0, bar.button_rect(i), 255);
         }
         assert!(frame.rgba.iter().any(|&v| v != 0), "something was drawn");
         let text = clock_text();
