@@ -40,8 +40,9 @@ pub const VOLUME_STEP: u32 = 5;
 
 /// How long the bar takes to fade in or out.
 pub const FADE_MS: u64 = 200;
-/// How long the bar stays after the last touch while playing.
-pub const LINGER_MS: u64 = 4000;
+/// How long the bar stays after the last touch while playing: long enough
+/// for a hand reaching out, in a car too.
+pub const LINGER_MS: u64 = 6000;
 /// How long after playback begins the bar leaves.
 pub const AFTER_PLAY_MS: u64 = 2000;
 
@@ -113,17 +114,19 @@ pub fn command_for(button: Button, volume: u32) -> Command {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Presence {
     visible: bool,
-    changed_at: u64,
+    /// When the last fade began; none when the bar is settled.
+    changed_at: Option<u64>,
     leave_at: Option<u64>,
     playing: bool,
 }
 
 impl Presence {
-    /// As the face starts: the bar there until playback says otherwise.
+    /// As the face starts: the bar there, settled, until playback says
+    /// otherwise.
     pub fn new() -> Self {
         Self {
             visible: true,
-            changed_at: 0,
+            changed_at: None,
             leave_at: None,
             playing: false,
         }
@@ -132,8 +135,11 @@ impl Presence {
     fn set(&mut self, visible: bool, now: u64) {
         if self.visible != visible {
             // A fade in the other direction starts where this one stands.
-            let done = now.saturating_sub(self.changed_at).min(FADE_MS);
-            self.changed_at = now.saturating_sub(FADE_MS - done);
+            let done = match self.changed_at {
+                Some(at) => now.saturating_sub(at).min(FADE_MS),
+                None => FADE_MS,
+            };
+            self.changed_at = Some(now.saturating_sub(FADE_MS - done));
             self.visible = visible;
         }
     }
@@ -189,7 +195,10 @@ impl Presence {
 
     /// How much of the bar shows, 0 to 255, through its fade.
     pub fn alpha(&self, now: u64) -> u8 {
-        let since = now.saturating_sub(self.changed_at).min(FADE_MS);
+        let since = match self.changed_at {
+            Some(at) => now.saturating_sub(at).min(FADE_MS),
+            None => FADE_MS,
+        };
         let up = (since * 255 / FADE_MS) as u8;
         if self.visible {
             up
@@ -236,6 +245,14 @@ impl Face {
 }
 
 const INK: [u8; 3] = [235, 235, 240];
+
+/// Whether the face says what it sees: the display's own log level, as the
+/// launcher hands it over, at its finest.
+fn verbose() -> bool {
+    std::env::var("GLASS_LOG")
+        .map(|v| v.contains("verbose"))
+        .unwrap_or(false)
+}
 
 fn scaled(a: u8, by: u8) -> u8 {
     (a as u32 * by as u32 / 255) as u8
@@ -416,6 +433,24 @@ impl Overlay for Face {
 
     fn pointer(&mut self, kind: PointerKind, x: i32, y: i32, view: &View) -> bool {
         let now = view.now_ms;
+        if verbose() {
+            let kind_name = match kind {
+                PointerKind::Down => "down",
+                PointerKind::Move => "move",
+                PointerKind::Up => "up",
+            };
+            println!(
+                "glass: face: {kind_name} at {x},{y}: bar {} alpha {} playing {} status {}",
+                if self.presence.visible() {
+                    "there"
+                } else {
+                    "away"
+                },
+                self.presence.alpha(now),
+                self.presence.playing,
+                view.input.metadata.status
+            );
+        }
         let bar = Bar::for_picture(view.width, view.height);
         let hit = if self.presence.visible() {
             bar.button_at(x, y)
@@ -549,6 +584,73 @@ mod tests {
         assert!(p.visible(), "playback ended: the bar is back and stays");
         p.touched(41_000);
         assert!(p.visible(), "a tap while stopped changes nothing");
+    }
+
+    /// A player's sequence, frame by frame: playing, the bar away after
+    /// two seconds; a tap on the picture passes through and brings the
+    /// bar; a tap on the bar within the linger acts.
+    #[test]
+    fn a_tap_brings_the_bar_and_the_next_tap_on_it_acts() {
+        use glass::face::{Fonts, Input, Metadata};
+        let input = Input {
+            metadata: Metadata {
+                status: "play".to_string(),
+                volume: 50,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let fonts = Fonts::default();
+        let view = |now_ms: u64| View {
+            input: &input,
+            fonts: &fonts,
+            width: 1280,
+            height: 720,
+            now_ms,
+            ours: true,
+        };
+        let mut frame = Frame {
+            blend: Default::default(),
+            width: 1280,
+            height: 720,
+            rgba: vec![0; 1280 * 720 * 4],
+        };
+        let mut face = Face::new();
+        assert!(
+            face.draw(&mut frame, &view(0)),
+            "the bar shows as the face starts"
+        );
+        assert!(
+            face.draw(&mut frame, &view(2000)),
+            "at two seconds the bar begins to leave"
+        );
+        assert!(
+            face.draw(&mut frame, &view(2100)),
+            "half way out it is still drawn"
+        );
+        assert!(
+            !face.draw(&mut frame, &view(8000)),
+            "eight seconds into playback nothing is drawn"
+        );
+        assert!(!face.presence().visible());
+        assert!(
+            !face.pointer(PointerKind::Down, 384, 684, &view(8000)),
+            "a touch on the picture passes through"
+        );
+        assert!(!face.pointer(PointerKind::Up, 384, 684, &view(8050)));
+        assert!(face.presence().visible(), "and brings the bar");
+        assert!(face.commands().is_empty(), "nothing acted");
+        assert!(face.draw(&mut frame, &view(9500)), "the bar is drawn");
+        assert!(
+            face.pointer(PointerKind::Down, 384, 684, &view(9500)),
+            "a touch on the bar is the bar's"
+        );
+        assert!(face.pointer(PointerKind::Up, 384, 684, &view(9550)));
+        let sent = face.commands();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].name, "toggle");
+        face.draw(&mut frame, &view(9600));
+        assert!(face.presence().visible(), "kept by the touch");
     }
 
     #[test]
