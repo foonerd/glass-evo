@@ -1,0 +1,35 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: check, cross builds, the component, the release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install && rustup show active-toolchain
+      - name: Cross compilers and the libraries the host build links against
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu libc6-dev-armhf-cross libc6-dev-arm64-cross libsdl2-dev libasound2-dev
+      - uses: Swatinem/rust-cache@v2
+      - run: scripts/check.sh
+      - run: scripts/ship.sh
+      - run: scripts/package.sh
+      - name: Release notes from the changelog
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          awk -v v="$v" '$0 ~ "^## \\[" v "\\]" {on=1; next} on && /^## \[/ {exit} on' CHANGELOG.md > dist/notes.md
+          [ -s dist/notes.md ] || echo "glass-evo $v" > dist/notes.md
+      - uses: softprops/action-gh-release@v3
+        with:
+          name: glass-evo ${{ github.ref_name }}
+          body_path: dist/notes.md
+          files: dist/glass-evo-*.zip
