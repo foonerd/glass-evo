@@ -57,8 +57,13 @@ pub struct Bar {
 }
 
 impl Bar {
-    pub fn for_picture(width: u32, height: u32) -> Self {
-        let h = (height / 10).max(40).min(height);
+    /// `scale` is the face size the display hands over: 1 as designed,
+    /// more for a hand at arm's length; the bar never takes more than
+    /// a third of the picture.
+    pub fn for_picture(width: u32, height: u32, scale: f32) -> Self {
+        let h = ((height as f32 / 10.0 * scale.max(0.5)).round() as u32)
+            .max(40)
+            .min(height / 3);
         Self {
             x: 0,
             y: height.saturating_sub(h) as i32,
@@ -371,7 +376,7 @@ impl Overlay for Face {
         let alpha = self.presence.alpha(view.now_ms);
         let mut drawn = false;
         if alpha > 0 {
-            let bar = Bar::for_picture(view.width, view.height);
+            let bar = Bar::for_picture(view.width, view.height, view.scale);
             // The bar: frosted dark over the picture, a hairline above it.
             ui::fill(
                 frame,
@@ -407,8 +412,10 @@ impl Overlay for Face {
         }
         // The clock: when the player stands still on the display's own screen.
         if view.ours && !playing {
-            let bar = Bar::for_picture(view.width, view.height);
-            let size = (view.height / 5).max(24);
+            let bar = Bar::for_picture(view.width, view.height, view.scale);
+            let size = ((view.height as f32 / 5.0 * view.scale.max(0.5)).round() as u32)
+                .max(24)
+                .min(view.height / 2);
             if let Some(line) = ui::line(view.fonts, TextStyle::Bold, size, INK, &clock_text()) {
                 let x = (view.width.saturating_sub(line.width) / 2) as i32;
                 let y = (view
@@ -451,7 +458,7 @@ impl Overlay for Face {
                 view.input.metadata.status
             );
         }
-        let bar = Bar::for_picture(view.width, view.height);
+        let bar = Bar::for_picture(view.width, view.height, view.scale);
         let hit = if self.presence.visible() {
             bar.button_at(x, y)
         } else {
@@ -500,7 +507,17 @@ mod tests {
 
     #[test]
     fn the_bar_sits_at_the_foot_and_names_the_button_under_a_point() {
-        let bar = Bar::for_picture(1280, 720);
+        let bar = Bar::for_picture(1280, 720, 1.0);
+        assert_eq!(
+            Bar::for_picture(1280, 720, 2.0).h,
+            144,
+            "car: twice the bar"
+        );
+        assert_eq!(
+            Bar::for_picture(1280, 720, 9.0).h,
+            240,
+            "never more than a third"
+        );
         assert_eq!(
             bar,
             Bar {
@@ -520,7 +537,7 @@ mod tests {
         );
         assert_eq!(bar.button_at(-1, 700), None);
         assert_eq!(
-            Bar::for_picture(320, 240).h,
+            Bar::for_picture(320, 240, 1.0).h,
             40,
             "never thinner than forty pixels"
         );
@@ -608,6 +625,7 @@ mod tests {
             height: 720,
             now_ms,
             ours: true,
+            scale: 1.0,
         };
         let mut frame = Frame {
             blend: Default::default(),
@@ -673,7 +691,7 @@ mod tests {
             height: 240,
             rgba: vec![0; 320 * 240 * 4],
         };
-        let bar = Bar::for_picture(320, 240);
+        let bar = Bar::for_picture(320, 240, 1.0);
         for (i, b) in BUTTONS.iter().enumerate() {
             glyph(&mut frame, *b, i % 2 == 0, bar.button_rect(i), 255);
         }
