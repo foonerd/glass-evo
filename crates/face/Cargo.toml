@@ -9,7 +9,7 @@ publish.workspace = true
 [dependencies]
 # Glass's display, the substrate: the loop, the renderer, the theme engine
 # and the channel. Pinned to a Glass release.
-glass = { git = "https://github.com/foonerd/glass", branch = "main" }
+glass = { git = "https://github.com/foonerd/glass", tag = "v0.7.87" }
 serde_json = "1"
 libc = "0.2"
 
