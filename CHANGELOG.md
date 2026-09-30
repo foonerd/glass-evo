@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.3] - 2026-09-30
+
+A face size. Glass 0.7.89 hands the face a size, normal, large or car, set on the Manager's Screen tab; the bar's height, its glyphs and the clock scale together, the bar never taking more than a third of the picture, so a hand at arm's length or a glance while driving finds them.
+
 ## [0.1.2] - 2026-09-30
 
 The bar lingers six seconds after a touch while playing, long enough for a hand reaching out, in a car too; it starts settled rather than mid-fade; and at the display's finest log level the face says what each touch met, the bar there or away, so a screen can be read from the journal.
