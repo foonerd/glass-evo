@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/face",
+    "bins/glass-evo",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+# One set of lints for every crate; CI denies warnings.
+[workspace.lints.rust]
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+type_complexity = "allow"
+too_many_arguments = "allow"
