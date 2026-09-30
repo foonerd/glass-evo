@@ -16,5 +16,25 @@ jobs:
       - uses: actions/checkout@v7
       - name: Toolchain from rust-toolchain.toml
         run: rustup toolchain install && rustup show active-toolchain
+      - name: System libraries the display links against, through Glass's pane and tap
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libsdl2-dev libasound2-dev
       - uses: Swatinem/rust-cache@v2
       - run: scripts/check.sh
+
+  ship:
+    name: cross builds and the component
+    runs-on: ubuntu-24.04
+    needs: check
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install && rustup show active-toolchain
+      - name: Cross compilers and the libraries the host build links against
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu libc6-dev-armhf-cross libc6-dev-arm64-cross libsdl2-dev libasound2-dev
+      - uses: Swatinem/rust-cache@v2
+      - run: scripts/ship.sh
+      - run: scripts/package.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: glass-evo-component
+          path: dist/glass-evo-*.zip
+          if-no-files-found: error
