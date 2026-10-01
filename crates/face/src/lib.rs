@@ -3,12 +3,16 @@
 //! nothing else; a touch brings the bar of controls (previous, play or
 //! pause, next, volume down and up, more), which leaves by itself; stopped
 //! or paused shows the clock with the bar. More opens a sheet above the
-//! bar with repeat, random and mute; a long press on volume down mutes.
+//! bar with repeat, random and mute; a long press on volume down mutes,
+//! and while the player is muted that button shows it and unmutes.
 //! Everything else the display does, the theme, the meters, the artwork,
 //! the never-empty screen, it does as before.
 
 use glass::face::{ui, Command, Frame, Metadata, PointerKind, TextStyle};
 use glass::{Overlay, View};
+
+pub mod icon;
+use icon::Icon;
 
 /// The workspace version, as Cargo knows it.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -105,10 +109,17 @@ impl Bar {
         Some(BUTTONS[slot.min(BUTTONS.len() - 1)])
     }
 
-    /// A button's rectangle: x, y, width, height.
+    /// A button's rectangle: x, y, width, height. The last one runs to
+    /// the bar's end.
     pub fn button_rect(&self, index: usize) -> (i32, i32, u32, u32) {
         let bw = self.slot_width();
-        (self.x + (index as u32 * bw) as i32, self.y, bw, self.h)
+        let x = index as u32 * bw;
+        let w = if index + 1 == BUTTONS.len() {
+            self.w - x
+        } else {
+            bw
+        };
+        (self.x + x as i32, self.y, w, self.h)
     }
 
     /// The sheet More opens: three tiles the width of a button each,
@@ -163,20 +174,23 @@ fn plain(name: &str) -> Command {
     }
 }
 
-/// The command a button sends, given the volume as the player has it;
-/// none for More, which only opens the sheet.
-pub fn command_for(button: Button, volume: u32) -> Option<Command> {
+/// The command a button sends, given the player's state: the volume
+/// buttons step from the volume as the player has it, and volume down on
+/// a muted player unmutes instead; none for More, which only opens the
+/// sheet.
+pub fn command_for(button: Button, meta: &Metadata) -> Option<Command> {
     match button {
         Button::Previous => Some(plain("previous")),
         Button::Toggle => Some(plain("toggle")),
         Button::Next => Some(plain("next")),
+        Button::VolumeDown if meta.mute => Some(mute_command(true)),
         Button::VolumeDown => Some(Command::with(
             "volume",
-            serde_json::json!(volume.saturating_sub(VOLUME_STEP)),
+            serde_json::json!(meta.volume.saturating_sub(VOLUME_STEP)),
         )),
         Button::VolumeUp => Some(Command::with(
             "volume",
-            serde_json::json!((volume + VOLUME_STEP).min(100)),
+            serde_json::json!((meta.volume + VOLUME_STEP).min(100)),
         )),
         Button::More => None,
     }
@@ -213,6 +227,32 @@ pub fn tile_lit(tile: Tile, meta: &Metadata) -> bool {
         Tile::Repeat => meta.repeat,
         Tile::Random => meta.random,
         Tile::Mute => meta.mute,
+    }
+}
+
+/// The icon a button wears: play or pause as the player stands, and the
+/// muted speaker on volume down while the player is muted.
+pub fn button_icon(button: Button, meta: &Metadata) -> Icon {
+    match button {
+        Button::Previous => Icon::Previous,
+        Button::Toggle if meta.status == "play" => Icon::Pause,
+        Button::Toggle => Icon::Play,
+        Button::Next => Icon::Next,
+        Button::VolumeDown if meta.mute => Icon::Muted,
+        Button::VolumeDown => Icon::Minus,
+        Button::VolumeUp => Icon::Plus,
+        Button::More => Icon::More,
+    }
+}
+
+/// The icon a tile wears, saying how its mode stands in the player.
+pub fn tile_icon(tile: Tile, meta: &Metadata) -> Icon {
+    match tile {
+        Tile::Repeat if meta.repeat && meta.repeat_single => Icon::RepeatOne,
+        Tile::Repeat => Icon::Repeat,
+        Tile::Random => Icon::Shuffle,
+        Tile::Mute if meta.mute => Icon::Muted,
+        Tile::Mute => Icon::Speaker,
     }
 }
 
@@ -324,7 +364,8 @@ impl Default for Presence {
 
 /// The face's state between frames: the bar's presence, whether the sheet
 /// is open, the commands not yet taken, what a finger is down on and
-/// since when, and whether that press already acted as a long one.
+/// since when, whether that press already acted as a long one, whether it
+/// is the press that shuts the sheet, and the icons at the size in use.
 #[derive(Default)]
 pub struct Face {
     presence: Presence,
@@ -334,6 +375,8 @@ pub struct Face {
     pressed_tile: Option<Tile>,
     down_at: u64,
     held: bool,
+    shutting: bool,
+    icons: Option<icon::Set>,
 }
 
 impl Face {
@@ -371,157 +414,16 @@ fn scaled(a: u8, by: u8) -> u8 {
     (a as u32 * by as u32 / 255) as u8
 }
 
-/// A filled triangle pointing right (or left), drawn row by row.
-fn triangle(frame: &mut Frame, x: i32, y: i32, w: u32, h: u32, right: bool, rgba: [u8; 4]) {
-    if w == 0 || h == 0 {
-        return;
-    }
-    let half = h as f32 / 2.0;
-    for row in 0..h {
-        let d = (row as f32 + 0.5 - half).abs() / half; // 0 at the middle, 1 at the ends
-        let span = ((1.0 - d) * w as f32).round() as u32;
-        if span == 0 {
-            continue;
-        }
-        let sx = if right { x } else { x + (w - span) as i32 };
-        ui::fill(frame, sx, y + row as i32, span, 1, rgba);
-    }
-}
-
-/// A straight stroke between two points, drawn as squares along it.
-fn stroke(frame: &mut Frame, from: (i32, i32), to: (i32, i32), thick: u32, rgba: [u8; 4]) {
-    let steps = (to.0 - from.0).abs().max((to.1 - from.1).abs()).max(1);
-    let half = thick as i32 / 2;
-    for i in 0..=steps {
-        let x = from.0 + (to.0 - from.0) * i / steps;
-        let y = from.1 + (to.1 - from.1) * i / steps;
-        ui::fill(frame, x - half, y - half, thick, thick, rgba);
-    }
-}
-
-/// The glyph's box inside a rectangle: its size, its centre, its stroke.
-fn glyph_box(rect: (i32, i32, u32, u32)) -> (i32, i32, i32, u32) {
+/// An icon in the middle of a rectangle.
+fn place(frame: &mut Frame, icon: &Frame, rect: (i32, i32, u32, u32), alpha: u8) {
     let (x, y, w, h) = rect;
-    let s = (h * 2 / 5).max(8);
-    (x + w as i32 / 2, y + h as i32 / 2, s as i32, (s / 5).max(2))
-}
-
-/// A button's glyph, drawn with fills: shapes, not fonts, so any theme's
-/// fonts do. Volume down wears a slash while the player is muted.
-fn glyph(
-    frame: &mut Frame,
-    button: Button,
-    playing: bool,
-    muted: bool,
-    rect: (i32, i32, u32, u32),
-    alpha: u8,
-) {
-    let (cx, cy, s, bar) = glyph_box(rect);
-    let ink = [INK[0], INK[1], INK[2], alpha];
-    let (left, top) = (cx - s / 2, cy - s / 2);
-    match button {
-        Button::Previous => {
-            ui::fill(frame, left, top, bar, s as u32, ink);
-            triangle(
-                frame,
-                left + bar as i32 + 1,
-                top,
-                s as u32 - bar - 1,
-                s as u32,
-                false,
-                ink,
-            );
-        }
-        Button::Toggle => {
-            if playing {
-                let gap = bar as i32;
-                ui::fill(frame, cx - bar as i32 - gap / 2, top, bar, s as u32, ink);
-                ui::fill(frame, cx + gap / 2, top, bar, s as u32, ink);
-            } else {
-                triangle(frame, left + 2, top, s as u32, s as u32, true, ink);
-            }
-        }
-        Button::Next => {
-            triangle(frame, left, top, s as u32 - bar - 1, s as u32, true, ink);
-            ui::fill(frame, cx + s / 2 - bar as i32, top, bar, s as u32, ink);
-        }
-        Button::VolumeDown => {
-            ui::fill(frame, left, cy - bar as i32 / 2, s as u32, bar, ink);
-            if muted {
-                stroke(frame, (left, top + s), (left + s, top), bar, ink);
-            }
-        }
-        Button::VolumeUp => {
-            ui::fill(frame, left, cy - bar as i32 / 2, s as u32, bar, ink);
-            ui::fill(frame, cx - bar as i32 / 2, top, bar, s as u32, ink);
-        }
-        Button::More => {
-            let dot = (bar * 3 / 2).max(3);
-            for i in -1..=1 {
-                ui::fill(
-                    frame,
-                    cx + i * (s / 2 - dot as i32 / 2) - dot as i32 / 2,
-                    cy - dot as i32 / 2,
-                    dot,
-                    dot,
-                    ink,
-                );
-            }
-        }
-    }
-}
-
-/// A tile's glyph: a loop for repeat (with a stem inside for single), two
-/// crossing strokes for random, a speaker for mute, struck through when
-/// muted.
-fn tile_glyph(
-    frame: &mut Frame,
-    tile: Tile,
-    meta: &Metadata,
-    rect: (i32, i32, u32, u32),
-    alpha: u8,
-) {
-    let (cx, cy, s, bar) = glyph_box(rect);
-    let ink = [INK[0], INK[1], INK[2], alpha];
-    let (left, top) = (cx - s / 2, cy - s / 2);
-    match tile {
-        Tile::Repeat => {
-            ui::fill(frame, left, top, s as u32, bar, ink);
-            ui::fill(frame, left, top + s - bar as i32, s as u32, bar, ink);
-            ui::fill(frame, left, top, bar, s as u32, ink);
-            ui::fill(frame, left + s - bar as i32, top, bar, s as u32, ink);
-            if meta.repeat && meta.repeat_single {
-                ui::fill(
-                    frame,
-                    cx - bar as i32 / 2,
-                    top + bar as i32 * 2,
-                    bar,
-                    (s - bar as i32 * 4).max(2) as u32,
-                    ink,
-                );
-            }
-        }
-        Tile::Random => {
-            stroke(frame, (left, top), (left + s, top + s), bar, ink);
-            stroke(frame, (left, top + s), (left + s, top), bar, ink);
-        }
-        Tile::Mute => {
-            let body = (s / 3).max(3);
-            ui::fill(frame, left, cy - body / 2, body as u32, body as u32, ink);
-            triangle(
-                frame,
-                left + body / 2,
-                top,
-                (s - body) as u32,
-                s as u32,
-                false,
-                ink,
-            );
-            if meta.mute {
-                stroke(frame, (left, top + s), (left + s, top), bar, ink);
-            }
-        }
-    }
+    ui::blit(
+        frame,
+        icon,
+        x + (w as i32 - icon.width as i32) / 2,
+        y + (h as i32 - icon.height as i32) / 2,
+        alpha,
+    );
 }
 
 /// The wall clock, hours and minutes, in the player's own zone.
@@ -561,6 +463,12 @@ impl Overlay for Face {
         let bar = Bar::for_picture(view.width, view.height, view.scale);
         let mut drawn = false;
         if alpha > 0 {
+            // The icons at half the bar's height, rastered when that changes.
+            let size = (bar.h / 2).max(16);
+            let icons = match self.icons.take() {
+                Some(set) if set.size() == size => set,
+                _ => icon::Set::new(size, INK),
+            };
             // The bar: frosted dark over the picture, a hairline above it.
             ui::fill(
                 frame,
@@ -592,7 +500,7 @@ impl Overlay for Face {
                         [255, 255, 255, scaled(40, alpha)],
                     );
                 }
-                glyph(frame, *button, playing, meta.mute, rect, alpha);
+                place(frame, icons.get(button_icon(*button, meta)), rect, alpha);
             }
             if self.sheet_open {
                 let sheet = bar.sheet();
@@ -625,15 +533,16 @@ impl Overlay for Face {
                             [255, 255, 255, scaled(46, alpha)],
                         );
                     }
-                    tile_glyph(
+                    // A mode that is off is there, and quieter.
+                    place(
                         frame,
-                        *tile,
-                        meta,
+                        icons.get(tile_icon(*tile, meta)),
                         rect,
-                        if lit { alpha } else { scaled(150, alpha) },
+                        if lit { alpha } else { scaled(140, alpha) },
                     );
                 }
             }
+            self.icons = Some(icons);
             drawn = true;
         }
         // The clock: when the player stands still on the display's own screen.
@@ -698,7 +607,10 @@ impl Overlay for Face {
                 self.pressed_tile = on_sheet;
                 self.down_at = now;
                 self.held = false;
-                if on_bar.is_some() || on_sheet.is_some() {
+                // A press beside an open sheet is the one that shuts it, and
+                // is the face's own: the theme does not act on it.
+                self.shutting = self.sheet_open && on_bar.is_none() && on_sheet.is_none();
+                if on_bar.is_some() || on_sheet.is_some() || self.shutting {
                     self.presence.kept(now);
                     return true;
                 }
@@ -709,10 +621,16 @@ impl Overlay for Face {
                     || on_sheet.is_some()
                     || self.pressed.is_some()
                     || self.pressed_tile.is_some()
+                    || self.shutting
             }
             PointerKind::Up => {
                 let was_tile = self.pressed_tile.take();
                 let was = self.pressed.take();
+                if std::mem::take(&mut self.shutting) {
+                    self.sheet_open = false;
+                    self.presence.kept(now);
+                    return true;
+                }
                 if let Some(tile) = was_tile {
                     if on_sheet == Some(tile) {
                         self.pending.push(tile_command(tile, meta));
@@ -725,7 +643,7 @@ impl Overlay for Face {
                         if button == Button::More {
                             self.sheet_open = !self.sheet_open;
                         } else if !(button == Button::VolumeDown && self.held) {
-                            if let Some(command) = command_for(button, meta.volume) {
+                            if let Some(command) = command_for(button, meta) {
                                 self.pending.push(command);
                             }
                         }
@@ -737,14 +655,9 @@ impl Overlay for Face {
                 if on_bar.is_some() || on_sheet.is_some() {
                     return true;
                 }
-                // A tap on the picture: the sheet shuts if it is open, else
-                // the bar comes or goes; the theme sees the tap too.
-                if self.sheet_open {
-                    self.sheet_open = false;
-                    self.presence.kept(now);
-                } else {
-                    self.presence.touched(now);
-                }
+                // A tap on the picture: the bar comes or goes; the theme
+                // sees the tap too.
+                self.presence.touched(now);
                 false
             }
         }
@@ -837,6 +750,7 @@ mod tests {
             "never thinner than forty pixels"
         );
         assert_eq!(bar.button_rect(2), (426, 648, 213, 72));
+        assert_eq!(bar.button_rect(5), (1065, 648, 215, 72), "to the bar's end");
     }
 
     #[test]
@@ -867,25 +781,46 @@ mod tests {
     #[test]
     fn the_buttons_and_tiles_send_the_players_own_commands() {
         let pair = |c: Command| (c.name, c.value);
+        let at = |volume: u32| Metadata {
+            volume,
+            ..Default::default()
+        };
         assert_eq!(
-            pair(command_for(Button::Toggle, 30).unwrap()),
+            pair(command_for(Button::Toggle, &at(30)).unwrap()),
             ("toggle".to_string(), None)
         );
         assert_eq!(
-            pair(command_for(Button::VolumeDown, 3).unwrap()),
+            pair(command_for(Button::VolumeDown, &at(3)).unwrap()),
             ("volume".to_string(), Some(serde_json::json!(0))),
             "never below zero"
         );
         assert_eq!(
-            pair(command_for(Button::VolumeUp, 98).unwrap()),
+            pair(command_for(Button::VolumeUp, &at(98)).unwrap()),
             ("volume".to_string(), Some(serde_json::json!(100))),
             "never above a hundred"
         );
-        assert_eq!(command_for(Button::Previous, 50).unwrap().name, "previous");
-        assert_eq!(command_for(Button::Next, 50).unwrap().name, "next");
+        assert_eq!(
+            command_for(Button::Previous, &at(50)).unwrap().name,
+            "previous"
+        );
+        assert_eq!(command_for(Button::Next, &at(50)).unwrap().name, "next");
         assert!(
-            command_for(Button::More, 50).is_none(),
+            command_for(Button::More, &at(50)).is_none(),
             "More only opens the sheet"
+        );
+        let muted = Metadata {
+            volume: 50,
+            mute: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            pair(command_for(Button::VolumeDown, &muted).unwrap()),
+            ("volume".to_string(), Some(serde_json::json!("unmute"))),
+            "volume down on a muted player unmutes and steps nothing"
+        );
+        assert_eq!(
+            pair(command_for(Button::VolumeUp, &muted).unwrap()),
+            ("volume".to_string(), Some(serde_json::json!(55)))
         );
         let mut meta = Metadata::default();
         assert_eq!(
@@ -1038,11 +973,38 @@ mod tests {
         assert!(face.pointer(PointerKind::Down, 1270, 600, &view(&input, &fonts, 3000)));
         assert!(face.pointer(PointerKind::Up, 700, 600, &view(&input, &fonts, 3050)));
         assert!(face.commands().is_empty());
-        // A tap on the picture shuts the sheet and passes through.
-        assert!(!face.pointer(PointerKind::Down, 300, 300, &view(&input, &fonts, 4000)));
-        assert!(!face.pointer(PointerKind::Up, 300, 300, &view(&input, &fonts, 4050)));
+        // A tap beside the sheet shuts it and is the face's own: the theme
+        // under it does not act.
+        assert!(face.pointer(PointerKind::Down, 300, 300, &view(&input, &fonts, 4000)));
+        assert!(face.pointer(PointerKind::Move, 302, 300, &view(&input, &fonts, 4020)));
+        assert!(face.pointer(PointerKind::Up, 302, 300, &view(&input, &fonts, 4050)));
         assert!(!face.sheet_open());
         assert!(face.presence().visible(), "the bar stays");
+        // The next tap there is the theme's again.
+        assert!(!face.pointer(PointerKind::Down, 300, 300, &view(&input, &fonts, 5000)));
+        assert!(!face.pointer(PointerKind::Up, 300, 300, &view(&input, &fonts, 5050)));
+    }
+
+    #[test]
+    fn the_sheet_leaves_with_the_bar() {
+        let input = input("play");
+        let fonts = Fonts::default();
+        let mut frame = blank();
+        let mut face = Face::new();
+        face.draw(&mut frame, &view(&input, &fonts, 0));
+        assert!(face.pointer(PointerKind::Down, 1200, 700, &view(&input, &fonts, 500)));
+        assert!(face.pointer(PointerKind::Up, 1200, 700, &view(&input, &fonts, 550)));
+        assert!(face.sheet_open());
+        face.draw(&mut frame, &view(&input, &fonts, 550 + LINGER_MS - 1));
+        assert!(face.sheet_open(), "open while the bar lingers");
+        face.draw(&mut frame, &view(&input, &fonts, 550 + LINGER_MS));
+        face.draw(&mut frame, &view(&input, &fonts, 550 + LINGER_MS + FADE_MS));
+        assert!(!face.presence().visible());
+        assert!(!face.sheet_open(), "gone with the bar");
+        // The bar brought back comes without the sheet.
+        face.pointer(PointerKind::Down, 300, 300, &view(&input, &fonts, 20_000));
+        face.pointer(PointerKind::Up, 300, 300, &view(&input, &fonts, 20_050));
+        assert!(face.presence().visible() && !face.sheet_open());
     }
 
     #[test]
@@ -1072,31 +1034,72 @@ mod tests {
             (sent[0].name.as_str(), sent[0].value.clone()),
             ("volume", Some(serde_json::json!(45)))
         );
+        // On a muted player the rest unmutes, and so does a short press.
+        let mut muted = input.clone();
+        muted.metadata.mute = true;
+        assert!(face.pointer(PointerKind::Down, 700, 700, &view(&muted, &fonts, 5000)));
+        face.draw(&mut frame, &view(&muted, &fonts, 5000 + HOLD_MS));
+        assert!(face.pointer(PointerKind::Up, 700, 700, &view(&muted, &fonts, 5900)));
+        assert!(face.pointer(PointerKind::Down, 700, 700, &view(&muted, &fonts, 7000)));
+        assert!(face.pointer(PointerKind::Up, 700, 700, &view(&muted, &fonts, 7100)));
+        let sent = face.commands();
+        assert_eq!(sent.len(), 2);
+        for command in sent {
+            assert_eq!(
+                (command.name.as_str(), command.value),
+                ("volume", Some(serde_json::json!("unmute")))
+            );
+        }
     }
 
     #[test]
-    fn the_glyphs_and_the_clock_draw_inside_the_frame() {
-        let mut frame = Frame {
-            blend: Default::default(),
-            width: 320,
-            height: 240,
-            rgba: vec![0; 320 * 240 * 4],
-        };
-        let bar = Bar::for_picture(320, 240, 1.0);
-        let meta = Metadata {
-            repeat: true,
-            repeat_single: true,
-            mute: true,
-            ..Default::default()
-        };
-        for (i, b) in BUTTONS.iter().enumerate() {
-            glyph(&mut frame, *b, i % 2 == 0, true, bar.button_rect(i), 255);
-        }
-        let sheet = bar.sheet();
-        for (i, t) in TILES.iter().enumerate() {
-            tile_glyph(&mut frame, *t, &meta, sheet.tile_rect(i), 255);
-        }
-        assert!(frame.rgba.iter().any(|&v| v != 0), "something was drawn");
+    fn the_buttons_and_tiles_wear_the_players_state() {
+        let mut meta = Metadata::default();
+        assert_eq!(button_icon(Button::Toggle, &meta), Icon::Play);
+        assert_eq!(button_icon(Button::VolumeDown, &meta), Icon::Minus);
+        assert_eq!(tile_icon(Tile::Repeat, &meta), Icon::Repeat);
+        assert_eq!(tile_icon(Tile::Random, &meta), Icon::Shuffle);
+        assert_eq!(tile_icon(Tile::Mute, &meta), Icon::Speaker);
+        meta.status = "play".to_string();
+        meta.mute = true;
+        meta.repeat = true;
+        assert_eq!(button_icon(Button::Toggle, &meta), Icon::Pause);
+        assert_eq!(button_icon(Button::VolumeDown, &meta), Icon::Muted);
+        assert_eq!(button_icon(Button::VolumeUp, &meta), Icon::Plus);
+        assert_eq!(tile_icon(Tile::Repeat, &meta), Icon::Repeat);
+        assert_eq!(tile_icon(Tile::Mute, &meta), Icon::Muted);
+        meta.repeat_single = true;
+        assert_eq!(tile_icon(Tile::Repeat, &meta), Icon::RepeatOne);
+    }
+
+    #[test]
+    fn the_bar_and_the_sheet_draw_and_the_icons_are_rastered_once_a_size() {
+        let mut input = input("pause");
+        input.metadata.mute = true;
+        let fonts = Fonts::default();
+        let mut frame = blank();
+        let mut face = Face::new();
+        face.sheet_open = true;
+        assert!(face.draw(&mut frame, &view(&input, &fonts, 0)));
+        let pixel = |frame: &Frame, x: usize, y: usize| frame.rgba[(y * 1280 + x) * 4 + 3];
+        assert_ne!(pixel(&frame, 100, 700), 0, "the bar");
+        assert_ne!(pixel(&frame, 960, 600), 0, "the sheet above its right end");
+        assert_eq!(pixel(&frame, 300, 600), 0, "nothing beside the sheet");
+        assert_eq!(face.icons.as_ref().map(|set| set.size()), Some(36));
+        let first = face
+            .icons
+            .as_ref()
+            .map(|set| set.get(Icon::Play).rgba.as_ptr());
+        face.draw(&mut frame, &view(&input, &fonts, 16));
+        let again = face
+            .icons
+            .as_ref()
+            .map(|set| set.get(Icon::Play).rgba.as_ptr());
+        assert_eq!(first, again, "the same raster on the next frame");
+        let mut car = view(&input, &fonts, 32);
+        car.scale = 2.0;
+        face.draw(&mut frame, &car);
+        assert_eq!(face.icons.as_ref().map(|set| set.size()), Some(72));
         let text = clock_text();
         assert!(
             text.is_empty() || text.len() == 5,

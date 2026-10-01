@@ -4,7 +4,9 @@ All notable changes to glass-evo are recorded here. The format follows Keep a Ch
 
 ## [0.1.4] - 2026-10-01
 
-More, and mute. The bar gains a sixth button at its right end, More, which opens a sheet above it with three tiles: repeat, walking off, all, single and off again; random; and mute. A tile is lit while its mode is on in the player, so the sheet says how the player stands as well as changing it. The sheet stays open for the next tile, shuts on a tap on the picture, and leaves with the bar. A finger resting on volume down for six tenths of a second mutes and unmutes without stepping the volume, and the button wears a slash while the player is muted. Sheet, tiles and glyphs scale with the face size as the bar does.
+More, and mute. The bar gains a sixth button at its right end, More, which opens a sheet above it with three tiles: repeat, walking off, all, single and off again; random; and mute. A tile is lit while its mode is on in the player, and repeat shows a one inside its arrows on single, so the sheet says how the player stands as well as changing it. The sheet stays open for the next tile, shuts on a tap beside it, which the theme under it does not act on, and leaves with the bar. A finger resting on volume down for six tenths of a second mutes and unmutes without stepping the volume; while the player is muted that button shows a muted speaker in place of its minus, and a tap on it unmutes.
+
+The icons are drawn anew: each a shape rastered once for the size in use, with smooth edges at every face size, and blitted from then on; no fonts and no files. Sheet, tiles and icons scale with the face size as the bar does.
 
 ## [0.1.3] - 2026-09-30
 
