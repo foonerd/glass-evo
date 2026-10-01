@@ -63,6 +63,9 @@ pub struct Theme {
     /// `clock.glass`: how much of the glass behind the clock and the date
     /// shows, 0 for no glass at all.
     pub clock_glass: f32,
+    /// `clock.tint`: the colour of the clock's glass when it has its own;
+    /// `tint` for the theme's.
+    pub clock_tint: Option<[u8; 3]>,
     /// `date.show`: whether the date stands with the clock.
     pub date_show: bool,
     /// `date.format`: the date as a pattern, `%A %-d %B` for Thursday 1
@@ -76,6 +79,8 @@ pub struct Theme {
     /// `date.glass`: how much of the glass behind a date at the top of the
     /// screen shows, 0 for none; with the clock, the date is on the clock's.
     pub date_glass: f32,
+    /// `date.tint`: the colour of that glass when it has its own.
+    pub date_tint: Option<[u8; 3]>,
     /// `measure.bar`, `measure.clock`: heights in units of a 720th of the
     /// picture's height.
     pub measure_bar: f32,
@@ -102,12 +107,14 @@ impl Default for Theme {
             clock_ink: None,
             clock_opacity: 0.86,
             clock_glass: 0.55,
+            clock_tint: None,
             date_show: false,
             date_format: "%A %-d %B".to_string(),
             date_place: DatePlace::Top,
             date_ink: None,
             date_opacity: 0.86,
             date_glass: 0.55,
+            date_tint: None,
             measure_bar: 72.0,
             measure_clock: 144.0,
             measure_date: 40.0,
@@ -255,6 +262,20 @@ impl Theme {
                         .filter(|n| n.is_finite())
                         .map(|n| n.clamp(0.0, 1.0))
                         .unwrap_or(self.clock_glass)
+                }
+                "clock.tint" => {
+                    self.clock_tint = if v.eq_ignore_ascii_case("tint") {
+                        None
+                    } else {
+                        colour(v).or(self.clock_tint)
+                    }
+                }
+                "date.tint" => {
+                    self.date_tint = if v.eq_ignore_ascii_case("tint") {
+                        None
+                    } else {
+                        colour(v).or(self.date_tint)
+                    }
                 }
                 "clock.show" => self.clock_show = switch(v).unwrap_or(self.clock_show),
                 "clock.format" => {
@@ -459,19 +480,21 @@ mod tests {
             "clock.ink",
             "clock.opacity",
             "clock.glass",
+            "clock.tint",
             "date.show",
             "date.format",
             "date.place",
             "date.ink",
             "date.opacity",
             "date.glass",
+            "date.tint",
             "measure.date",
             "measure.bar",
             "measure.clock",
         ] {
             assert!(written.contains_key(key), "the example documents {key}");
         }
-        assert_eq!(written.len(), 24, "and nothing the face does not read");
+        assert_eq!(written.len(), 26, "and nothing the face does not read");
     }
 
     #[test]
@@ -527,6 +550,25 @@ mod tests {
         );
         theme.apply(&settings(&[("clock.show", "Off"), ("date.show", "0")]));
         assert!(!theme.clock_show && !theme.date_show);
+        // The clock's glass and the date's each take a colour of their own, or the theme's tint.
+        assert_eq!((theme.clock_tint, theme.date_tint), (None, None));
+        theme.apply(&settings(&[
+            ("clock.tint", "#102030"),
+            ("date.tint", "#302010"),
+        ]));
+        assert_eq!(
+            (theme.clock_tint, theme.date_tint),
+            (Some([16, 32, 48]), Some([48, 32, 16]))
+        );
+        theme.apply(&settings(&[
+            ("clock.tint", "nonsense"),
+            ("date.tint", "Tint"),
+        ]));
+        assert_eq!(
+            (theme.clock_tint, theme.date_tint),
+            (Some([16, 32, 48]), None),
+            "what cannot be read changes nothing; tint is the theme's again"
+        );
         assert_eq!(pattern(&"%H".repeat(30)), None, "a pattern is short");
         assert_eq!(pattern("%H\n%M"), None, "and of printing characters");
         assert_eq!(switch(" TRUE "), Some(true));

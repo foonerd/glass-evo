@@ -46,6 +46,8 @@ ink = ink
 opacity = 0.86
 # How much of the glass behind the clock and the date shows; 0 for no glass.
 glass = 0.55
+# That glass's colour: "tint" for the theme's tint, or a colour of its own.
+tint = tint
 
 [date]
 # The date when nothing plays: on or off. Its place: "top" of the screen,
@@ -59,6 +61,7 @@ ink = ink
 opacity = 0.86
 # The glass behind a date at the top of the screen; 0 for no glass.
 glass = 0.55
+tint = tint
 
 [measure]
 # Heights in units of a 720th of the picture's height; the face size

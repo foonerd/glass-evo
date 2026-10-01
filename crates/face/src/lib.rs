@@ -752,13 +752,15 @@ struct Glass<'a> {
 }
 
 impl Glass<'_> {
-    /// A glass behind words, with room about them; none at no opacity.
+    /// A glass behind words, with room about them, in the look's tint or a
+    /// colour of its own; none at no opacity.
     fn behind(
         &mut self,
         frame: &mut Frame,
         rect: (i32, i32, u32, u32),
         pad: (u32, u32),
         opacity: f32,
+        own: Option<[u8; 3]>,
     ) {
         if opacity <= 0.0 {
             return;
@@ -772,7 +774,7 @@ impl Glass<'_> {
         if let Some(frost) = self.frost.as_deref_mut() {
             frost.apply(frame, x, y, w, h, 255);
         }
-        let t = self.look.tint;
+        let t = own.unwrap_or(self.look.tint);
         ui::fill(frame, x, y, w, h, [t[0], t[1], t[2], share(opacity, 255)]);
         ui::fill(
             frame,
@@ -939,11 +941,17 @@ impl ClockFace {
             theme.date_place,
         );
         if let Some((x, y, w, h)) = layout.top {
-            glass.behind(frame, (x, y, w, h), pad, theme.date_glass);
+            glass.behind(frame, (x, y, w, h), pad, theme.date_glass, theme.date_tint);
             self.date.place(frame, x, y, w, theme.date_opacity);
         }
         if let Some((x, y, w, h)) = layout.middle {
-            glass.behind(frame, (x, y, w, h), pad, theme.clock_glass);
+            glass.behind(
+                frame,
+                (x, y, w, h),
+                pad,
+                theme.clock_glass,
+                theme.clock_tint,
+            );
             if let Some(at) = layout.clock_y {
                 self.clock.place(frame, x, at, w, theme.clock_opacity);
             }
