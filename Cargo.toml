@@ -6,10 +6,16 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.8"
+version = "0.1.9"
 edition = "2021"
 license = "MIT"
 publish = false
+
+# The least Glass plugin this glass-evo works with. The component's
+# manifest carries it, and the Glass Manager installs the component only
+# on a Glass that is at least this.
+[workspace.metadata.glass]
+plugin = "0.7.97"
 
 # One set of lints for every crate; CI denies warnings.
 [workspace.lints.rust]
