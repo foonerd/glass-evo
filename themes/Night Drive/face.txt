@@ -1,0 +1,25 @@
+# A look for glass-evo: large and high in contrast, for a glance while
+# driving in the dark.
+[theme]
+name = Night Drive
+description = Large, high contrast
+
+[colours]
+tint = #000000
+ink = #ffffff
+
+[glass]
+bar = 0.95
+sheet = 0.95
+frost = off
+
+[clock]
+glass = 0.9
+
+[date]
+glass = 0.9
+
+[measure]
+bar = 100
+clock = 180
+date = 52

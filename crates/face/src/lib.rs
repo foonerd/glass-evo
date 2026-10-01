@@ -410,8 +410,8 @@ struct Tokens {
     frosted: bool,
 }
 
-/// Where face themes are kept, as the launcher says, and a theme's text by
-/// its folder's name; a name that is not one folder's is no theme.
+/// A theme's text by its folder's name in one of the folders face themes
+/// are kept in; a name that is not one folder's is no theme.
 fn theme_file(base: &Path, name: &str) -> Option<PathBuf> {
     let name = name.trim();
     if name.is_empty() || name.starts_with('.') || name.contains(['/', '\\']) {
@@ -420,10 +420,21 @@ fn theme_file(base: &Path, name: &str) -> Option<PathBuf> {
     Some(base.join(name).join("face.txt"))
 }
 
+/// The folders face themes are kept in, as the launcher names them, the
+/// user's before the ones glass-evo ships: `GLASS_FACES`, folders parted
+/// by a colon. A theme is the first of its name found.
+fn theme_text(folders: &str, name: &str) -> Option<String> {
+    folders
+        .split(':')
+        .filter(|folder| !folder.is_empty())
+        .filter_map(|folder| theme_file(Path::new(folder), name))
+        .find_map(|file| std::fs::read_to_string(file).ok())
+}
+
 fn tokens_for(view: &View) -> Tokens {
     let text = view.settings.get("theme").and_then(|name| {
-        let base = std::env::var_os("GLASS_FACES")?;
-        std::fs::read_to_string(theme_file(Path::new(&base), name)?).ok()
+        let folders = std::env::var("GLASS_FACES").ok()?;
+        theme_text(&folders, name)
     });
     let theme = Theme::resolve(text.as_deref(), view.settings);
     let frosted = theme.frosted(view.settings);
@@ -2000,5 +2011,63 @@ mod tests {
             }
         );
         assert_eq!(lay(None, None, DatePlace::Below), IdleLayout::default());
+    }
+
+    #[test]
+    fn a_theme_is_the_first_of_its_name_in_the_folders_named() {
+        let shipped = concat!(env!("CARGO_MANIFEST_DIR"), "/../../themes");
+        let folders = format!("/nonexistent/faces:{shipped}");
+        let text = theme_text(&folders, "Warm").expect("found in the second folder");
+        assert!(text.contains("name = Warm"));
+        assert_eq!(theme_text(&folders, "No Such Look"), None);
+        assert_eq!(
+            theme_text(&folders, "../themes/Warm"),
+            None,
+            "a name is one folder's"
+        );
+        assert_eq!(theme_text("", "Warm"), None);
+        // The first folder wins: the user's theme of a name stands before the shipped one.
+        let both = format!("{shipped}:/nonexistent/faces");
+        assert_eq!(theme_text(&both, "Warm"), Some(text));
+    }
+
+    #[test]
+    fn the_looks_that_ship_say_only_what_the_face_reads() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../themes");
+        let known = theme::keys(&std::fs::read_to_string(dir.join("Example/face.txt")).unwrap());
+        let mut looks = 0;
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let folder = entry.unwrap().path();
+            let name = folder.file_name().unwrap().to_string_lossy().into_owned();
+            let text = std::fs::read_to_string(folder.join("face.txt")).unwrap();
+            let said = theme::keys(&text);
+            for key in said.keys() {
+                assert!(
+                    known.contains_key(key),
+                    "{name} says {key}, which the example does not document"
+                );
+            }
+            assert_eq!(
+                said.get("theme.name").map(String::as_str),
+                Some(name.as_str()),
+                "{name} is named as its folder"
+            );
+            // Every value is one the face reads: laid over the defaults and
+            // taken off again by the defaults' own words, nothing is left.
+            let mut theme = Theme::default();
+            theme.apply(&said);
+            if name != "Example" {
+                assert_ne!(
+                    theme,
+                    Theme {
+                        name: name.clone(),
+                        ..Theme::default()
+                    },
+                    "{name} changes something"
+                );
+                looks += 1;
+            }
+        }
+        assert_eq!(looks, 4, "Dark Glass, Clear, Warm and Night Drive");
     }
 }

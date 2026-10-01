@@ -1,0 +1,17 @@
+# A look for glass-evo: no backgrounds, the words and the buttons on the
+# picture itself.
+[theme]
+name = Clear
+description = No backgrounds
+
+[glass]
+bar = 0.1
+sheet = 0.6
+hairline = 0
+frost = off
+
+[clock]
+glass = 0
+
+[date]
+glass = 0

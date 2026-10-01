@@ -1,0 +1,9 @@
+# A look for glass-evo: amber on brown glass.
+[theme]
+name = Warm
+description = Amber on brown
+
+[colours]
+tint = #281206
+accent = #ffb347
+ink = #ffd27a

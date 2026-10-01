@@ -2,15 +2,19 @@
 #
 # A theme is a folder with this file in it. Every line is optional: what a
 # theme leaves out keeps the built-in look, and what the user sets in the
-# Glass Manager (Screen tab, "The face's look") goes over the theme, key
+# Glass Manager (Screen tab, "How the screen looks") goes over the theme, key
 # for key. A key a face does not know is passed over, so a theme written
 # for a later glass-evo still draws on an earlier one.
 #
 # Install: copy the folder to /data/INTERNAL/glass/faces/ on the player and
-# choose it on the Manager's Screen tab.
+# choose it on the Manager's Screen tab. A theme there stands before a look
+# of the same name that glass-evo ships.
 
 [theme]
+# The theme's name, as its folder's, and a line about it: both for the
+# list the look is chosen from.
 name = Example
+description = The built-in look, written out
 
 [colours]
 # The colour of glass and the colour of what is lit: "artwork" takes each
