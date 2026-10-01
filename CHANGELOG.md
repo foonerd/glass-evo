@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.9] - 2026-10-01
+
+The component says which Glass it works with. Its manifest names the least Glass plugin it needs (`requires.glass`, 0.7.97 for this release), kept in `Cargo.toml` under `workspace.metadata.glass`; the Glass Manager installs a component only on a Glass that is at least that, as Glass names the least glass-evo it works with. Nothing changes on the screen.
+
 ## [0.1.8] - 2026-10-01
 
 Looks. A look is a face theme chosen whole, and four ship with glass-evo beside the built-in one that follows the artwork.
