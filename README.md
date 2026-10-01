@@ -26,7 +26,7 @@ glass-evo is built on Glass's crates rather than beside them: the renderer, the 
 
 ## Status
 
-0.1.0: the first face. Glass's display with a bar of controls over it (previous, play or pause, next, volume) and a clock when the player stands still, released as the component the Glass Manager installs. The switch that puts glass-evo on the screen ships with Glass 0.8.0; until then the kiosk stays as it is on every player.
+0.1.4. Glass's display with a face over it: a bar of controls on demand (previous, play or pause, next, volume down and up, and More, a sheet with repeat, random and mute), a long press on volume down that mutes, and a clock when the player stands still; everything at the face size the Manager's Screen tab sets, normal, large or car. Released as the component the Glass Manager installs. The switch that puts glass-evo on the screen ships with Glass 0.8.0; until then the kiosk stays as it is on every player.
 
 ## Building
 
