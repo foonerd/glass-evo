@@ -22,6 +22,15 @@ pub enum Frost {
     Off,
 }
 
+/// Where the date stands: at the top of the screen on a glass of its own,
+/// or with the clock, above it or below it, on the clock's glass.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum DatePlace {
+    Top,
+    Above,
+    Below,
+}
+
 /// The tokens, with the defaults of the design language.
 #[derive(Clone, PartialEq, Debug)]
 pub struct Theme {
@@ -33,8 +42,6 @@ pub struct Theme {
     pub accent: Paint,
     /// `colours.ink`: text and icons.
     pub ink: [u8; 3],
-    /// `colours.plate`: behind text that sits on a picture.
-    pub plate: [u8; 3],
     /// `glass.bar`, `glass.sheet`: how much of the glass shows, 0.1 to 1.
     pub bar: f32,
     pub sheet: f32,
@@ -45,14 +52,36 @@ pub struct Theme {
     /// `buttons.ink`, `buttons.opacity`: the icons, when they have their own.
     pub buttons_ink: Option<[u8; 3]>,
     pub buttons_opacity: f32,
-    /// `clock.ink`, `clock.opacity`, `clock.plate`: the clock's own.
+    /// `clock.show`: whether there is a clock when nothing plays.
+    pub clock_show: bool,
+    /// `clock.format`: the time as a pattern, `%H:%M` for 13:05,
+    /// `%-I:%M %p` for 1:05 PM, `%H:%M:%S` with the seconds.
+    pub clock_format: String,
+    /// `clock.ink`, `clock.opacity`: the clock's own.
     pub clock_ink: Option<[u8; 3]>,
     pub clock_opacity: f32,
-    pub clock_plate: f32,
+    /// `clock.glass`: how much of the glass behind the clock and the date
+    /// shows, 0 for no glass at all.
+    pub clock_glass: f32,
+    /// `date.show`: whether the date stands with the clock.
+    pub date_show: bool,
+    /// `date.format`: the date as a pattern, `%A %-d %B` for Thursday 1
+    /// October, `%d/%m/%Y` for 01/10/2026.
+    pub date_format: String,
+    /// `date.place`: `top` of the screen, or `above` or `below` the clock.
+    pub date_place: DatePlace,
+    /// `date.ink`, `date.opacity`: the date's own.
+    pub date_ink: Option<[u8; 3]>,
+    pub date_opacity: f32,
+    /// `date.glass`: how much of the glass behind a date at the top of the
+    /// screen shows, 0 for none; with the clock, the date is on the clock's.
+    pub date_glass: f32,
     /// `measure.bar`, `measure.clock`: heights in units of a 720th of the
     /// picture's height.
     pub measure_bar: f32,
     pub measure_clock: f32,
+    /// `measure.date`: the date's height, in the same units.
+    pub measure_date: f32,
 }
 
 impl Default for Theme {
@@ -62,20 +91,36 @@ impl Default for Theme {
             tint: Paint::Artwork,
             accent: Paint::Artwork,
             ink: [242, 242, 245],
-            plate: [0, 0, 0],
             bar: 0.75,
             sheet: 0.78,
             hairline: 0.12,
             frost: Frost::Auto,
             buttons_ink: None,
             buttons_opacity: 1.0,
+            clock_show: true,
+            clock_format: "%H:%M".to_string(),
             clock_ink: None,
             clock_opacity: 0.86,
-            clock_plate: 0.55,
+            clock_glass: 0.55,
+            date_show: false,
+            date_format: "%A %-d %B".to_string(),
+            date_place: DatePlace::Top,
+            date_ink: None,
+            date_opacity: 0.86,
+            date_glass: 0.55,
             measure_bar: 72.0,
             measure_clock: 144.0,
+            measure_date: 40.0,
         }
     }
+}
+
+/// A pattern for a time or a date, as `strftime` reads it: short, and of
+/// printing characters only.
+pub fn pattern(text: &str) -> Option<String> {
+    let text = text.trim();
+    let fits = !text.is_empty() && text.len() <= 48 && text.chars().all(|c| !c.is_control());
+    fits.then(|| text.to_string())
 }
 
 /// `#rrggbb` or `#rgb` as a colour.
@@ -90,6 +135,15 @@ pub fn colour(text: &str) -> Option<[u8; 3]> {
             digit(b[4])? * 16 + digit(b[5])?,
         ]),
         3 => Some([digit(b[0])? * 17, digit(b[1])? * 17, digit(b[2])? * 17]),
+        _ => None,
+    }
+}
+
+/// `on` or `off`, said any of the usual ways.
+pub fn switch(text: &str) -> Option<bool> {
+    match text.trim().to_ascii_lowercase().as_str() {
+        "on" | "true" | "yes" | "1" => Some(true),
+        "off" | "false" | "no" | "0" => Some(false),
         _ => None,
     }
 }
@@ -158,7 +212,6 @@ impl Theme {
                 "colours.tint" | "colors.tint" => self.tint = paint(v).unwrap_or(self.tint),
                 "colours.accent" | "colors.accent" => self.accent = paint(v).unwrap_or(self.accent),
                 "colours.ink" | "colors.ink" => self.ink = colour(v).unwrap_or(self.ink),
-                "colours.plate" | "colors.plate" => self.plate = colour(v).unwrap_or(self.plate),
                 "glass.bar" => self.bar = share(v).unwrap_or(self.bar),
                 "glass.sheet" => self.sheet = share(v).unwrap_or(self.sheet),
                 "glass.hairline" => {
@@ -195,13 +248,52 @@ impl Theme {
                     }
                 }
                 "clock.opacity" => self.clock_opacity = share(v).unwrap_or(self.clock_opacity),
-                "clock.plate" => {
-                    self.clock_plate = v
+                "clock.glass" | "clock.plate" => {
+                    self.clock_glass = v
                         .parse::<f32>()
                         .ok()
                         .filter(|n| n.is_finite())
                         .map(|n| n.clamp(0.0, 1.0))
-                        .unwrap_or(self.clock_plate)
+                        .unwrap_or(self.clock_glass)
+                }
+                "clock.show" => self.clock_show = switch(v).unwrap_or(self.clock_show),
+                "clock.format" => {
+                    if let Some(format) = pattern(v) {
+                        self.clock_format = format;
+                    }
+                }
+                "date.show" => self.date_show = switch(v).unwrap_or(self.date_show),
+                "date.format" => {
+                    if let Some(format) = pattern(v) {
+                        self.date_format = format;
+                    }
+                }
+                "date.place" => {
+                    self.date_place = match v.to_ascii_lowercase().as_str() {
+                        "top" => DatePlace::Top,
+                        "above" => DatePlace::Above,
+                        "below" => DatePlace::Below,
+                        _ => self.date_place,
+                    }
+                }
+                "date.glass" => {
+                    self.date_glass = v
+                        .parse::<f32>()
+                        .ok()
+                        .filter(|n| n.is_finite())
+                        .map(|n| n.clamp(0.0, 1.0))
+                        .unwrap_or(self.date_glass)
+                }
+                "date.ink" => {
+                    self.date_ink = if v.eq_ignore_ascii_case("ink") {
+                        None
+                    } else {
+                        colour(v).or(self.date_ink)
+                    }
+                }
+                "date.opacity" => self.date_opacity = share(v).unwrap_or(self.date_opacity),
+                "measure.date" => {
+                    self.measure_date = units(v, 16.0, 200.0).unwrap_or(self.measure_date)
                 }
                 "measure.bar" => {
                     self.measure_bar = units(v, 48.0, 240.0).unwrap_or(self.measure_bar)
@@ -356,22 +448,89 @@ mod tests {
             "colours.tint",
             "colours.accent",
             "colours.ink",
-            "colours.plate",
             "glass.bar",
             "glass.sheet",
             "glass.hairline",
             "glass.frost",
             "buttons.ink",
             "buttons.opacity",
+            "clock.show",
+            "clock.format",
             "clock.ink",
             "clock.opacity",
-            "clock.plate",
+            "clock.glass",
+            "date.show",
+            "date.format",
+            "date.place",
+            "date.ink",
+            "date.opacity",
+            "date.glass",
+            "measure.date",
             "measure.bar",
             "measure.clock",
         ] {
             assert!(written.contains_key(key), "the example documents {key}");
         }
-        assert_eq!(written.len(), 16, "and nothing the face does not read");
+        assert_eq!(written.len(), 24, "and nothing the face does not read");
+    }
+
+    #[test]
+    fn the_clock_and_the_date_are_shown_or_not_each_in_its_own_pattern() {
+        let mut theme = Theme::default();
+        assert!(
+            theme.clock_show && !theme.date_show,
+            "as designed: a clock, no date"
+        );
+        assert_eq!(
+            (theme.clock_format.as_str(), theme.date_format.as_str()),
+            ("%H:%M", "%A %-d %B")
+        );
+        assert_eq!(
+            theme.date_place,
+            DatePlace::Top,
+            "a date, when wanted, stands at the top of the screen"
+        );
+        theme.apply(&settings(&[
+            ("clock.format", "%-I:%M %p"),
+            ("date.show", "on"),
+            ("date.format", " %d/%m/%Y "),
+            ("date.place", "Above"),
+            ("date.ink", "#88aaff"),
+            ("date.opacity", "0.5"),
+            ("measure.date", "60"),
+            ("clock.glass", "0"),
+        ]));
+        assert_eq!(theme.clock_format, "%-I:%M %p");
+        assert!(theme.date_show);
+        assert_eq!(theme.date_place, DatePlace::Above);
+        assert_eq!(theme.date_format, "%d/%m/%Y");
+        assert_eq!(
+            (theme.date_ink, theme.date_opacity, theme.measure_date),
+            (Some([136, 170, 255]), 0.5, 60.0)
+        );
+        assert_eq!(
+            theme.clock_glass, 0.0,
+            "no glass behind the clock is a choice"
+        );
+        theme.apply(&settings(&[
+            ("clock.show", "perhaps"),
+            ("clock.format", ""),
+            ("date.place", "sideways"),
+            ("clock.plate", "0.4"),
+        ]));
+        assert!(theme.clock_show, "what cannot be read changes nothing");
+        assert_eq!(theme.date_place, DatePlace::Above);
+        assert_eq!(theme.clock_format, "%-I:%M %p");
+        assert_eq!(
+            theme.clock_glass, 0.4,
+            "the key's earlier name is still read"
+        );
+        theme.apply(&settings(&[("clock.show", "Off"), ("date.show", "0")]));
+        assert!(!theme.clock_show && !theme.date_show);
+        assert_eq!(pattern(&"%H".repeat(30)), None, "a pattern is short");
+        assert_eq!(pattern("%H\n%M"), None, "and of printing characters");
+        assert_eq!(switch(" TRUE "), Some(true));
+        assert_eq!(switch(""), None);
     }
 
     #[test]

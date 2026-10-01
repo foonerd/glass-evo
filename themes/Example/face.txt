@@ -17,9 +17,8 @@ name = Example
 # from the cover of what plays, or fix one as #rrggbb.
 tint = artwork
 accent = artwork
-# Text and icons, and the plate behind text that sits on a picture.
+# Text and icons.
 ink = #f2f2f5
-plate = #000000
 
 [glass]
 # How much of the glass shows over the picture, 0.1 to 1.
@@ -37,13 +36,33 @@ ink = ink
 opacity = 1.0
 
 [clock]
+# The clock shows when nothing plays: on or off.
+show = on
+# The time as a pattern (strftime's): %H:%M is 13:05, %H:%M:%S adds the
+# seconds, %-I:%M %p is 1:05 PM.
+format = %H:%M
+# The clock on its own: a colour, or "ink" for the theme's ink.
 ink = ink
 opacity = 0.86
-# The plate behind the clock, 0 for none.
-plate = 0.55
+# How much of the glass behind the clock and the date shows; 0 for no glass.
+glass = 0.55
+
+[date]
+# The date when nothing plays: on or off. Its place: "top" of the screen,
+# on a glass of its own, or "above" or "below" the clock, on the clock's.
+show = off
+place = top
+# The date as a pattern: %A %-d %B is Thursday 1 October, %a %-d %b %Y is
+# Thu 1 Oct 2026, %d/%m/%Y is 01/10/2026, %Y-%m-%d is 2026-10-01.
+format = %A %-d %B
+ink = ink
+opacity = 0.86
+# The glass behind a date at the top of the screen; 0 for no glass.
+glass = 0.55
 
 [measure]
 # Heights in units of a 720th of the picture's height; the face size
 # (normal, large, car) scales them together.
 bar = 72
 clock = 144
+date = 40
