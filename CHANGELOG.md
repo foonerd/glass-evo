@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.4] - 2026-10-01
+
+More, and mute. The bar gains a sixth button at its right end, More, which opens a sheet above it with three tiles: repeat, walking off, all, single and off again; random; and mute. A tile is lit while its mode is on in the player, so the sheet says how the player stands as well as changing it. The sheet stays open for the next tile, shuts on a tap on the picture, and leaves with the bar. A finger resting on volume down for six tenths of a second mutes and unmutes without stepping the volume, and the button wears a slash while the player is muted. Sheet, tiles and glyphs scale with the face size as the bar does.
+
 ## [0.1.3] - 2026-09-30
 
 A face size. Glass 0.7.89 hands the face a size, normal, large or car, set on the Manager's Screen tab; the bar's height, its glyphs and the clock scale together, the bar never taking more than a third of the picture, so a hand at arm's length or a glance while driving finds them.
