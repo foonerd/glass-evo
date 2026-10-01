@@ -2,6 +2,21 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.6] - 2026-10-01
+
+The clock and the date. The idle screen's words follow the same rules as the controls, and are the theme's and the user's to set.
+
+- **The controls lie over the clock.** The clock was drawn last and covered the sheet where the two met; it is drawn first now, the bar and the sheet over it.
+- **The clock on glass.** Its plate is glass like the bar's: the artwork's or the user's tint, the hairline, frosted where frost is on, at an opacity of its own (`clock.glass`, 0 for no glass). The separate plate colour is gone from the theme format; `clock.plate` is still read as `clock.glass`.
+- **The clock as a pattern.** `clock.format` says what shows and in which order, as `strftime` reads it: `%H:%M`, `%H:%M:%S` with the seconds, `%-I:%M %p` for 1:05 PM. `clock.show = off` leaves the clock out.
+- **The date.** `date.show = on` adds the date in a pattern of its own (`%A %-d %B`, `%d/%m/%Y`, any order), at the top of the screen on a glass of its own, or above or below the clock on the clock's; with its own ink, opacity, glass and measure.
+- **Nothing runs off the screen.** A line too wide or too tall for the room there is, a long clock at the car size, is set as large as fits, and the clock stands in what a date at the top and the bar leave.
+- **Set once.** The clock and the date are rastered when their words change, not every frame, and their glass keeps its width while the digits change.
+
+The Glass Manager's look panel gains the clock and the date, each with its switch and its pattern, the date's place, and for the navigation, the clock and the date a size of their own.
+
+Built on Glass 0.7.96, which brings two fixes of its own to the screen: the bar's last faint frame is no longer left over the theme when it has faded out, and a letter no longer comes out as a grey smear (the w of some titles).
+
 ## [0.1.5] - 2026-10-01
 
 The look. What the face draws with is no longer fixed in its code: it comes from a face theme, with the user's own word over it.

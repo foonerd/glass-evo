@@ -2,7 +2,8 @@
 //! touches the theme's controls do not take. Playing shows the theme and
 //! nothing else; a touch brings the bar of controls (previous, play or
 //! pause, next, volume down and up, more), which leaves by itself; stopped
-//! or paused shows the clock with the bar. More opens a sheet above the
+//! or paused shows the clock and the date, where the theme and the user
+//! want them and in the patterns they choose, with the bar over them. More opens a sheet above the
 //! bar with repeat, random and mute; a long press on volume down mutes,
 //! and while the player is muted that button shows it and unmutes.
 //! Everything else the display does, the theme, the meters, the artwork,
@@ -22,7 +23,7 @@ pub mod look;
 pub mod theme;
 use icon::Icon;
 use look::Look;
-use theme::Theme;
+use theme::{DatePlace, Theme};
 
 /// The workspace version, as Cargo knows it.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -399,6 +400,7 @@ pub struct Face {
     tokens: Option<Tokens>,
     track: TrackLook,
     frost: Frost,
+    clock: ClockFace,
 }
 
 /// The tokens in use, read on the first frame: the display starts again
@@ -540,8 +542,8 @@ impl Frost {
         let at = match self.held.iter().position(|(r, _, _)| *r == rect) {
             Some(at) => at,
             None => {
-                // The bar's band and the sheet's: two at most are kept.
-                if self.held.len() >= 2 {
+                // The bar's band, the sheet's, the clock's and the date's: four at most are kept.
+                if self.held.len() >= 4 {
                     self.held.remove(0);
                 }
                 self.held.push((rect, !sum, Vec::new()));
@@ -628,17 +630,328 @@ fn place(frame: &mut Frame, icon: &Frame, rect: (i32, i32, u32, u32), alpha: u8)
     );
 }
 
-/// The wall clock, hours and minutes, in the player's own zone.
-fn clock_text() -> String {
+/// The time and the date in the player's own zone.
+fn local_time() -> Option<libc::tm> {
     // SAFETY: localtime_r writes only into the tm handed to it and reads
     // the clock; both live on this stack for the call.
     unsafe {
         let now = libc::time(std::ptr::null_mut());
         let mut tm: libc::tm = std::mem::zeroed();
         if libc::localtime_r(&now, &mut tm).is_null() {
-            return String::new();
+            return None;
         }
-        format!("{:02}:{:02}", tm.tm_hour, tm.tm_min)
+        Some(tm)
+    }
+}
+
+/// A time set in a pattern, as `strftime` reads it: `%H:%M`, `%-I:%M %p`,
+/// `%A %-d %B`. Nothing when the pattern cannot be read or gives nothing.
+pub fn format_time(pattern: &str, tm: &libc::tm) -> String {
+    let Ok(pattern) = std::ffi::CString::new(pattern) else {
+        return String::new();
+    };
+    let mut text = [0u8; 128];
+    // SAFETY: strftime writes at most the buffer's length into it, and
+    // reads the pattern, which ends in a nul, and the tm.
+    let written =
+        unsafe { libc::strftime(text.as_mut_ptr().cast(), text.len(), pattern.as_ptr(), tm) };
+    String::from_utf8_lossy(&text[..written]).trim().to_string()
+}
+
+/// The size a line is set at so that it fits: the size wanted, or less by
+/// as much as its room at that size exceeds the room there is; never
+/// under twelve pixels.
+fn fitted_size(wanted: u32, room: (u32, u32), most: (u32, u32)) -> u32 {
+    if room.0 <= most.0 && room.1 <= most.1 {
+        return wanted;
+    }
+    let by = (most.0 as f32 / room.0.max(1) as f32).min(most.1 as f32 / room.1.max(1) as f32);
+    ((wanted as f32 * by).floor() as u32).max(12)
+}
+
+/// A line set in type: rastered when its words, its size or its ink
+/// change, not every frame; with the room the widest words of its shape
+/// take, every digit an 8, so the glass behind it stands still while the
+/// digits change; and set smaller than wanted where it would not fit.
+#[derive(Default)]
+struct Line {
+    set_for: Option<(String, u32, [u8; 3])>,
+    frame: Option<Frame>,
+    /// The shape, the size wanted and the room there was, the fit was made for.
+    fit_for: Option<(String, u32, (u32, u32))>,
+    size: u32,
+    room: (u32, u32),
+}
+
+impl Line {
+    /// Set the words at the size wanted, or the largest that fits in
+    /// `most`; the room they take, or nothing when there is nothing to
+    /// set or no face to set it in.
+    fn set(
+        &mut self,
+        view: &View,
+        text: String,
+        wanted: u32,
+        ink: [u8; 3],
+        most: (u32, u32),
+    ) -> Option<(u32, u32)> {
+        if text.is_empty() {
+            return None;
+        }
+        let widest: String = text
+            .chars()
+            .map(|c| if c.is_ascii_digit() { '8' } else { c })
+            .collect();
+        if self.fit_for.as_ref().map(|(w, s, m)| (w.as_str(), *s, *m))
+            != Some((widest.as_str(), wanted, most))
+        {
+            let line = ui::line(view.fonts, TextStyle::Bold, wanted, ink, &widest)?;
+            self.size = fitted_size(wanted, (line.width, line.height), most);
+            self.room = (line.width, line.height);
+            if self.size != wanted {
+                let line = ui::line(view.fonts, TextStyle::Bold, self.size, ink, &widest)?;
+                self.room = (line.width, line.height);
+            }
+            self.fit_for = Some((widest, wanted, most));
+        }
+        if self.set_for.as_ref().map(|(t, s, i)| (t.as_str(), *s, *i))
+            != Some((text.as_str(), self.size, ink))
+        {
+            self.frame = ui::line(view.fonts, TextStyle::Bold, self.size, ink, &text);
+            self.set_for = Some((text, self.size, ink));
+        }
+        self.frame.as_ref().map(|_| self.room)
+    }
+
+    /// The line in the middle of a width, at an opacity.
+    fn place(&self, frame: &mut Frame, x: i32, y: i32, width: u32, opacity: f32) {
+        if let Some(line) = self.frame.as_ref() {
+            ui::blit(
+                frame,
+                line,
+                x + (width as i32 - line.width as i32) / 2,
+                y,
+                share(opacity, 255),
+            );
+        }
+    }
+}
+
+/// The clock and the date of the idle screen.
+#[derive(Default)]
+struct ClockFace {
+    clock: Line,
+    date: Line,
+}
+
+/// What a glass is drawn with: the look, the hairline, and the frost.
+struct Glass<'a> {
+    look: Look,
+    hairline: f32,
+    frost: Option<&'a mut Frost>,
+}
+
+impl Glass<'_> {
+    /// A glass behind words, with room about them; none at no opacity.
+    fn behind(
+        &mut self,
+        frame: &mut Frame,
+        rect: (i32, i32, u32, u32),
+        pad: (u32, u32),
+        opacity: f32,
+    ) {
+        if opacity <= 0.0 {
+            return;
+        }
+        let (x, y, w, h) = (
+            rect.0 - pad.0 as i32,
+            rect.1 - pad.1 as i32,
+            rect.2 + 2 * pad.0,
+            rect.3 + 2 * pad.1,
+        );
+        if let Some(frost) = self.frost.as_deref_mut() {
+            frost.apply(frame, x, y, w, h, 255);
+        }
+        let t = self.look.tint;
+        ui::fill(frame, x, y, w, h, [t[0], t[1], t[2], share(opacity, 255)]);
+        ui::fill(
+            frame,
+            x,
+            y,
+            w,
+            1,
+            [255, 255, 255, share(self.hairline, 255)],
+        );
+    }
+}
+
+/// Where the idle screen's words go: a date at the top of the screen in
+/// a rectangle of its own; and in the middle of what the top date and the
+/// bar leave, one rectangle for the clock and a date above or below it,
+/// with the height each of the two starts at. A date placed with a clock
+/// that is not shown takes the middle alone.
+#[derive(Debug, PartialEq, Default)]
+struct IdleLayout {
+    top: Option<(i32, i32, u32, u32)>,
+    middle: Option<(i32, i32, u32, u32)>,
+    clock_y: Option<i32>,
+    date_y: Option<i32>,
+}
+
+/// The measures the idle screen is laid out with, in pixels: the screen's
+/// margin, the gap between a clock and a date, and the room a glass keeps
+/// about its words.
+#[derive(Clone, Copy)]
+struct IdleMeasure {
+    margin: u32,
+    gap: u32,
+    pad: (u32, u32),
+}
+
+impl IdleMeasure {
+    /// What a date at the top takes of the picture's height, its glass
+    /// and the margin under it included.
+    fn top_takes(&self, date_height: u32) -> u32 {
+        self.margin + date_height + 2 * self.pad.1 + self.margin
+    }
+}
+
+fn idle_layout(
+    picture: (u32, u32),
+    below: u32,
+    m: IdleMeasure,
+    clock: Option<(u32, u32)>,
+    date: Option<(u32, u32)>,
+    place: DatePlace,
+) -> IdleLayout {
+    let mut layout = IdleLayout::default();
+    let mut with_clock = date;
+    let mut from = 0;
+    if let (Some((w, h)), DatePlace::Top) = (date, place) {
+        layout.top = Some((
+            (picture.0.saturating_sub(w) / 2) as i32,
+            (m.margin + m.pad.1) as i32,
+            w,
+            h,
+        ));
+        with_clock = None;
+        from = m.top_takes(h);
+    }
+    let gap = if clock.is_some() && with_clock.is_some() {
+        m.gap
+    } else {
+        0
+    };
+    let width = clock.map_or(0, |c| c.0).max(with_clock.map_or(0, |d| d.0));
+    let height = clock.map_or(0, |c| c.1) + gap + with_clock.map_or(0, |d| d.1);
+    if width == 0 {
+        return layout;
+    }
+    let x = (picture.0.saturating_sub(width) / 2) as i32;
+    let y = (from
+        + picture
+            .1
+            .saturating_sub(below)
+            .saturating_sub(from)
+            .saturating_sub(height)
+            / 2) as i32;
+    layout.middle = Some((x, y, width, height));
+    let date_first = place == DatePlace::Above;
+    let mut at = y;
+    if let (Some((_, h)), true) = (with_clock, date_first) {
+        layout.date_y = Some(at);
+        at += (h + gap) as i32;
+    }
+    if let Some((_, h)) = clock {
+        layout.clock_y = Some(at);
+        at += (h + gap) as i32;
+    }
+    if let (Some(_), false) = (with_clock, date_first) {
+        layout.date_y = Some(at);
+    }
+    layout
+}
+
+impl ClockFace {
+    /// Draw what the theme shows of the clock and the date, above a bar
+    /// `below` high; whether anything was drawn.
+    fn draw(
+        &mut self,
+        frame: &mut Frame,
+        view: &View,
+        theme: &Theme,
+        glass: &mut Glass,
+        below: u32,
+        tm: &libc::tm,
+    ) -> bool {
+        let unit = view.height as f32 / 720.0 * view.scale.max(0.5);
+        let px = |units: f32| (unit * units).round() as u32;
+        let m = IdleMeasure {
+            margin: px(20.0),
+            gap: px(8.0),
+            pad: (px(28.0), px(12.0)),
+        };
+        let pad = m.pad;
+        // No line is wider than the picture leaves beside its glass and the
+        // margins; the date is set first, and the clock takes what the date
+        // and the bar leave of the height.
+        let widest = view.width.saturating_sub(2 * (m.margin + pad.0));
+        let date = if theme.date_show {
+            let size = px(theme.measure_date).max(13);
+            self.date.set(
+                view,
+                format_time(&theme.date_format, tm),
+                size,
+                theme.date_ink.unwrap_or(theme.ink),
+                (widest, view.height / 4),
+            )
+        } else {
+            None
+        };
+        let clock = if theme.clock_show {
+            let taken = match (date, theme.date_place) {
+                (Some((_, h)), DatePlace::Top) => m.top_takes(h),
+                (Some((_, h)), _) => h + m.gap,
+                (None, _) => 0,
+            };
+            let tallest = view
+                .height
+                .saturating_sub(below)
+                .saturating_sub(taken)
+                .saturating_sub(2 * (pad.1 + m.margin));
+            let size = px(theme.measure_clock).max(24);
+            self.clock.set(
+                view,
+                format_time(&theme.clock_format, tm),
+                size,
+                theme.clock_ink.unwrap_or(theme.ink),
+                (widest, tallest.min(view.height / 2)),
+            )
+        } else {
+            None
+        };
+        let layout = idle_layout(
+            (view.width, view.height),
+            below,
+            m,
+            clock,
+            date,
+            theme.date_place,
+        );
+        if let Some((x, y, w, h)) = layout.top {
+            glass.behind(frame, (x, y, w, h), pad, theme.date_glass);
+            self.date.place(frame, x, y, w, theme.date_opacity);
+        }
+        if let Some((x, y, w, h)) = layout.middle {
+            glass.behind(frame, (x, y, w, h), pad, theme.clock_glass);
+            if let Some(at) = layout.clock_y {
+                self.clock.place(frame, x, at, w, theme.clock_opacity);
+            }
+            if let Some(at) = layout.date_y {
+                self.date.place(frame, x, at, w, theme.date_opacity);
+            }
+        }
+        clock.is_some() || date.is_some()
     }
 }
 
@@ -666,7 +979,7 @@ impl Overlay for Face {
         let theme = &tokens.theme;
         let frosted = tokens.frosted;
         let bar = Bar::measured(view.width, view.height, view.scale, theme.measure_bar);
-        let clock = view.ours && !playing;
+        let clock = view.ours && !playing && (theme.clock_show || theme.date_show);
         if alpha > 0 || clock {
             // The look of the track, asked for only while there is something to draw with it.
             if self.track.follow(theme, &meta.art_file) {
@@ -676,6 +989,18 @@ impl Overlay for Face {
         let look = self.track.look;
         let ink = theme.buttons_ink.unwrap_or(theme.ink);
         let mut drawn = false;
+        // The clock and the date first, when the player stands still on the
+        // display's own screen: the controls are drawn after and lie over them.
+        if clock {
+            if let Some(tm) = local_time() {
+                let mut glass = Glass {
+                    look,
+                    hairline: theme.hairline,
+                    frost: frosted.then_some(&mut self.frost),
+                };
+                drawn |= self.clock.draw(frame, view, theme, &mut glass, bar.h, &tm);
+            }
+        }
         if alpha > 0 {
             // The icons at half the bar's height, rastered when the size or the ink changes.
             let size = (bar.h / 2).max(16);
@@ -799,35 +1124,6 @@ impl Overlay for Face {
             self.icons = Some(icons);
             self.accents = Some(accents);
             drawn = true;
-        }
-        // The clock: when the player stands still on the display's own screen.
-        if clock {
-            let size = ((view.height as f32 / 720.0 * theme.measure_clock * view.scale.max(0.5))
-                .round() as u32)
-                .max(24)
-                .min(view.height / 2);
-            let clock_ink = theme.clock_ink.unwrap_or(theme.ink);
-            if let Some(line) =
-                ui::line(view.fonts, TextStyle::Bold, size, clock_ink, &clock_text())
-            {
-                let x = (view.width.saturating_sub(line.width) / 2) as i32;
-                let y = (view
-                    .height
-                    .saturating_sub(bar.h)
-                    .saturating_sub(line.height)
-                    / 2) as i32;
-                let p = theme.plate;
-                ui::fill(
-                    frame,
-                    x - 12,
-                    y - 6,
-                    line.width + 24,
-                    line.height + 12,
-                    [p[0], p[1], p[2], share(theme.clock_plate, 255)],
-                );
-                ui::blit(frame, &line, x, y, share(theme.clock_opacity, 255));
-                drawn = true;
-            }
         }
         drawn
     }
@@ -1376,11 +1672,7 @@ mod tests {
         car.scale = 2.0;
         face.draw(&mut frame, &car);
         assert_eq!(face.icons.as_ref().map(|set| set.size()), Some(72));
-        let text = clock_text();
-        assert!(
-            text.is_empty() || text.len() == 5,
-            "HH:MM or nothing: {text}"
-        );
+        assert!(local_time().is_some(), "the player's clock can be read");
     }
 
     #[test]
@@ -1564,5 +1856,137 @@ mod tests {
                 accent: [255, 136, 0]
             }
         );
+    }
+
+    /// Thursday 1 October 2026, five past one in the afternoon and nine seconds.
+    fn a_thursday() -> libc::tm {
+        // SAFETY: a tm is plain numbers; all zero is a valid one.
+        let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+        tm.tm_year = 126;
+        tm.tm_mon = 9;
+        tm.tm_mday = 1;
+        tm.tm_wday = 4;
+        tm.tm_yday = 273;
+        tm.tm_hour = 13;
+        tm.tm_min = 5;
+        tm.tm_sec = 9;
+        tm
+    }
+
+    #[test]
+    fn a_time_and_a_date_are_set_in_the_pattern_given() {
+        let tm = a_thursday();
+        assert_eq!(format_time("%H:%M", &tm), "13:05");
+        assert_eq!(format_time("%H:%M:%S", &tm), "13:05:09");
+        assert_eq!(format_time("%-I:%M %p", &tm), "1:05 PM");
+        assert_eq!(format_time("%A %-d %B", &tm), "Thursday 1 October");
+        assert_eq!(format_time("%a %-d %b %Y", &tm), "Thu 1 Oct 2026");
+        assert_eq!(format_time("%d/%m/%Y", &tm), "01/10/2026");
+        assert_eq!(format_time("%m/%d/%Y", &tm), "10/01/2026");
+        assert_eq!(format_time("%Y-%m-%d", &tm), "2026-10-01");
+        assert_eq!(
+            format_time("%B %-d, %A", &tm),
+            "October 1, Thursday",
+            "any order"
+        );
+        assert_eq!(format_time("", &tm), "");
+        assert_eq!(
+            format_time("a\0b", &tm),
+            "",
+            "a pattern with a nul in it is no pattern"
+        );
+        let mut midnight = a_thursday();
+        midnight.tm_hour = 0;
+        assert_eq!(format_time("%-I:%M %p", &midnight), "12:05 AM");
+    }
+
+    #[test]
+    fn a_line_is_set_as_large_as_wanted_or_as_fits() {
+        assert_eq!(
+            fitted_size(288, (700, 340), (1184, 360)),
+            288,
+            "it fits: as wanted"
+        );
+        assert_eq!(
+            fitted_size(288, (1900, 340), (1184, 360)),
+            179,
+            "too wide: smaller by as much"
+        );
+        assert_eq!(
+            fitted_size(288, (700, 340), (1184, 170)),
+            144,
+            "too tall: smaller by as much"
+        );
+        assert_eq!(
+            fitted_size(288, (1900, 340), (1184, 100)),
+            84,
+            "the tighter of the two decides"
+        );
+        assert_eq!(
+            fitted_size(40, (4000, 40), (100, 100)),
+            12,
+            "never under twelve pixels"
+        );
+    }
+
+    #[test]
+    fn the_date_stands_at_the_top_or_with_the_clock_and_alone_takes_the_middle() {
+        let (clock, date) = (Some((400, 150)), Some((300, 40)));
+        // 1280 by 720, a bar of 72; a margin of 20, 8 between clock and
+        // date, a glass 28 by 12 about its words.
+        let m = IdleMeasure {
+            margin: 20,
+            gap: 8,
+            pad: (28, 12),
+        };
+        let lay = |c, d, place| idle_layout((1280, 720), 72, m, c, d, place);
+        let top = lay(clock, date, DatePlace::Top);
+        assert_eq!(
+            top.top,
+            Some((490, 32, 300, 40)),
+            "the date in the middle of the top"
+        );
+        // The date and its glass take 104 of the height; the clock stands
+        // in the middle of what is left, 104 to 648.
+        assert_eq!(top.middle, Some((440, 301, 400, 150)));
+        assert_eq!((top.clock_y, top.date_y), (Some(301), None));
+        assert!(
+            top.middle.unwrap().1 - 12 >= 104,
+            "the clock's glass starts below the date's"
+        );
+        let below = lay(clock, date, DatePlace::Below);
+        assert_eq!(below.top, None);
+        assert_eq!(
+            below.middle,
+            Some((440, 225, 400, 198)),
+            "one glass for both"
+        );
+        assert_eq!(
+            (below.clock_y, below.date_y),
+            (Some(225), Some(383)),
+            "the clock, then the date"
+        );
+        let above = lay(clock, date, DatePlace::Above);
+        assert_eq!(
+            (above.date_y, above.clock_y),
+            (Some(225), Some(273)),
+            "the date, then the clock"
+        );
+        // No clock: a date placed with it takes the middle alone; one at the top stays there.
+        let alone = lay(None, date, DatePlace::Below);
+        assert_eq!(alone.middle, Some((490, 304, 300, 40)));
+        assert_eq!((alone.clock_y, alone.date_y), (None, Some(304)));
+        assert_eq!(lay(None, date, DatePlace::Top).middle, None);
+        // No date: the clock in the middle of what the bar leaves. Neither: nothing.
+        assert_eq!(
+            lay(clock, None, DatePlace::Top),
+            IdleLayout {
+                top: None,
+                middle: Some((440, 249, 400, 150)),
+                clock_y: Some(249),
+                date_y: None
+            }
+        );
+        assert_eq!(lay(None, None, DatePlace::Below), IdleLayout::default());
     }
 }
