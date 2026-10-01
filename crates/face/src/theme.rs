@@ -466,6 +466,7 @@ mod tests {
         );
         for key in [
             "theme.name",
+            "theme.description",
             "colours.tint",
             "colours.accent",
             "colours.ink",
@@ -494,7 +495,11 @@ mod tests {
         ] {
             assert!(written.contains_key(key), "the example documents {key}");
         }
-        assert_eq!(written.len(), 26, "and nothing the face does not read");
+        assert_eq!(
+            written.len(),
+            27,
+            "and nothing but what the face reads and the line for a list"
+        );
     }
 
     #[test]

@@ -2,6 +2,17 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.8] - 2026-10-01
+
+Looks. A look is a face theme chosen whole, and four ship with glass-evo beside the built-in one that follows the artwork.
+
+- **Dark Glass, Clear, Warm and Night Drive.** Black glass whatever the artwork; no backgrounds at all, the words and the buttons on the picture itself; amber on brown; and large and high in contrast, for a glance while driving in the dark. Each is a face theme like any other, under `themes/`, and a starting point for one's own.
+- **Shipped with the component.** The looks travel in the component under `themes/`, and the built-in look written out, `face.txt`, beside the manifest, so the Glass Manager shows what the face draws when nothing is said.
+- **The user's themes first.** `GLASS_FACES` names the folders face themes are kept in, parted by a colon; a theme is the first of its name found, so one of the user's own stands before a shipped look of the same name.
+- **A line about a theme.** `description` in a theme's `[theme]` section says in a few words what the look is, for the list it is chosen from.
+
+The Glass Manager's look panel is drawn anew around them: a row of looks to choose from, a likeness of the screen, and the adjustments in plain words, a section for each part of the screen.
+
 ## [0.1.7] - 2026-10-01
 
 A glass of its own colour for the clock and for the date. `clock.tint` and `date.tint` take a colour, or `tint` for the theme's own: the clock's glass, which a date above or below it shares, and the glass of a date at the top of the screen. The Glass Manager's look panel has a switch and a colour for each beside their other settings.

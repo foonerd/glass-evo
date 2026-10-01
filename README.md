@@ -26,7 +26,7 @@ glass-evo is built on Glass's crates rather than beside them: the renderer, the 
 
 ## Status
 
-0.1.7. Glass's display with a face over it: a bar of controls on demand (previous, play or pause, next, volume down and up, and More, a sheet with repeat, random and mute), a long press on volume down that mutes, and a clock and a date when the player stands still, each in a pattern of the user's choosing; everything at the face size the Manager's Screen tab sets, normal, large or car. The look follows the artwork on frosted glass, takes the user's own colours, and can be themed: a face theme is a folder with a `face.txt` (see `themes/Example` and the wiki's Face themes page). Released as the component the Glass Manager installs. The switch that puts glass-evo on the screen ships with Glass 0.8.0; until then the kiosk stays as it is on every player.
+0.1.8. Glass's display with a face over it: a bar of controls on demand (previous, play or pause, next, volume down and up, and More, a sheet with repeat, random and mute), a long press on volume down that mutes, and a clock and a date when the player stands still, each in a pattern of the user's choosing; everything at the face size the Manager's Screen tab sets, normal, large or car. The look follows the artwork on frosted glass, or is one of the looks that ship (Dark Glass, Clear, Warm, Night Drive), takes the user's own adjustments, and can be themed: a face theme is a folder with a `face.txt` (see `themes/Example` and the wiki's Face themes page). Released as the component the Glass Manager installs. The switch that puts glass-evo on the screen ships with Glass 0.8.0; until then the kiosk stays as it is on every player.
 
 ## Building
 

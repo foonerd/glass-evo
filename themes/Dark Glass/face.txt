@@ -1,0 +1,17 @@
+# A look for glass-evo: black glass, fairly solid, whatever the artwork.
+[theme]
+name = Dark Glass
+description = Black, fairly solid
+
+[colours]
+tint = #000000
+
+[glass]
+bar = 0.85
+sheet = 0.88
+
+[clock]
+glass = 0.8
+
+[date]
+glass = 0.8

@@ -1,6 +1,7 @@
 #!/bin/bash
-# Assemble the component the Glass Manager installs: manifest.json and the
-# binaries by architecture, as dist/glass-evo-<version>.zip. The manifest
+# Assemble the component the Glass Manager installs: manifest.json, the
+# binaries by architecture, the looks that ship (themes/) and the built-in
+# look written out (face.txt), as dist/glass-evo-<version>.zip. The manifest
 # names the version, the build (commit and time) and, per architecture,
 # the binary's path and its sha256, which the Manager checks on install.
 set -euo pipefail
@@ -15,6 +16,15 @@ for arch in arm armv7 armv8 x64; do
   [ -x "$bin" ] || { echo "package: $bin is missing; run scripts/ship.sh first" >&2; exit 1; }
   install -D -m 755 "$bin" "$STAGE/bin/$arch/glass-evo"
 done
+# The looks that ship: every face theme but the example, which documents
+# the format and is the built-in look written out. That one goes beside the
+# manifest, for the Manager to know what a face shows when nothing is said.
+for theme in themes/*/; do
+  name=$(basename "$theme")
+  [ "$name" = "Example" ] && continue
+  install -D -m 644 "$theme/face.txt" "$STAGE/themes/$name/face.txt"
+done
+install -D -m 644 themes/Example/face.txt "$STAGE/face.txt"
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
 python3 - "$STAGE" "$VERSION" "$COMMIT" <<'EOF'
 import hashlib, json, sys, time
