@@ -1825,17 +1825,21 @@ mod tests {
             "no cover: the neutral look stands"
         );
         assert_eq!(track.look, look::NEUTRAL);
-        // A cover that is not a picture: asked for off the frame's path, and neutral when it is in.
-        assert!(!track.follow(&theme, "/nonexistent/cover.jpg"));
-        assert!(track.pending.is_some());
-        for _ in 0..200 {
+        // A cover that is not a picture: asked for off the frame's path, and
+        // neutral when the answer is in, which may be at once or some frames on.
+        assert!(
+            !track.follow(&theme, "/nonexistent/cover.jpg"),
+            "neutral before, neutral after: no change"
+        );
+        assert_eq!(track.cover.as_deref(), Some("/nonexistent/cover.jpg"));
+        for _ in 0..400 {
             if track.pending.is_none() {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(5));
-            track.follow(&theme, "/nonexistent/cover.jpg");
+            assert!(!track.follow(&theme, "/nonexistent/cover.jpg"));
         }
-        assert!(track.pending.is_none());
+        assert!(track.pending.is_none(), "the answer came");
         assert_eq!(track.look, look::NEUTRAL);
         // A theme that fixes both colours never asks for the cover.
         let mut fixed = Theme::default();
