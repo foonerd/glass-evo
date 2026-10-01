@@ -1,0 +1,49 @@
+# A face theme for glass-evo.
+#
+# A theme is a folder with this file in it. Every line is optional: what a
+# theme leaves out keeps the built-in look, and what the user sets in the
+# Glass Manager (Screen tab, "The face's look") goes over the theme, key
+# for key. A key a face does not know is passed over, so a theme written
+# for a later glass-evo still draws on an earlier one.
+#
+# Install: copy the folder to /data/INTERNAL/glass/faces/ on the player and
+# choose it on the Manager's Screen tab.
+
+[theme]
+name = Example
+
+[colours]
+# The colour of glass and the colour of what is lit: "artwork" takes each
+# from the cover of what plays, or fix one as #rrggbb.
+tint = artwork
+accent = artwork
+# Text and icons, and the plate behind text that sits on a picture.
+ink = #f2f2f5
+plate = #000000
+
+[glass]
+# How much of the glass shows over the picture, 0.1 to 1.
+bar = 0.75
+sheet = 0.78
+# The line along a glass's inner edge, 0 to 1.
+hairline = 0.12
+# Frost what lies under the glass while the theme moves: auto (as suits the
+# board, which the plugin knows), on, or off.
+frost = auto
+
+[buttons]
+# The icons on their own: a colour, or "ink" for the theme's ink.
+ink = ink
+opacity = 1.0
+
+[clock]
+ink = ink
+opacity = 0.86
+# The plate behind the clock, 0 for none.
+plate = 0.55
+
+[measure]
+# Heights in units of a 720th of the picture's height; the face size
+# (normal, large, car) scales them together.
+bar = 72
+clock = 144
