@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.7] - 2026-10-01
+
+A glass of its own colour for the clock and for the date. `clock.tint` and `date.tint` take a colour, or `tint` for the theme's own: the clock's glass, which a date above or below it shares, and the glass of a date at the top of the screen. The Glass Manager's look panel has a switch and a colour for each beside their other settings.
+
 ## [0.1.6] - 2026-10-01
 
 The clock and the date. The idle screen's words follow the same rules as the controls, and are the theme's and the user's to set.
