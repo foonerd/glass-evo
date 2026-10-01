@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.10] - 2026-10-01
+
+Built on Glass 0.7.99, for players whose screen is reached through an X server.
+
+- **An X server of its own.** Where the Glass plugin brings up a plain X server for the face, as it does on an x86 player, the face treats that screen as its own: it stays on it whether or not anything plays, a touch outside a control does nothing, and it turns the picture itself.
+- **No screen is a failure.** With no X server, no Wayland and no screen the kernel drives, the face no longer runs drawing to nowhere: it stops with "no screen to draw on", so the plugin can give the screen back to the kiosk.
+
 ## [0.1.9] - 2026-10-01
 
 The component says which Glass it works with. Its manifest names the least Glass plugin it needs (`requires.glass`, 0.7.97 for this release), kept in `Cargo.toml` under `workspace.metadata.glass`; the Glass Manager installs a component only on a Glass that is at least that, as Glass names the least glass-evo it works with. Nothing changes on the screen.
