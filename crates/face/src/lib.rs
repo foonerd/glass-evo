@@ -7,12 +7,22 @@
 //! and while the player is muted that button shows it and unmutes.
 //! Everything else the display does, the theme, the meters, the artwork,
 //! the never-empty screen, it does as before.
+//!
+//! What the face draws with comes from a face theme, tokens in a text a
+//! theme's author writes, with the user's settings over it; the colours a
+//! theme leaves to the artwork are read from the cover, once per track.
 
-use glass::face::{ui, Command, Frame, Metadata, PointerKind, TextStyle};
+use glass::face::{blur, fit_art, read_art, ui, Command, Frame, Metadata, PointerKind, TextStyle};
 use glass::{Overlay, View};
+use std::path::{Path, PathBuf};
+use std::sync::mpsc;
 
 pub mod icon;
+pub mod look;
+pub mod theme;
 use icon::Icon;
+use look::Look;
+use theme::Theme;
 
 /// The workspace version, as Cargo knows it.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -80,7 +90,13 @@ impl Bar {
     /// more for a hand at arm's length; the bar never takes more than
     /// a third of the picture.
     pub fn for_picture(width: u32, height: u32, scale: f32) -> Self {
-        let h = ((height as f32 / 10.0 * scale.max(0.5)).round() as u32)
+        Self::measured(width, height, scale, 72.0)
+    }
+
+    /// The bar at a theme's measure, in units of a 720th of the picture's
+    /// height: 72 as designed.
+    pub fn measured(width: u32, height: u32, scale: f32, units: f32) -> Self {
+        let h = ((height as f32 / 720.0 * units * scale.max(0.5)).round() as u32)
             .max(40)
             .min(height / 3);
         Self {
@@ -365,7 +381,9 @@ impl Default for Presence {
 /// The face's state between frames: the bar's presence, whether the sheet
 /// is open, the commands not yet taken, what a finger is down on and
 /// since when, whether that press already acted as a long one, whether it
-/// is the press that shuts the sheet, and the icons at the size in use.
+/// is the press that shuts the sheet, the icons at the size in use; and
+/// what it draws with: the tokens, the look of the track, the icons in the
+/// accent for what is lit, and the frost as last made.
 #[derive(Default)]
 pub struct Face {
     presence: Presence,
@@ -377,6 +395,192 @@ pub struct Face {
     held: bool,
     shutting: bool,
     icons: Option<icon::Set>,
+    accents: Option<icon::Set>,
+    tokens: Option<Tokens>,
+    track: TrackLook,
+    frost: Frost,
+}
+
+/// The tokens in use, read on the first frame: the display starts again
+/// when a setting changes, so they stand while it runs.
+struct Tokens {
+    theme: Theme,
+    frosted: bool,
+}
+
+/// Where face themes are kept, as the launcher says, and a theme's text by
+/// its folder's name; a name that is not one folder's is no theme.
+fn theme_file(base: &Path, name: &str) -> Option<PathBuf> {
+    let name = name.trim();
+    if name.is_empty() || name.starts_with('.') || name.contains(['/', '\\']) {
+        return None;
+    }
+    Some(base.join(name).join("face.txt"))
+}
+
+fn tokens_for(view: &View) -> Tokens {
+    let text = view.settings.get("theme").and_then(|name| {
+        let base = std::env::var_os("GLASS_FACES")?;
+        std::fs::read_to_string(theme_file(Path::new(&base), name)?).ok()
+    });
+    let theme = Theme::resolve(text.as_deref(), view.settings);
+    let frosted = theme.frosted(view.settings);
+    Tokens { theme, frosted }
+}
+
+/// The look of the track on show: read from the cover off the frame's
+/// path, the look before it standing until the new one is in.
+struct TrackLook {
+    /// The cover's file the look in use was read from, or is being read
+    /// from; none before the first frame, so the first always resolves.
+    cover: Option<String>,
+    look: Look,
+    pending: Option<mpsc::Receiver<Option<Look>>>,
+}
+
+impl Default for TrackLook {
+    fn default() -> Self {
+        Self {
+            cover: None,
+            look: look::NEUTRAL,
+            pending: None,
+        }
+    }
+}
+
+impl TrackLook {
+    /// The look for the cover's file as the player has it now. Returns
+    /// whether the look changed with this call.
+    fn follow(&mut self, theme: &Theme, cover: &str) -> bool {
+        let fixed = matches!(
+            (theme.tint, theme.accent),
+            (theme::Paint::Fixed(_), theme::Paint::Fixed(_))
+        );
+        if self.cover.as_deref() != Some(cover) {
+            self.cover = Some(cover.to_string());
+            self.pending = None;
+            if cover.is_empty() || fixed {
+                let before = self.look;
+                self.look = look::resolve(theme, None);
+                return self.look != before;
+            }
+            let (send, receive) = mpsc::channel();
+            let path = PathBuf::from(cover);
+            std::thread::spawn(move || {
+                let _ =
+                    send.send(read_art(&path, 64, 64, None).map(|cover| look::of_cover(&cover)));
+            });
+            self.pending = Some(receive);
+        }
+        if let Some(receive) = self.pending.as_ref() {
+            match receive.try_recv() {
+                Ok(found) => {
+                    self.pending = None;
+                    let before = self.look;
+                    let from_cover = found.unwrap_or(look::NEUTRAL);
+                    self.look = Look {
+                        tint: match theme.tint {
+                            theme::Paint::Fixed(c) => c,
+                            theme::Paint::Artwork => from_cover.tint,
+                        },
+                        accent: match theme.accent {
+                            theme::Paint::Fixed(c) => c,
+                            theme::Paint::Artwork => from_cover.accent,
+                        },
+                    };
+                    return self.look != before;
+                }
+                Err(mpsc::TryRecvError::Disconnected) => self.pending = None,
+                Err(mpsc::TryRecvError::Empty) => {}
+            }
+        }
+        false
+    }
+}
+
+/// Frosted glass over a moving picture: a band of the frame taken at an
+/// eighth, blurred there and stretched back. The band as last frosted is
+/// kept with a sum of what lay under it, so a picture that stands still
+/// under the glass is frosted once.
+#[derive(Default)]
+struct Frost {
+    held: Vec<(Rect, u64, Vec<u8>)>,
+}
+
+type Rect = (u32, u32, u32, u32);
+
+fn band_sum(frame: &Frame, (x, y, w, h): Rect) -> u64 {
+    let mut sum = 0xcbf29ce484222325u64;
+    for row in y..y + h {
+        let start = ((row * frame.width + x) * 4) as usize;
+        for chunk in frame.rgba[start..start + (w * 4) as usize]
+            .as_chunks::<8>()
+            .0
+        {
+            let word = u64::from_le_bytes([
+                chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
+            ]);
+            sum = (sum ^ word).wrapping_mul(0x100000001b3);
+        }
+    }
+    sum
+}
+
+impl Frost {
+    /// Frost a rectangle of the frame in place, `alpha` of the way.
+    fn apply(&mut self, frame: &mut Frame, x: i32, y: i32, w: u32, h: u32, alpha: u8) {
+        let x = x.clamp(0, frame.width as i32) as u32;
+        let y = y.clamp(0, frame.height as i32) as u32;
+        let (w, h) = (w.min(frame.width - x), h.min(frame.height - y));
+        if w < 8 || h < 4 || alpha == 0 {
+            return;
+        }
+        let rect = (x, y, w, h);
+        let sum = band_sum(frame, rect);
+        let at = match self.held.iter().position(|(r, _, _)| *r == rect) {
+            Some(at) => at,
+            None => {
+                // The bar's band and the sheet's: two at most are kept.
+                if self.held.len() >= 2 {
+                    self.held.remove(0);
+                }
+                self.held.push((rect, !sum, Vec::new()));
+                self.held.len() - 1
+            }
+        };
+        if self.held[at].1 != sum {
+            let mut band = Vec::with_capacity((w * h * 4) as usize);
+            for row in y..y + h {
+                let start = ((row * frame.width + x) * 4) as usize;
+                band.extend_from_slice(&frame.rgba[start..start + (w * 4) as usize]);
+            }
+            let band = Frame {
+                blend: Default::default(),
+                width: w,
+                height: h,
+                rgba: band,
+            };
+            let small = blur(&fit_art(&band, (w / 8).max(4), (h / 8).max(2)), 2);
+            self.held[at] = (rect, sum, fit_art(&small, w, h).rgba);
+        }
+        let frosted = &self.held[at].2;
+        let a = alpha as u32;
+        for row in 0..h {
+            let to = (((y + row) * frame.width + x) * 4) as usize;
+            let from = (row * w * 4) as usize;
+            let (dst, src) = (
+                &mut frame.rgba[to..to + (w * 4) as usize],
+                &frosted[from..from + (w * 4) as usize],
+            );
+            if alpha == 255 {
+                dst.copy_from_slice(src);
+            } else {
+                for (d, s) in dst.iter_mut().zip(src) {
+                    *d = ((*s as u32 * a + *d as u32 * (255 - a)) / 255) as u8;
+                }
+            }
+        }
+    }
 }
 
 impl Face {
@@ -400,7 +604,9 @@ impl Face {
     }
 }
 
-const INK: [u8; 3] = [235, 235, 240];
+fn share(of: f32, alpha: u8) -> u8 {
+    (of.clamp(0.0, 1.0) * alpha as f32).round() as u8
+}
 
 /// Whether the face says what it sees: the display's own log level, as the
 /// launcher hands it over, at its finest.
@@ -408,10 +614,6 @@ fn verbose() -> bool {
     std::env::var("GLASS_LOG")
         .map(|v| v.contains("verbose"))
         .unwrap_or(false)
-}
-
-fn scaled(a: u8, by: u8) -> u8 {
-    (a as u32 * by as u32 / 255) as u8
 }
 
 /// An icon in the middle of a rectangle.
@@ -460,112 +662,170 @@ impl Overlay for Face {
             // The bar is away, and the sheet with it.
             self.sheet_open = false;
         }
-        let bar = Bar::for_picture(view.width, view.height, view.scale);
+        let tokens = self.tokens.get_or_insert_with(|| tokens_for(view));
+        let theme = &tokens.theme;
+        let frosted = tokens.frosted;
+        let bar = Bar::measured(view.width, view.height, view.scale, theme.measure_bar);
+        let clock = view.ours && !playing;
+        if alpha > 0 || clock {
+            // The look of the track, asked for only while there is something to draw with it.
+            if self.track.follow(theme, &meta.art_file) {
+                self.accents = None;
+            }
+        }
+        let look = self.track.look;
+        let ink = theme.buttons_ink.unwrap_or(theme.ink);
         let mut drawn = false;
         if alpha > 0 {
-            // The icons at half the bar's height, rastered when that changes.
+            // The icons at half the bar's height, rastered when the size or the ink changes.
             let size = (bar.h / 2).max(16);
             let icons = match self.icons.take() {
-                Some(set) if set.size() == size => set,
-                _ => icon::Set::new(size, INK),
+                Some(set) if set.is(size, ink) => set,
+                _ => icon::Set::new(size, ink),
             };
-            // The bar: frosted dark over the picture, a hairline above it.
-            ui::fill(
-                frame,
-                bar.x,
-                bar.y,
-                bar.w,
-                bar.h,
-                [10, 10, 12, scaled(175, alpha)],
-            );
-            ui::fill(
-                frame,
-                bar.x,
-                bar.y,
-                bar.w,
-                1,
-                [255, 255, 255, scaled(36, alpha)],
-            );
+            let accents = match self.accents.take() {
+                Some(set) if set.is(size, look.accent) => set,
+                _ => icon::Set::new(size, look.accent),
+            };
+            let glass = |frame: &mut Frame, x: i32, y: i32, w: u32, h: u32, opacity: f32| {
+                ui::fill(
+                    frame,
+                    x,
+                    y,
+                    w,
+                    h,
+                    [
+                        look.tint[0],
+                        look.tint[1],
+                        look.tint[2],
+                        share(opacity, alpha),
+                    ],
+                );
+                ui::fill(
+                    frame,
+                    x,
+                    y,
+                    w,
+                    1,
+                    [255, 255, 255, share(theme.hairline, alpha)],
+                );
+            };
+            let button_alpha = share(theme.buttons_opacity, alpha);
+            // The bar: glass over the picture, frosted where that is on.
+            if frosted {
+                self.frost.apply(frame, bar.x, bar.y, bar.w, bar.h, alpha);
+            }
+            glass(frame, bar.x, bar.y, bar.w, bar.h, theme.bar);
             for (i, button) in BUTTONS.iter().enumerate() {
                 let rect = bar.button_rect(i);
-                let lit =
-                    self.pressed == Some(*button) || (*button == Button::More && self.sheet_open);
-                if lit {
+                if self.pressed == Some(*button) {
                     ui::fill(
                         frame,
                         rect.0,
                         rect.1,
                         rect.2,
                         rect.3,
-                        [255, 255, 255, scaled(40, alpha)],
+                        [255, 255, 255, share(0.16, alpha)],
                     );
                 }
-                place(frame, icons.get(button_icon(*button, meta)), rect, alpha);
+                let open = *button == Button::More && self.sheet_open;
+                if open {
+                    ui::fill(
+                        frame,
+                        rect.0,
+                        rect.1,
+                        rect.2,
+                        rect.3,
+                        [
+                            look.accent[0],
+                            look.accent[1],
+                            look.accent[2],
+                            share(0.18, alpha),
+                        ],
+                    );
+                }
+                let set = if open { &accents } else { &icons };
+                place(
+                    frame,
+                    set.get(button_icon(*button, meta)),
+                    rect,
+                    button_alpha,
+                );
             }
             if self.sheet_open {
                 let sheet = bar.sheet();
-                ui::fill(
-                    frame,
-                    sheet.x,
-                    sheet.y,
-                    sheet.w,
-                    sheet.h,
-                    [10, 10, 12, scaled(200, alpha)],
-                );
-                ui::fill(
-                    frame,
-                    sheet.x,
-                    sheet.y,
-                    sheet.w,
-                    1,
-                    [255, 255, 255, scaled(36, alpha)],
-                );
+                if frosted {
+                    self.frost
+                        .apply(frame, sheet.x, sheet.y, sheet.w, sheet.h, alpha);
+                }
+                glass(frame, sheet.x, sheet.y, sheet.w, sheet.h, theme.sheet);
                 for (i, tile) in TILES.iter().enumerate() {
                     let rect = sheet.tile_rect(i);
                     let lit = tile_lit(*tile, meta);
-                    if lit || self.pressed_tile == Some(*tile) {
+                    if lit {
                         ui::fill(
                             frame,
                             rect.0,
                             rect.1,
                             rect.2,
                             rect.3,
-                            [255, 255, 255, scaled(46, alpha)],
+                            [
+                                look.accent[0],
+                                look.accent[1],
+                                look.accent[2],
+                                share(0.18, alpha),
+                            ],
                         );
                     }
-                    // A mode that is off is there, and quieter.
-                    place(
-                        frame,
-                        icons.get(tile_icon(*tile, meta)),
-                        rect,
-                        if lit { alpha } else { scaled(140, alpha) },
-                    );
+                    if self.pressed_tile == Some(*tile) {
+                        ui::fill(
+                            frame,
+                            rect.0,
+                            rect.1,
+                            rect.2,
+                            rect.3,
+                            [255, 255, 255, share(0.16, alpha)],
+                        );
+                    }
+                    // A mode that is on wears the accent; one that is off is there, and quieter.
+                    let (set, a) = if lit {
+                        (&accents, button_alpha)
+                    } else {
+                        (&icons, share(0.55, button_alpha))
+                    };
+                    place(frame, set.get(tile_icon(*tile, meta)), rect, a);
                 }
             }
             self.icons = Some(icons);
+            self.accents = Some(accents);
             drawn = true;
         }
         // The clock: when the player stands still on the display's own screen.
-        if view.ours && !playing {
-            let size = ((view.height as f32 / 5.0 * view.scale.max(0.5)).round() as u32)
+        if clock {
+            let size = ((view.height as f32 / 720.0 * theme.measure_clock * view.scale.max(0.5))
+                .round() as u32)
                 .max(24)
                 .min(view.height / 2);
-            if let Some(line) = ui::line(view.fonts, TextStyle::Bold, size, INK, &clock_text()) {
+            let clock_ink = theme.clock_ink.unwrap_or(theme.ink);
+            if let Some(line) =
+                ui::line(view.fonts, TextStyle::Bold, size, clock_ink, &clock_text())
+            {
                 let x = (view.width.saturating_sub(line.width) / 2) as i32;
                 let y = (view
                     .height
                     .saturating_sub(bar.h)
                     .saturating_sub(line.height)
                     / 2) as i32;
+                let p = theme.plate;
                 ui::fill(
                     frame,
                     x - 12,
                     y - 6,
                     line.width + 24,
                     line.height + 12,
-                    [10, 10, 12, 140],
+                    [p[0], p[1], p[2], share(theme.clock_plate, 255)],
                 );
-                ui::blit(frame, &line, x, y, 220);
+                ui::blit(frame, &line, x, y, share(theme.clock_opacity, 255));
                 drawn = true;
             }
         }
@@ -590,7 +850,12 @@ impl Overlay for Face {
                 meta.status
             );
         }
-        let bar = Bar::for_picture(view.width, view.height, view.scale);
+        let units = self
+            .tokens
+            .get_or_insert_with(|| tokens_for(view))
+            .theme
+            .measure_bar;
+        let bar = Bar::measured(view.width, view.height, view.scale, units);
         let on_bar = if self.presence.visible() {
             bar.button_at(x, y)
         } else {
@@ -672,6 +937,16 @@ impl Overlay for Face {
 mod tests {
     use super::*;
     use glass::face::{Fonts, Input};
+    use std::collections::BTreeMap;
+
+    static NO_SETTINGS: BTreeMap<String, String> = BTreeMap::new();
+
+    fn settings(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    }
 
     fn input(status: &str) -> Input {
         Input {
@@ -693,6 +968,7 @@ mod tests {
             now_ms,
             ours: true,
             scale: 1.0,
+            settings: &NO_SETTINGS,
         }
     }
 
@@ -1104,6 +1380,189 @@ mod tests {
         assert!(
             text.is_empty() || text.len() == 5,
             "HH:MM or nothing: {text}"
+        );
+    }
+
+    #[test]
+    fn the_users_settings_reach_what_is_drawn_and_what_is_touched() {
+        let input = input("pause");
+        let fonts = Fonts::default();
+        let mut frame = blank();
+        let mut face = Face::new();
+        // A bar twice as tall, in a red glass, with the buttons in yellow.
+        let set = settings(&[
+            ("measure.bar", "144"),
+            ("colours.tint", "#400000"),
+            ("glass.bar", "1"),
+            ("buttons.ink", "#ffff00"),
+        ]);
+        let mut v = view(&input, &fonts, 0);
+        v.settings = &set;
+        assert!(face.draw(&mut frame, &v));
+        let at = |frame: &Frame, x: usize, y: usize| {
+            let i = (y * 1280 + x) * 4;
+            [
+                frame.rgba[i],
+                frame.rgba[i + 1],
+                frame.rgba[i + 2],
+                frame.rgba[i + 3],
+            ]
+        };
+        assert_eq!(
+            at(&frame, 5, 600),
+            [0x40, 0, 0, 255],
+            "the glass is the user's, and reaches up to 576"
+        );
+        assert_eq!(at(&frame, 5, 570)[3], 0, "and no further");
+        // Play's middle is inside its triangle: the buttons' own ink.
+        let play = at(&frame, 213 + 106 + 4, 576 + 72);
+        assert_eq!(
+            [play[0], play[1], play[2]],
+            [255, 255, 0],
+            "the icon wears the buttons' ink"
+        );
+        // A touch where the taller bar is, is the bar's.
+        assert!(face.pointer(PointerKind::Down, 320, 600, &v));
+        assert!(face.pointer(PointerKind::Up, 320, 600, &v));
+        assert_eq!(face.commands()[0].name, "toggle");
+    }
+
+    #[test]
+    fn what_is_lit_wears_the_accent() {
+        let mut input = input("pause");
+        input.metadata.random = true;
+        let fonts = Fonts::default();
+        let mut frame = blank();
+        let mut face = Face::new();
+        face.sheet_open = true;
+        let set = settings(&[
+            ("colours.accent", "#00ff00"),
+            ("colours.tint", "#000000"),
+            ("glass.sheet", "1"),
+        ]);
+        let mut v = view(&input, &fonts, 0);
+        v.settings = &set;
+        face.draw(&mut frame, &v);
+        let at = |x: usize, y: usize| {
+            let i = (y * 1280 + x) * 4;
+            [frame.rgba[i], frame.rgba[i + 1], frame.rgba[i + 2]]
+        };
+        // The random tile is lit: an accent wash on the black glass; repeat is not.
+        let lit = at(860, 580);
+        assert!(
+            lit[1] > 30 && lit[0] == 0 && lit[2] == 0,
+            "a green wash: {lit:?}"
+        );
+        assert_eq!(at(650, 580), [0, 0, 0], "an unlit tile is plain glass");
+    }
+
+    #[test]
+    fn a_theme_is_one_folders_text_and_nothing_else() {
+        let base = Path::new("/data/faces");
+        assert_eq!(
+            theme_file(base, "Midnight"),
+            Some(PathBuf::from("/data/faces/Midnight/face.txt"))
+        );
+        assert_eq!(
+            theme_file(base, " Warm Glow "),
+            Some(PathBuf::from("/data/faces/Warm Glow/face.txt"))
+        );
+        for bad in ["", "..", ".hidden", "a/b", "../../etc", "a\\b"] {
+            assert_eq!(theme_file(base, bad), None, "{bad:?} is no theme");
+        }
+    }
+
+    #[test]
+    fn a_picture_standing_still_under_the_glass_is_frosted_once() {
+        let mut frame = blank();
+        for (i, px) in frame.rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+            let v = if (i / 16) % 2 == 0 { 255 } else { 0 };
+            px.copy_from_slice(&[v, v, v, 255]);
+        }
+        let clear = frame.rgba.clone();
+        let mut frost = Frost::default();
+        frost.apply(&mut frame, 0, 648, 1280, 72, 255);
+        let band = |f: &Frame| f.rgba[648 * 1280 * 4..].to_vec();
+        let frosted = band(&frame);
+        assert_ne!(
+            frosted,
+            clear[648 * 1280 * 4..].to_vec(),
+            "the stripes are blurred"
+        );
+        assert!(
+            frosted
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|px| px[0] > 60 && px[0] < 200),
+            "into greys"
+        );
+        assert_eq!(
+            frame.rgba[..648 * 1280 * 4],
+            clear[..648 * 1280 * 4],
+            "and nothing above the band is touched"
+        );
+        // The same picture again: the band held is used, the same pixels land.
+        let held = frost.held[0].2.as_ptr();
+        frame.rgba.copy_from_slice(&clear);
+        frost.apply(&mut frame, 0, 648, 1280, 72, 255);
+        assert_eq!(frost.held[0].2.as_ptr(), held, "not frosted again");
+        assert_eq!(band(&frame), frosted);
+        // The picture moves under the glass: frosted afresh.
+        frame.rgba.copy_from_slice(&clear);
+        for px in frame.rgba[700 * 1280 * 4..701 * 1280 * 4]
+            .as_chunks_mut::<4>()
+            .0
+        {
+            px.copy_from_slice(&[255, 0, 0, 255]);
+        }
+        frost.apply(&mut frame, 0, 648, 1280, 72, 255);
+        assert_ne!(band(&frame), frosted);
+        // Half way through a fade the glass is half frosted.
+        frame.rgba.copy_from_slice(&clear);
+        frost.apply(&mut frame, 0, 648, 1280, 72, 0);
+        assert_eq!(frame.rgba, clear, "none of the way is nothing");
+    }
+
+    #[test]
+    fn the_look_follows_the_track_and_a_fixed_theme_reads_no_cover() {
+        let mut track = TrackLook::default();
+        let theme = Theme::default();
+        assert!(
+            !track.follow(&theme, ""),
+            "no cover: the neutral look stands"
+        );
+        assert_eq!(track.look, look::NEUTRAL);
+        // A cover that is not a picture: asked for off the frame's path, and neutral when it is in.
+        assert!(!track.follow(&theme, "/nonexistent/cover.jpg"));
+        assert!(track.pending.is_some());
+        for _ in 0..200 {
+            if track.pending.is_none() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            track.follow(&theme, "/nonexistent/cover.jpg");
+        }
+        assert!(track.pending.is_none());
+        assert_eq!(track.look, look::NEUTRAL);
+        // A theme that fixes both colours never asks for the cover.
+        let mut fixed = Theme::default();
+        fixed.apply(&settings(&[
+            ("colours.tint", "#102030"),
+            ("colours.accent", "#ff8800"),
+        ]));
+        let mut track = TrackLook::default();
+        assert!(
+            track.follow(&fixed, "/any/cover.jpg"),
+            "the look changed to the theme's"
+        );
+        assert!(track.pending.is_none());
+        assert_eq!(
+            track.look,
+            Look {
+                tint: [16, 32, 48],
+                accent: [255, 136, 0]
+            }
         );
     }
 }

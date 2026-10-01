@@ -186,6 +186,7 @@ fn raster(icon: Icon, size: u32, ink: [u8; 3]) -> Frame {
 /// The icons rastered at one size.
 pub struct Set {
     size: u32,
+    ink: [u8; 3],
     frames: Vec<Frame>,
 }
 
@@ -195,8 +196,14 @@ impl Set {
         let size = size.max(1);
         Self {
             size,
+            ink,
             frames: ICONS.iter().map(|icon| raster(*icon, size, ink)).collect(),
         }
+    }
+
+    /// Whether the set is the one for a size and an ink.
+    pub fn is(&self, size: u32, ink: [u8; 3]) -> bool {
+        self.size == size.max(1) && self.ink == ink
     }
 
     /// The size the set was rastered at.

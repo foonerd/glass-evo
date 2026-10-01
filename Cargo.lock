@@ -50,8 +50,8 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "bank"
-version = "0.7.89"
-source = "git+https://github.com/foonerd/glass?tag=v0.7.89#0eea0831d40e48ecd9579b0787a73623cb5e0f52"
+version = "0.7.95"
+source = "git+https://github.com/foonerd/glass?tag=v0.7.95#4b8f6285aba613f73924755e06bb835c64e3f8fa"
 dependencies = [
  "rustfft",
  "serde",
@@ -132,8 +132,8 @@ checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
 
 [[package]]
 name = "controls"
-version = "0.7.89"
-source = "git+https://github.com/foonerd/glass?tag=v0.7.89#0eea0831d40e48ecd9579b0787a73623cb5e0f52"
+version = "0.7.95"
+source = "git+https://github.com/foonerd/glass?tag=v0.7.95#4b8f6285aba613f73924755e06bb835c64e3f8fa"
 dependencies = [
  "expose",
  "intake",
@@ -197,8 +197,8 @@ dependencies = [
 
 [[package]]
 name = "expose"
-version = "0.7.89"
-source = "git+https://github.com/foonerd/glass?tag=v0.7.89#0eea0831d40e48ecd9579b0787a73623cb5e0f52"
+version = "0.7.95"
+source = "git+https://github.com/foonerd/glass?tag=v0.7.95#4b8f6285aba613f73924755e06bb835c64e3f8fa"
 dependencies = [
  "ab_glyph",
  "font8x8",
@@ -211,7 +211,7 @@ dependencies = [
 
 [[package]]
 name = "face"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "glass",
  "libc",
@@ -289,8 +289,8 @@ dependencies = [
 
 [[package]]
 name = "glass"
-version = "0.7.89"
-source = "git+https://github.com/foonerd/glass?tag=v0.7.89#0eea0831d40e48ecd9579b0787a73623cb5e0f52"
+version = "0.7.95"
+source = "git+https://github.com/foonerd/glass?tag=v0.7.95#4b8f6285aba613f73924755e06bb835c64e3f8fa"
 dependencies = [
  "controls",
  "crc32fast",
@@ -311,7 +311,7 @@ dependencies = [
 
 [[package]]
 name = "glass-evo"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "face",
  "glass",
@@ -375,8 +375,8 @@ checksum = "65b27460c2c92b037f3f94c538ed9a3342f3fdf923606781629ccb35f82d042a"
 
 [[package]]
 name = "intake"
-version = "0.7.89"
-source = "git+https://github.com/foonerd/glass?tag=v0.7.89#0eea0831d40e48ecd9579b0787a73623cb5e0f52"
+version = "0.7.95"
+source = "git+https://github.com/foonerd/glass?tag=v0.7.95#4b8f6285aba613f73924755e06bb835c64e3f8fa"
 dependencies = [
  "bank",
  "lead",
@@ -415,8 +415,8 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "lead"
-version = "0.7.89"
-source = "git+https://github.com/foonerd/glass?tag=v0.7.89#0eea0831d40e48ecd9579b0787a73623cb5e0f52"
+version = "0.7.95"
+source = "git+https://github.com/foonerd/glass?tag=v0.7.95#4b8f6285aba613f73924755e06bb835c64e3f8fa"
 dependencies = [
  "bank",
  "serde",
@@ -436,8 +436,8 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "logline"
-version = "0.7.89"
-source = "git+https://github.com/foonerd/glass?tag=v0.7.89#0eea0831d40e48ecd9579b0787a73623cb5e0f52"
+version = "0.7.95"
+source = "git+https://github.com/foonerd/glass?tag=v0.7.95#4b8f6285aba613f73924755e06bb835c64e3f8fa"
 
 [[package]]
 name = "memchr"
@@ -528,8 +528,8 @@ dependencies = [
 
 [[package]]
 name = "pane"
-version = "0.7.89"
-source = "git+https://github.com/foonerd/glass?tag=v0.7.89#0eea0831d40e48ecd9579b0787a73623cb5e0f52"
+version = "0.7.95"
+source = "git+https://github.com/foonerd/glass?tag=v0.7.95#4b8f6285aba613f73924755e06bb835c64e3f8fa"
 dependencies = [
  "expose",
  "plot",
@@ -550,8 +550,8 @@ checksum = "5be167a7af36ee22fe3115051bc51f6e6c7054c9348e28deb4f49bd6f705a315"
 
 [[package]]
 name = "plot"
-version = "0.7.89"
-source = "git+https://github.com/foonerd/glass?tag=v0.7.89#0eea0831d40e48ecd9579b0787a73623cb5e0f52"
+version = "0.7.95"
+source = "git+https://github.com/foonerd/glass?tag=v0.7.95#4b8f6285aba613f73924755e06bb835c64e3f8fa"
 dependencies = [
  "bank",
  "lead",
@@ -869,8 +869,8 @@ dependencies = [
 
 [[package]]
 name = "tap"
-version = "0.7.89"
-source = "git+https://github.com/foonerd/glass?tag=v0.7.89#0eea0831d40e48ecd9579b0787a73623cb5e0f52"
+version = "0.7.95"
+source = "git+https://github.com/foonerd/glass?tag=v0.7.95#4b8f6285aba613f73924755e06bb835c64e3f8fa"
 dependencies = [
  "bank",
  "libc",

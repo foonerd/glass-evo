@@ -2,6 +2,17 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.5] - 2026-10-01
+
+The look. What the face draws with is no longer fixed in its code: it comes from a face theme, with the user's own word over it.
+
+- **Colours from the artwork.** The glass takes the colour of the cover of what plays, made dark, and what is lit, a mode that is on, the More button while its sheet is open, takes the cover's most vivid colour. The cover is read once per track, off the frame's path, and only while the face has something to draw; a cover with no colour to speak of gives a neutral look.
+- **Frosted glass.** What lies under the bar and the sheet is frosted while the theme moves, so a theme's own text and controls no longer show through the buttons. It is frosted once while the picture under the glass stands still. On by itself where the board has room for it, off on the small ones, and the user's switch decides either way.
+- **The user's own look**, on the Glass Manager's Screen tab: the colours from the artwork or their own, the glass's opacity, frost, the buttons and the clock on their own, and a reset to the defaults.
+- **Face themes.** A theme is a folder with a `face.txt`, sections of `key = value`, the way meter themes are written: colours, the glass's opacities, the hairline, frost, the buttons' and the clock's own ink and opacity, the bar's and the clock's measure. What it leaves out keeps the built-in look; a key a face does not know is passed over. `themes/Example/face.txt` documents every key; the wiki's Face themes page has the reference. The format is provisional until the first full preview.
+
+Built on Glass 0.7.95, which hands the face its settings.
+
 ## [0.1.4] - 2026-10-01
 
 More, and mute. The bar gains a sixth button at its right end, More, which opens a sheet above it with three tiles: repeat, walking off, all, single and off again; random; and mute. A tile is lit while its mode is on in the player, and repeat shows a one inside its arrows on single, so the sheet says how the player stands as well as changing it. The sheet stays open for the next tile, shuts on a tap beside it, which the theme under it does not act on, and leaves with the bar. A finger resting on volume down for six tenths of a second mutes and unmutes without stepping the volume; while the player is muted that button shows a muted speaker in place of its minus, and a tap on it unmutes.
