@@ -1519,6 +1519,10 @@ impl Overlay for Face {
         }
     }
 
+    fn name(&self) -> Option<String> {
+        Some(banner())
+    }
+
     fn commands(&mut self) -> Vec<Command> {
         std::mem::take(&mut self.pending)
     }
