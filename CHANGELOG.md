@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.18] - 2026-10-02
+
+The face on a remote display, on Linux. Built on Glass 0.8.22.
+
+- **A remote display shows the face.** The release carries, beside the component the Manager installs, a bundle per architecture for a remote display (`glass-evo-<version>-<arch>.tar.gz`: x64, armv8, armv7, arm): the same binary with Glass's own remote installer. A remote installed from it is Glass's remote with the face in it, in the standalone remote's place: the same settings, cache and menu entries. It shows the clock and the date when the player stands still and the bar of controls, in the player's look, where the player's own screen shows them; its settings page has the choice of always, or never. The controls need a touch screen or a mouse on the remote. The player needs Glass 0.8.20 or later; Windows and Android have the standalone remote only for now, and Anymote for the face.
+- The face says what it is called (`Overlay::name`), which a remote shows on its settings page and tells the player.
+
 ## [0.1.17] - 2026-10-02
 
 Built on Glass 0.8.19. No change in what is shown.

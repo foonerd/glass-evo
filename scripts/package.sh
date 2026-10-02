@@ -6,6 +6,10 @@
 # Glass it works with (Cargo.toml's workspace.metadata.glass), the build
 # (commit and time) and, per architecture and for the browser's module, the
 # file's path and its sha256, which the Manager checks on install.
+#
+# And the bundle for a remote display: per architecture, the same binary
+# with Glass's remote installer, as dist/glass-evo-<version>-<arch>.tar.gz.
+# A remote installed from it is Glass's remote with the face in it.
 set -euo pipefail
 ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
@@ -58,3 +62,24 @@ EOF
 ( cd "$STAGE" && rm -f "$ROOT/dist/glass-evo-$VERSION.zip" && zip -qr "$ROOT/dist/glass-evo-$VERSION.zip" . )
 cat "$STAGE/manifest.json"
 ls -la "$ROOT/dist/glass-evo-$VERSION.zip"
+
+# The bundle for a remote display. The installer and its instructions are
+# Glass's own, taken from the Glass this face is built on (the checkout
+# cargo keeps of the tag the crates name), so there is one installer for
+# both flavours of a remote and it cannot come to differ between them.
+GLASS_SRC=$(cargo metadata --format-version 1 --locked | python3 -c '
+import json, os, sys
+packages = [p for p in json.load(sys.stdin)["packages"] if p["name"] == "glass"]
+print(os.path.dirname(os.path.dirname(os.path.dirname(packages[0]["manifest_path"]))) if packages else "")')
+[ -n "$GLASS_SRC" ] && [ -f "$GLASS_SRC/remote/linux/install.sh" ] || { echo "package: Glass's remote installer was not found (looked under: $GLASS_SRC)" >&2; exit 1; }
+grep -q 'binary_named glass-evo' "$GLASS_SRC/remote/linux/install.sh" || { echo "package: the Glass this is built on has an installer that does not know the bundle (0.8.21 or later is needed)" >&2; exit 1; }
+for arch in arm armv7 armv8 x64; do
+  top="glass-evo-$VERSION-$arch"
+  rm -rf "$STAGE/remote-$arch" && mkdir -p "$STAGE/remote-$arch/$top/remote"
+  install -D -m 755 "bin/$arch/glass-evo" "$STAGE/remote-$arch/$top/bin/$arch/glass-evo"
+  cp -r "$GLASS_SRC/remote/linux" "$STAGE/remote-$arch/$top/remote/linux"
+  cp "$GLASS_SRC/remote/README.md" "$STAGE/remote-$arch/$top/remote/README.md"
+  chmod +x "$STAGE/remote-$arch/$top/remote/linux/"*.sh
+  tar -C "$STAGE/remote-$arch" -czf "dist/$top.tar.gz" "$top"
+done
+ls -la dist/glass-evo-"$VERSION"-*.tar.gz

@@ -48,8 +48,17 @@ jobs:
       - name: The component names the commit it was built from
         run: |
           unzip -p dist/glass-evo-*.zip manifest.json | grep -F "\"commit\": \"$(git rev-parse --short HEAD)\""
+      - name: A remote's bundle installs as the bundle
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          work=$(mktemp -d)
+          tar -C "$work" -xzf "dist/glass-evo-$version-x64.tar.gz"
+          HOME="$work/home" PREFIX="$work/home/.local" sh "$work/glass-evo-$version-x64/remote/linux/install.sh" | tee "$work/said"
+          grep -F "flavour:   the bundle, glass-evo $version" "$work/said"
       - uses: actions/upload-artifact@v7
         with:
           name: glass-evo-component
-          path: dist/glass-evo-*.zip
+          path: |
+            dist/glass-evo-*.zip
+            dist/glass-evo-*-*.tar.gz
           if-no-files-found: error
