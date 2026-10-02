@@ -1,0 +1,29 @@
+name: signing check
+
+# Run by hand: proves that this repository can sign in to Azure Trusted
+# Signing the way the release does (a federated login from the `release`
+# environment), without cutting a release. It signs nothing.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  login:
+    name: the release's login to Azure
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Azure login for Trusted Signing
+        uses: azure/login@v3
+        with:
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: A token for the signing service
+        run: |
+          az account get-access-token --resource https://codesigning.azure.net --query expiresOn -o tsv
