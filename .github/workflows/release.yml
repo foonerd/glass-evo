@@ -66,19 +66,71 @@ jobs:
             dist/glass-evo-*-*.tar.gz
           if-no-files-found: error
 
-  publish:
-    name: publish
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [check, component]
+  windows:
+    name: windows cross build, the remote's bundle laid out
     runs-on: ubuntu-24.04
+    container: ghcr.io/foonerd/glass-builder@sha256:1d6d085cbf23ff53628402be14e87a5ffe996416894684e596956143365800da
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install && rustup show active-toolchain && rustup target add x86_64-pc-windows-gnu
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows
+          cache-bin: false
+          save-if: false
+      - run: scripts/ship-windows.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-windows
+          path: dist/windows
+          if-no-files-found: error
+
+  publish:
+    name: sign, publish
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [check, component, windows]
+    runs-on: ubuntu-24.04
+    # The environment names this job to Azure: the federated credential for
+    # Trusted Signing matches repo glass-evo, environment release.
+    environment: release
     permissions:
       contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           name: release-component
           path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-windows
+          path: dist/windows
+      # The Windows display and the installer scripts are signed with Azure
+      # Trusted Signing when the repository holds the account (variables
+      # TRUSTED_SIGNING_ENDPOINT, _ACCOUNT, _PROFILE; secrets AZURE_TENANT_ID,
+      # AZURE_CLIENT_ID, AZURE_SUBSCRIPTION_ID for a federated login);
+      # without them the bundle is published unsigned.
+      - name: Azure login for Trusted Signing
+        if: ${{ vars.TRUSTED_SIGNING_ACCOUNT != '' }}
+        uses: azure/login@v3
+        with:
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Sign the Windows display and the installer
+        if: ${{ vars.TRUSTED_SIGNING_ACCOUNT != '' }}
+        run: scripts/sign-windows.sh
+        env:
+          TRUSTED_SIGNING_ENDPOINT: ${{ vars.TRUSTED_SIGNING_ENDPOINT }}
+          TRUSTED_SIGNING_ACCOUNT: ${{ vars.TRUSTED_SIGNING_ACCOUNT }}
+          TRUSTED_SIGNING_PROFILE: ${{ vars.TRUSTED_SIGNING_PROFILE }}
+      - name: The Windows bundle as one archive
+        run: |
+          top=$(ls dist/windows | head -n1)
+          [ "$top" = "glass-evo-${GITHUB_REF_NAME#v}-windows-x64" ] || { echo "the bundle laid out is $top" >&2; exit 1; }
+          (cd dist/windows && zip -qr "../$top.zip" "$top")
+          ls -la "dist/$top.zip"
       - name: Release notes from the changelog
         run: |
           v="${GITHUB_REF_NAME#v}"
