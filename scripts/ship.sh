@@ -20,7 +20,7 @@ fetch() {
   local so="target/sysroot/$deb_arch/usr/lib/$multiarch/$soname"
   if [ ! -e "$so" ]; then
     mkdir -p "target/sysroot/$deb_arch"
-    curl -fsSL -o "$deb" "$url"
+    "$ROOT/scripts/fetch.sh" "$url" "$deb"
     dpkg-deb -x "$deb" "target/sysroot/$deb_arch"
   fi
   mkdir -p "target/sysroot/link-$deb_arch"
