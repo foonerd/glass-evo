@@ -1,8 +1,8 @@
 name: release
 
 # A tag builds the release: the check and the cross builds side by side in
-# Glass's builder image, then the component published. Run by hand it
-# builds everything and publishes nothing.
+# Glass's builder image, then the component published as a pre-release.
+# Run by hand it builds everything and publishes nothing.
 on:
   push:
     tags: ["v*"]
@@ -75,8 +75,12 @@ jobs:
           v="${GITHUB_REF_NAME#v}"
           awk -v v="$v" '$0 ~ "^## \\[" v "\\]" {on=1; next} on && /^## \[/ {exit} on' CHANGELOG.md > dist/notes.md
           [ -s dist/notes.md ] || echo "glass-evo $v" > dist/notes.md
+      # Published as a pre-release: no player is offered it but one set to
+      # take test releases. It is made the latest by hand once it has been
+      # tried (gh release edit <tag> --prerelease=false --latest).
       - uses: softprops/action-gh-release@v3
         with:
+          prerelease: true
           name: glass-evo ${{ github.ref_name }}
           body_path: dist/notes.md
           files: dist/glass-evo-*.zip
