@@ -19,7 +19,7 @@ jobs:
   check:
     name: format, lints, tests, docs
     runs-on: ubuntu-24.04
-    container: ghcr.io/foonerd/glass-builder@sha256:cdc7706f7cb2e06022a418ed257659d192e9b1d68d478e7885b110575620697a
+    container: ghcr.io/foonerd/glass-builder@sha256:1d6d085cbf23ff53628402be14e87a5ffe996416894684e596956143365800da
     steps:
       - uses: actions/checkout@v7
       - name: Toolchain from rust-toolchain.toml, in the image unless the file has moved on
@@ -35,7 +35,7 @@ jobs:
     name: cross builds and the component
     runs-on: ubuntu-24.04
     needs: check
-    container: ghcr.io/foonerd/glass-builder@sha256:cdc7706f7cb2e06022a418ed257659d192e9b1d68d478e7885b110575620697a
+    container: ghcr.io/foonerd/glass-builder@sha256:1d6d085cbf23ff53628402be14e87a5ffe996416894684e596956143365800da
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install && rustup show active-toolchain
@@ -46,6 +46,8 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: scripts/ship.sh
       - run: scripts/package.sh
+      - name: The component names the commit it was built from
+        run: unzip -p dist/glass-evo-*.zip manifest.json | grep -F "\"commit\": \"$(git rev-parse --short HEAD)\""
       - uses: actions/upload-artifact@v7
         with:
           name: glass-evo-component
