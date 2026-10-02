@@ -62,3 +62,23 @@ jobs:
             dist/glass-evo-*.zip
             dist/glass-evo-*-*.tar.gz
           if-no-files-found: error
+
+  windows:
+    if: github.ref == 'refs/heads/main'
+    name: windows cross build
+    runs-on: ubuntu-24.04
+    container: ghcr.io/foonerd/glass-builder@sha256:1d6d085cbf23ff53628402be14e87a5ffe996416894684e596956143365800da
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install && rustup show active-toolchain && rustup target add x86_64-pc-windows-gnu
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows
+          cache-bin: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: scripts/ship-windows.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: glass-evo-windows-unsigned
+          path: dist/windows
+          if-no-files-found: error

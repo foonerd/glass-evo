@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.19] - 2026-10-02
+
+The face on a remote display on Windows. Built on Glass 0.8.23.
+
+- **A bundle for Windows.** The release carries `glass-evo-<version>-windows-x64.zip`: the display with the face in it, the SDL2.dll it loads and Glass's own remote installer for Windows, the display and the installer scripts signed as Glass's are. Installed, it is Glass's remote for Windows with the face in it, in the standalone's place; its settings page has the choice of when the face shows. The clock reads Windows' local time (Glass 0.8.23). Windows 10 or later, 64 bit; the controls need a mouse or a touch screen. Android has the standalone remote only for now.
+
 ## [0.1.18] - 2026-10-02
 
 The face on a remote display, on Linux. Built on Glass 0.8.22.
