@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.17] - 2026-10-02
+
+Built on Glass 0.8.19. No change in what is shown.
+
+- The face is laid over the picture by the same code on the player's screen and in the module the Face tab and Anymote bring (Glass's `overlay::Laid`), where the display and the browser's pipeline each had their own; the two cannot come to differ there.
+
 ## [0.1.16] - 2026-10-02
 
 Built on Glass 0.8.15, for one fix of the display's.
