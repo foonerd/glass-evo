@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.16] - 2026-10-02
+
+Built on Glass 0.8.15, for one fix of the display's.
+
+- **What plays no longer changes a spectrum look's layout.** A look laid out for two channels became one area for as long as a mono recording played, in the single palette where the theme names only `palette.left` and `palette.right`. It keeps its two sides now, on the player's screen and in the module the Face tab and Anymote bring; a section that asks for a one-channel bank (`channels = 1`) draws one, as before.
+
 ## [0.1.15] - 2026-10-02
 
 Clock faces: the clock set in type as before, or drawn.
