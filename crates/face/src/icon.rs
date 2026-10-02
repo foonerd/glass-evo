@@ -47,14 +47,14 @@ const SPAN: f32 = 20.0;
 const STROKE: f32 = 1.0;
 
 /// The distance to a stroke between two points, round at its ends.
-fn segment(p: Point, a: Point, b: Point, half: f32) -> f32 {
+pub(crate) fn segment(p: Point, a: Point, b: Point, half: f32) -> f32 {
     let (pa, ba) = ((p.0 - a.0, p.1 - a.1), (b.0 - a.0, b.1 - a.1));
     let along = ((pa.0 * ba.0 + pa.1 * ba.1) / (ba.0 * ba.0 + ba.1 * ba.1)).clamp(0.0, 1.0);
     (pa.0 - ba.0 * along).hypot(pa.1 - ba.1 * along) - half
 }
 
 /// The distance to a filled polygon, negative inside.
-fn polygon(p: Point, v: &[Point]) -> f32 {
+pub(crate) fn polygon(p: Point, v: &[Point]) -> f32 {
     let mut nearest = f32::MAX;
     let mut inside = false;
     let mut j = v.len() - 1;
@@ -78,7 +78,7 @@ fn polygon(p: Point, v: &[Point]) -> f32 {
 }
 
 /// The distance to a disc.
-fn disc(p: Point, c: Point, radius: f32) -> f32 {
+pub(crate) fn disc(p: Point, c: Point, radius: f32) -> f32 {
     (p.0 - c.0).hypot(p.1 - c.1) - radius
 }
 

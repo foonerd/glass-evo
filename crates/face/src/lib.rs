@@ -16,11 +16,12 @@
 use overlay::face::{
     blur, fit_art, read_art, read_to_string, ui, Command, Frame, Metadata, PointerKind, TextStyle,
 };
-use overlay::{Cover, Overlay, View, Wall};
+use overlay::{Cover, Overlay, View};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
+pub mod clock;
 pub mod icon;
 pub mod look;
 pub mod theme;
@@ -28,6 +29,45 @@ pub mod when;
 use icon::Icon;
 use look::Look;
 use theme::{DatePlace, Theme};
+
+pub use overlay::Wall;
+
+/// The clock alone, as a set of the face's keys draws it `size` high at a
+/// time of day: for a page that shows a look before it is saved, drawn by
+/// what draws it on the screen. The picture of a drawn face; nothing for
+/// a clock set in type, which a page sets in its own, or not shown.
+pub fn clock_preview<'a>(
+    drawn: &'a mut clock::Drawn,
+    keys: &std::collections::BTreeMap<String, String>,
+    size: u32,
+    wall: &Wall,
+    now_ms: u64,
+) -> Option<&'a Frame> {
+    let theme = Theme::resolve(None, keys);
+    if !theme.clock_show || theme.clock_face == clock::ClockKind::Type {
+        return None;
+    }
+    // The second hand of a look that takes its accent from the cover is
+    // shown in the accent of no cover.
+    let accent = match theme.accent {
+        theme::Paint::Fixed(colour) => colour,
+        theme::Paint::Artwork => look::NEUTRAL.accent,
+    };
+    let text = format_time(&theme.clock_format, wall);
+    drawn.set(
+        &clock::Asked {
+            kind: theme.clock_face,
+            dial: theme.clock_dial,
+            paints: theme.paints(accent),
+            text: &text,
+            wall,
+            seconds: when::shows_seconds(&theme.clock_format),
+            now_ms,
+        },
+        size,
+    )?;
+    drawn.frame()
+}
 
 /// The workspace version, as Cargo knows it.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -837,6 +877,8 @@ impl Line {
 struct ClockFace {
     clock: Line,
     date: Line,
+    /// The clock where it is drawn and not set in type.
+    drawn: clock::Drawn,
 }
 
 /// What a glass is drawn with: the look, the hairline, and the frost.
@@ -1025,17 +1067,36 @@ impl ClockFace {
                 .saturating_sub(taken)
                 .saturating_sub(2 * least.1);
             let size = px(theme.measure_clock).max(24);
-            self.clock.set(
-                view,
-                format_time(&theme.clock_format, wall),
-                size,
-                theme.clock_ink.unwrap_or(theme.ink),
-                if own("measure.clock") {
-                    ANY
-                } else {
-                    (view.width.saturating_sub(2 * least.0), tallest)
-                },
-            )
+            let text = format_time(&theme.clock_format, wall);
+            let most = if own("measure.clock") {
+                ANY
+            } else {
+                (view.width.saturating_sub(2 * least.0), tallest)
+            };
+            if theme.clock_face == clock::ClockKind::Type {
+                self.clock
+                    .set(view, text, size, theme.clock_ink.unwrap_or(theme.ink), most)
+            } else {
+                // A drawn face: fitted by the room it takes at the size
+                // wanted, every digit an 8 so the room stands still.
+                let widest: String = text
+                    .chars()
+                    .map(|c| if c.is_ascii_digit() { '8' } else { c })
+                    .collect();
+                let size = fitted_size(size, clock::room(theme.clock_face, &widest, size), most);
+                self.drawn.set(
+                    &clock::Asked {
+                        kind: theme.clock_face,
+                        dial: theme.clock_dial,
+                        paints: theme.paints(glass.look.accent),
+                        text: &text,
+                        wall,
+                        seconds: when::shows_seconds(&theme.clock_format),
+                        now_ms: view.now_ms,
+                    },
+                    size,
+                )
+            }
         } else {
             None
         };
@@ -1078,7 +1139,17 @@ impl ClockFace {
                 theme.clock_tint,
             );
             if let Some(at) = layout.clock_y {
-                self.clock.place(frame, x, at, w, theme.clock_opacity);
+                if theme.clock_face == clock::ClockKind::Type {
+                    self.clock.place(frame, x, at, w, theme.clock_opacity);
+                } else if let Some(drawn) = self.drawn.frame() {
+                    ui::blit(
+                        frame,
+                        drawn,
+                        x + (w as i32 - drawn.width as i32) / 2,
+                        at,
+                        share(theme.clock_opacity, 255),
+                    );
+                }
             }
             if let Some(at) = layout.date_y {
                 self.date.place(frame, x, at, w, theme.date_opacity);
@@ -1151,6 +1222,10 @@ impl Face {
             let theme = &tokens.theme;
             if theme.clock_show {
                 format_time(&theme.clock_format, tm).hash(&mut h);
+                // A card on its way is another picture every frame.
+                if self.clock.drawn.moving(view.now_ms) {
+                    view.now_ms.hash(&mut h);
+                }
             }
             if theme.date_show {
                 format_time(&theme.date_format, tm).hash(&mut h);
@@ -2428,5 +2503,38 @@ mod tests {
             }
         }
         assert_eq!(looks, 4, "Dark Glass, Clear, Warm and Night Drive");
+    }
+
+    #[test]
+    fn the_clock_alone_is_drawn_for_a_page_from_the_looks_keys() {
+        let mut drawn = clock::Drawn::default();
+        let wall: &Wall = &A_THURSDAY;
+        // Set in type, or not shown: nothing, the page sets its own.
+        assert!(clock_preview(&mut drawn, &NO_SETTINGS, 100, wall, 0).is_none());
+        let off = settings(&[("clock.face", "dial"), ("clock.show", "off")]);
+        assert!(clock_preview(&mut drawn, &off, 100, wall, 0).is_none());
+        // A dial twice the size across; segments as wide as the pattern's words.
+        let dial = settings(&[("clock.face", "dial"), ("clock.dial", "roman")]);
+        let picture = clock_preview(&mut drawn, &dial, 100, wall, 0).expect("a dial");
+        assert_eq!((picture.width, picture.height), (200, 200));
+        let seven = settings(&[("clock.face", "seven"), ("clock.format", "%H:%M:%S")]);
+        let picture = clock_preview(&mut drawn, &seven, 100, wall, 0).expect("segments");
+        assert_eq!(
+            (picture.width, picture.height),
+            clock::room(clock::ClockKind::Seven, "13:05:09", 100)
+        );
+        // The lit segments are in the clock's ink.
+        let inked = settings(&[
+            ("clock.face", "seven"),
+            ("clock.ink", "#ff0000"),
+            ("clock.unlit", "0"),
+        ]);
+        let picture = clock_preview(&mut drawn, &inked, 100, wall, 0).expect("segments");
+        assert!(picture
+            .rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .any(|p| p[3] == 255 && p[0] == 255 && p[1] == 0));
     }
 }
