@@ -85,10 +85,49 @@ jobs:
           path: dist/windows
           if-no-files-found: error
 
+  # The Android app is signed with the project's key when the repository
+  # holds it (secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASS), the
+  # key Glass's own app carries, so the bundle installs over the standalone;
+  # without it the apk carries a throwaway key and is not published.
+  android:
+    name: android build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install && rustup show active-toolchain && rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+      - name: The NDK, the build tools and cargo-ndk
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.2.12479018" "build-tools;35.0.0" "platforms;android-35" >/dev/null
+          cargo install cargo-ndk --locked
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: android
+          save-if: false
+      - name: The Android app
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/glass-android.jks"
+            export ANDROID_KEYSTORE="$RUNNER_TEMP/glass-android.jks"
+          fi
+          scripts/ship-android.sh
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "no signing key in the repository: the apk is not published"
+            rm -f dist/glass-evo-*-android.apk
+          fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-android
+          path: dist/glass-evo-*-android.apk
+          if-no-files-found: ignore
+
   publish:
     name: sign, publish
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [check, component, windows]
+    needs: [check, component, windows, android]
     runs-on: ubuntu-24.04
     # The environment names this job to Azure: the federated credential for
     # Trusted Signing matches repo glass-evo, environment release.
@@ -106,6 +145,11 @@ jobs:
         with:
           name: release-windows
           path: dist/windows
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-android
+          path: dist
+          merge-multiple: true
       # The Windows display and the installer scripts are signed with Azure
       # Trusted Signing when the repository holds the account (variables
       # TRUSTED_SIGNING_ENDPOINT, _ACCOUNT, _PROFILE; secrets AZURE_TENANT_ID,
@@ -147,3 +191,4 @@ jobs:
           files: |
             dist/glass-evo-*.zip
             dist/glass-evo-*-*.tar.gz
+            dist/glass-evo-*-android.apk

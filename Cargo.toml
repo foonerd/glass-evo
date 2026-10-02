@@ -4,6 +4,7 @@ members = [
     "crates/face",
     "bins/glass-evo",
     "bins/glass-evo-face",
+    "bins/glass-evo-android",
 ]
 
 # The browser module: one unit, linked whole, so the page loads the least.
@@ -14,7 +15,7 @@ codegen-units = 1
 panic = "abort"
 
 [workspace.package]
-version = "0.1.19"
+version = "0.1.20"
 edition = "2021"
 license = "MIT"
 publish = false

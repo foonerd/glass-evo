@@ -26,7 +26,7 @@ glass-evo is built on Glass's crates rather than beside them: the renderer, the 
 
 ## Status
 
-0.1.19. Glass's display with a face over it: a bar of controls on demand (previous, play or pause, next, volume down and up, and More, a sheet with repeat, random and mute), a long press on volume down that mutes, and a clock and a date when the player stands still, each in a pattern of the user's choosing, the clock set in type or drawn (seven or sixteen segments, a flip clock, a dial with hands in four styles); everything at the face size the Manager's Screen tab sets, normal, large or car. The look follows the artwork on frosted glass, or is one of the looks that ship (Dark Glass, Clear, Warm, Night Drive), takes the user's own adjustments, and can be themed: a face theme is a folder with a `face.txt` (see `themes/Example` and the wiki's Face themes page). Released as the component the Glass Manager installs. From Glass 0.8.0 the Glass Manager gets it and keeps it up to date on its System tab, and hands the screen to it and back on its Screen tab; the kiosk stays the player's interface until then and returns whenever the screen is given back. On a Raspberry Pi the face draws on the screen itself; on x86 it draws on a plain X server brought up for it. A preview: verified on a Raspberry Pi 5 with a DSI screen and on an x86 player.
+0.1.20. Glass's display with a face over it: a bar of controls on demand (previous, play or pause, next, volume down and up, and More, a sheet with repeat, random and mute), a long press on volume down that mutes, and a clock and a date when the player stands still, each in a pattern of the user's choosing, the clock set in type or drawn (seven or sixteen segments, a flip clock, a dial with hands in four styles); everything at the face size the Manager's Screen tab sets, normal, large or car. The look follows the artwork on frosted glass, or is one of the looks that ship (Dark Glass, Clear, Warm, Night Drive), takes the user's own adjustments, and can be themed: a face theme is a folder with a `face.txt` (see `themes/Example` and the wiki's Face themes page). Released as the component the Glass Manager installs. From Glass 0.8.0 the Glass Manager gets it and keeps it up to date on its System tab, and hands the screen to it and back on its Screen tab; the kiosk stays the player's interface until then and returns whenever the screen is given back. On a Raspberry Pi the face draws on the screen itself; on x86 it draws on a plain X server brought up for it. A preview: verified on a Raspberry Pi 5 with a DSI screen and on an x86 player.
 
 ## On a remote display
 
@@ -36,7 +36,7 @@ A Glass remote display, another machine showing a player's meters, comes in two 
 | --- | --- | --- |
 | Linux (x64, armv8, armv7) | yes | yes, from 0.1.18 |
 | Windows (10 or later, 64 bit) | yes | yes, from 0.1.19 |
-| Android | yes | not yet |
+| Android (7 or later) | yes | yes, from 0.1.20 |
 
 On Linux, unpack `glass-evo-<version>-<arch>.tar.gz` (`x64` for a PC, `armv8` for a 64-bit Raspberry Pi OS, `armv7` for a 32-bit one) and run its installer as the user who will run the display:
 
@@ -55,7 +55,9 @@ powershell -ExecutionPolicy Bypass -File glass-evo-<version>-windows-x64\remote\
 
 The display and the installer scripts are signed. The installer says which flavour it installed, and the bundle takes the standalone's place as on Linux. The controls need a mouse or a touch screen.
 
-Where the bundle is not built yet, Anymote shows the same face in any browser, served by the player's manager at `/anymote`.
+On Android, download `glass-evo-<version>-android.apk` to the phone or tablet, open it and allow the install. It is the same app as Glass's standalone remote, **Glass Remote**, signed with the same key: it installs over the standalone and keeps its settings, and the standalone installs over it again. Android itself refuses an app built on an older Glass than the one installed, so change flavour to one built on the same Glass or a newer one, or uninstall first. The bar comes at a touch.
+
+For a device with nothing installed, Anymote shows the same face in any browser, served by the player's manager at `/anymote`.
 
 ## Building
 
