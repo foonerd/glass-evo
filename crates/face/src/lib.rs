@@ -14,7 +14,9 @@
 //! theme leaves to the artwork are read from the cover, once per track.
 
 use glass::face::{blur, fit_art, read_art, ui, Command, Frame, Metadata, PointerKind, TextStyle};
-use glass::{Overlay, View};
+use glass::{Cover, Overlay, View};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
@@ -75,6 +77,42 @@ pub const LINGER_MS: u64 = 6000;
 pub const AFTER_PLAY_MS: u64 = 2000;
 /// How long a finger rests on volume down before it mutes.
 pub const HOLD_MS: u64 = 600;
+/// How long a stop that still names a track is taken for the gap between
+/// two tracks: the player says "stop" there for a moment, and the plugin
+/// waits as long before it believes a stop.
+pub const TRACK_CHANGE_MS: u64 = 5000;
+
+/// Whether the player plays, the gap between two tracks bridged. A pause is
+/// the listener's own and counts at once, as does a stop that names no
+/// track, the queue's end; a stop that still names a track, after playing,
+/// counts only once it has lasted.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct Playing {
+    was: bool,
+    stopped_at: Option<u64>,
+}
+
+impl Playing {
+    /// Every frame: the player's word, and whether the face takes it as
+    /// playing.
+    pub fn settle(&mut self, now: u64, meta: &Metadata) -> bool {
+        if meta.status == "play" {
+            self.was = true;
+            self.stopped_at = None;
+            return true;
+        }
+        let between = self.was && meta.status == "stop" && !meta.title.is_empty();
+        if between {
+            let at = *self.stopped_at.get_or_insert(now);
+            if now.saturating_sub(at) < TRACK_CHANGE_MS {
+                return true;
+            }
+        }
+        self.was = false;
+        self.stopped_at = None;
+        false
+    }
+}
 
 /// The bar's place on a picture: the foot, a tenth of the height and at
 /// least forty pixels, six buttons of equal width across it.
@@ -388,6 +426,7 @@ impl Default for Presence {
 #[derive(Default)]
 pub struct Face {
     presence: Presence,
+    playing: Playing,
     sheet_open: bool,
     pending: Vec<Command>,
     pressed: Option<Button>,
@@ -401,6 +440,8 @@ pub struct Face {
     track: TrackLook,
     frost: Frost,
     clock: ClockFace,
+    /// What was last drawn, as `stamp` puts it; none when nothing was.
+    drawn: Option<u64>,
 }
 
 /// The tokens in use, read on the first frame: the display starts again
@@ -974,11 +1015,18 @@ impl ClockFace {
     }
 }
 
-impl Overlay for Face {
-    fn draw(&mut self, frame: &mut Frame, view: &View) -> bool {
+impl Face {
+    /// What a frame begins with: the player's word settled, the bar's
+    /// presence moved on, a resting finger turned into a mute. Answers with
+    /// what there is to draw: how much of the bar shows, and whether the
+    /// clock stands. Asked twice for one frame it changes nothing the
+    /// second time.
+    fn advance(&mut self, view: &View) -> (u8, bool) {
         let meta = &view.input.metadata;
         let now = view.now_ms;
-        let playing = meta.status == "play";
+        // A change of track is not the player standing still: the bar does
+        // not come up for it, and the clock does not show.
+        let playing = self.playing.settle(now, meta);
         self.presence.tick(now, playing);
         // A finger resting on volume down: mute, once, and no step on its lift.
         if self.pressed == Some(Button::VolumeDown)
@@ -994,11 +1042,84 @@ impl Overlay for Face {
             // The bar is away, and the sheet with it.
             self.sheet_open = false;
         }
+        let theme = &self.tokens.get_or_insert_with(|| tokens_for(view)).theme;
+        let clock = view.ours && !playing && (theme.clock_show || theme.date_show);
+        (alpha, clock)
+    }
+}
+
+impl Face {
+    /// Everything a drawing depends on, as one number: two frames with the
+    /// same stamp are drawn alike on the same picture. How much of the bar
+    /// shows, what is pressed, the sheet, what each button and tile wears,
+    /// the look of the track, the picture's size, and what the clock and
+    /// the date say.
+    fn stamp(&self, view: &View, alpha: u8, time: Option<&libc::tm>) -> u64 {
+        let meta = &view.input.metadata;
+        let mut h = DefaultHasher::new();
+        (alpha, view.width, view.height, view.scale.to_bits()).hash(&mut h);
+        (self.track.look.tint, self.track.look.accent).hash(&mut h);
+        if alpha > 0 {
+            self.pressed.map(|b| b as u8).hash(&mut h);
+            self.pressed_tile.map(|t| t as u8).hash(&mut h);
+            self.sheet_open.hash(&mut h);
+            for button in BUTTONS {
+                (button_icon(button, meta) as u8).hash(&mut h);
+            }
+            for tile in TILES {
+                (tile_icon(tile, meta) as u8, tile_lit(tile, meta)).hash(&mut h);
+            }
+        }
+        if let (Some(tm), Some(tokens)) = (time, self.tokens.as_ref()) {
+            let theme = &tokens.theme;
+            if theme.clock_show {
+                format_time(&theme.clock_format, tm).hash(&mut h);
+            }
+            if theme.date_show {
+                format_time(&theme.date_format, tm).hash(&mut h);
+            }
+        }
+        h.finish()
+    }
+}
+
+impl Overlay for Face {
+    /// Nothing to draw while the player plays and the bar is away: the
+    /// display is told so, and spares the copy of the picture a face draws
+    /// on. And where the face would draw what it drew last, a clock that
+    /// says the same minute, a bar nobody touches, the display is told
+    /// that too, and leaves the screen as it is.
+    fn covers(&mut self, view: &View) -> Cover {
+        let (alpha, clock) = self.advance(view);
+        if alpha == 0 && !clock {
+            self.drawn = None;
+            return Cover::Nothing;
+        }
+        // A cover read since the last frame changes what is drawn.
+        if let Some(tokens) = self.tokens.as_ref() {
+            if self
+                .track
+                .follow(&tokens.theme, &view.input.metadata.art_file)
+            {
+                self.accents = None;
+            }
+        }
+        let time = if clock { local_time() } else { None };
+        if self.drawn.is_some() && self.drawn == Some(self.stamp(view, alpha, time.as_ref())) {
+            Cover::Same
+        } else {
+            Cover::New
+        }
+    }
+
+    fn draw(&mut self, frame: &mut Frame, view: &View) -> bool {
+        let meta = &view.input.metadata;
+        let (alpha, clock) = self.advance(view);
+        let time = if clock { local_time() } else { None };
         let tokens = self.tokens.get_or_insert_with(|| tokens_for(view));
         let theme = &tokens.theme;
         let frosted = tokens.frosted;
         let bar = Bar::measured(view.width, view.height, view.scale, theme.measure_bar);
-        let clock = view.ours && !playing && (theme.clock_show || theme.date_show);
         if alpha > 0 || clock {
             // The look of the track, asked for only while there is something to draw with it.
             if self.track.follow(theme, &meta.art_file) {
@@ -1011,7 +1132,7 @@ impl Overlay for Face {
         // The clock and the date first, when the player stands still on the
         // display's own screen: the controls are drawn after and lie over them.
         if clock {
-            if let Some(tm) = local_time() {
+            if let Some(tm) = time {
                 let mut glass = Glass {
                     look,
                     hairline: theme.hairline,
@@ -1144,6 +1265,7 @@ impl Overlay for Face {
             self.accents = Some(accents);
             drawn = true;
         }
+        self.drawn = drawn.then(|| self.stamp(view, alpha, time.as_ref()));
         drawn
     }
 
@@ -1446,6 +1568,113 @@ mod tests {
                 && tile_lit(Tile::Mute, &meta)
                 && !tile_lit(Tile::Random, &meta)
         );
+    }
+
+    #[test]
+    fn a_change_of_track_is_not_the_player_standing_still() {
+        let track = |status: &str, title: &str| Metadata {
+            status: status.to_string(),
+            title: title.to_string(),
+            ..Default::default()
+        };
+        let mut playing = Playing::default();
+        assert!(playing.settle(0, &track("play", "One")));
+        // The player says stop between two tracks, naming the next already.
+        assert!(playing.settle(1000, &track("stop", "One")));
+        assert!(playing.settle(1200, &track("stop", "Two")));
+        assert!(playing.settle(1250, &track("play", "Two")));
+        // A stop that lasts is a stop, and stays one.
+        assert!(playing.settle(2000, &track("stop", "Two")));
+        assert!(playing.settle(2000 + TRACK_CHANGE_MS - 1, &track("stop", "Two")));
+        assert!(!playing.settle(2000 + TRACK_CHANGE_MS, &track("stop", "Two")));
+        assert!(!playing.settle(2001 + TRACK_CHANGE_MS, &track("stop", "Two")));
+        // A pause is the listener's own, and the queue's end names no track.
+        assert!(playing.settle(20000, &track("play", "Two")));
+        assert!(!playing.settle(20100, &track("pause", "Two")));
+        assert!(playing.settle(21000, &track("play", "Two")));
+        assert!(!playing.settle(21100, &track("stop", "")));
+        // Never having played, a stop is a stop at once.
+        assert!(!Playing::default().settle(0, &track("stop", "One")));
+
+        // On the screen: neither the clock nor the bar for the gap.
+        let fonts = Fonts::default();
+        let mut face = Face::new();
+        let mut input = input("play");
+        input.metadata.title = "One".to_string();
+        let mut frame = blank();
+        // Playing: the bar leaves after its moment, and once its fade is
+        // done nothing is drawn.
+        face.draw(&mut frame, &view(&input, &fonts, 0));
+        face.draw(&mut frame, &view(&input, &fonts, AFTER_PLAY_MS));
+        let settled = AFTER_PLAY_MS + FADE_MS + 100;
+        assert!(!face.draw(&mut frame, &view(&input, &fonts, settled)));
+        input.metadata.status = "stop".to_string();
+        input.metadata.title = "Two".to_string();
+        assert!(
+            face.covers(&view(&input, &fonts, settled + 100)) == Cover::Nothing,
+            "the gap between two tracks: the display is told there is nothing to draw"
+        );
+        assert!(
+            !face.draw(&mut frame, &view(&input, &fonts, settled + 100)),
+            "and nothing is drawn"
+        );
+        assert!(!face.presence().visible(), "and the bar stays away");
+        input.metadata.status = "play".to_string();
+        assert!(!face.draw(&mut frame, &view(&input, &fonts, settled + 300)));
+        assert!(!face.draw(&mut frame, &view(&input, &fonts, settled + 3000)));
+        // A pause brings the bar at once, through its fade; a face on a
+        // screen of its own has its clock to draw from the first frame.
+        input.metadata.status = "pause".to_string();
+        assert!(face.covers(&view(&input, &fonts, settled + 4000)) != Cover::Nothing);
+        face.draw(&mut frame, &view(&input, &fonts, settled + 4000));
+        assert!(face.presence().visible());
+        assert!(face.draw(&mut frame, &view(&input, &fonts, settled + 4000 + FADE_MS)));
+    }
+
+    #[test]
+    fn the_face_says_when_it_would_draw_what_it_drew() {
+        let fonts = Fonts::default();
+        let mut face = Face::new();
+        let input = input("pause");
+        let mut frame = blank();
+        // A clock that says the same whatever the hour, so the test does
+        // not cross a minute.
+        let set = settings(&[("clock.format", "standing"), ("date.show", "off")]);
+        let at = |now_ms: u64| {
+            let mut v = view(&input, &fonts, now_ms);
+            v.settings = &set;
+            v
+        };
+        // The bar is there from the start: something new, drawn.
+        assert_eq!(face.covers(&at(0)), Cover::New);
+        assert!(face.draw(&mut frame, &at(0)));
+        // The next frames would be the same drawing.
+        assert_eq!(face.covers(&at(16)), Cover::Same);
+        assert_eq!(face.covers(&at(5000)), Cover::Same);
+        // Drawn again all the same (the picture under it moved): still the same.
+        assert!(face.draw(&mut frame, &at(5016)));
+        assert_eq!(face.covers(&at(5032)), Cover::Same);
+        // A finger down on a button: a new drawing, and the same again once drawn.
+        let bar = Bar::for_picture(1280, 720, 1.0);
+        let (x, y, w, h) = bar.button_rect(4);
+        face.pointer(
+            PointerKind::Down,
+            x + w as i32 / 2,
+            y + h as i32 / 2,
+            &at(6000),
+        );
+        assert_eq!(face.covers(&at(6016)), Cover::New);
+        assert!(face.draw(&mut frame, &at(6016)));
+        assert_eq!(face.covers(&at(6032)), Cover::Same);
+        face.pointer(
+            PointerKind::Up,
+            x + w as i32 / 2,
+            y + h as i32 / 2,
+            &at(6100),
+        );
+        assert_eq!(face.covers(&at(6116)), Cover::New);
+        // A face that has drawn nothing has nothing to repeat.
+        assert_eq!(Face::new().covers(&at(0)), Cover::New);
     }
 
     #[test]
