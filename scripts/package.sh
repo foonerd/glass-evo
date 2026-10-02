@@ -1,11 +1,11 @@
 #!/bin/bash
 # Assemble the component the Glass Manager installs: manifest.json, the
-# binaries by architecture, the looks that ship (themes/) and the built-in
-# look written out (face.txt), as dist/glass-evo-<version>.zip. The manifest
-# names the version, the least Glass it works with (Cargo.toml's
-# workspace.metadata.glass), the build (commit and time) and, per
-# architecture, the binary's path and its sha256, which the Manager checks
-# on install.
+# binaries by architecture, the face for a browser (face/), the looks that
+# ship (themes/) and the built-in look written out (face.txt), as
+# dist/glass-evo-<version>.zip. The manifest names the version, the least
+# Glass it works with (Cargo.toml's workspace.metadata.glass), the build
+# (commit and time) and, per architecture and for the browser's module, the
+# file's path and its sha256, which the Manager checks on install.
 set -euo pipefail
 ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
@@ -20,6 +20,9 @@ for arch in arm armv7 armv8 x64; do
   [ -x "$bin" ] || { echo "package: $bin is missing; run scripts/ship.sh first" >&2; exit 1; }
   install -D -m 755 "$bin" "$STAGE/bin/$arch/glass-evo"
 done
+# The face for a browser, one module for every player.
+[ -f face/glass-evo-face.wasm ] || { echo "package: face/glass-evo-face.wasm is missing; run scripts/ship.sh first" >&2; exit 1; }
+install -D -m 644 face/glass-evo-face.wasm "$STAGE/face/glass-evo-face.wasm"
 # The looks that ship: every face theme but the example, which documents
 # the format and is the built-in look written out. That one goes beside the
 # manifest, for the Manager to know what a face shows when nothing is said.
@@ -38,12 +41,15 @@ for arch in ("arm", "armv7", "armv8", "x64"):
     path = f"bin/{arch}/glass-evo"
     with open(f"{stage}/{path}", "rb") as f:
         binaries[arch] = {"path": path, "sha256": hashlib.sha256(f.read()).hexdigest()}
+with open(f"{stage}/face/glass-evo-face.wasm", "rb") as f:
+    module = {"path": "face/glass-evo-face.wasm", "sha256": hashlib.sha256(f.read()).hexdigest()}
 manifest = {
     "name": "glass-evo",
     "version": version,
     "requires": {"glass": glass},
     "built": {"commit": commit, "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
     "binaries": binaries,
+    "face": module,
 }
 with open(f"{stage}/manifest.json", "w") as f:
     json.dump(manifest, f, indent=2)

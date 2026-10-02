@@ -1,0 +1,19 @@
+[package]
+name = "glass-evo-face"
+description = "The face for a browser: Glass's pipeline for a page with the face over it, as a WebAssembly module."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+face = { path = "../../crates/face" }
+# Glass's pipeline for a page, which draws the theme in a browser and
+# takes a face over it. Pinned to the same Glass release as the display.
+page = { git = "https://github.com/foonerd/glass", tag = "v0.8.9" }
+
+[lints]
+workspace = true

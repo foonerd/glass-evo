@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.14] - 2026-10-02
+
+The face made fit for a browser, and its module carried in the component. Nothing changes on the player's screen. Built on Glass 0.8.9.
+
+- **The face builds for a browser as it does for a player.** It is written against Glass's `overlay` crate, the contract of a face without the display's window, where it was written against the display itself. The time of day comes with the view (`View::wall`) and is set in a pattern by the face's own reading of `strftime` (`face::when`), which a test holds against the C library's for every conversion in every flag and width; the theme folders can be told to it (`Face::with_faces`) where no launcher names them; a text is read where the display reads its own; and the cover's colours are read on a thread where there is one and at the frame where there is none.
+- **`glass-evo-face.wasm`**: Glass's pipeline for a page with the face over it (`bins/glass-evo-face`, one line over `page::exports!`), built by `scripts/ship.sh` and carried in the component under `face/`, named in the manifest with its digest. A Glass Manager that knows of it serves it to the Face tab and to Anymote; one that does not leaves it in the zip.
+
 ## [0.1.13] - 2026-10-02
 
 One change, to how large the clock and the date may be.

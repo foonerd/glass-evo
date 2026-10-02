@@ -11,6 +11,11 @@ cargo fmt --all -- --check
 echo "check: clippy"
 cargo clippy --workspace --all-targets --locked -- -D warnings
 
+echo "check: browser module"
+# The face and its module for a browser, linted and built for their target.
+cargo clippy -p face -p glass-evo-face --target wasm32-unknown-unknown --locked -- -D warnings
+cargo build -p glass-evo-face --profile face --target wasm32-unknown-unknown --locked
+
 echo "check: tests"
 cargo test --workspace --locked
 

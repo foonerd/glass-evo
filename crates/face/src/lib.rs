@@ -13,16 +13,18 @@
 //! theme's author writes, with the user's settings over it; the colours a
 //! theme leaves to the artwork are read from the cover, once per track.
 
-use glass::face::{blur, fit_art, read_art, ui, Command, Frame, Metadata, PointerKind, TextStyle};
-use glass::{Cover, Overlay, View};
+use overlay::face::{
+    blur, fit_art, read_art, read_to_string, ui, Command, Frame, Metadata, PointerKind, TextStyle,
+};
+use overlay::{Cover, Overlay, View, Wall};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
 
 pub mod icon;
 pub mod look;
 pub mod theme;
+pub mod when;
 use icon::Icon;
 use look::Look;
 use theme::{DatePlace, Theme};
@@ -442,6 +444,9 @@ pub struct Face {
     clock: ClockFace,
     /// What was last drawn, as `stamp` puts it; none when nothing was.
     drawn: Option<u64>,
+    /// The folders face themes are kept in, where the face was told them;
+    /// else the launcher's word, `GLASS_FACES`.
+    faces: Option<String>,
 }
 
 /// The tokens in use, read on the first frame: the display starts again
@@ -461,20 +466,27 @@ fn theme_file(base: &Path, name: &str) -> Option<PathBuf> {
     Some(base.join(name).join("face.txt"))
 }
 
-/// The folders face themes are kept in, as the launcher names them, the
-/// user's before the ones glass-evo ships: `GLASS_FACES`, folders parted
-/// by a colon. A theme is the first of its name found.
+/// The folders face themes are kept in, the user's before the ones
+/// glass-evo ships, parted by a colon. A theme is the first of its name
+/// found, read where the display reads its own files: the file system on a
+/// player, the page's file table in a browser.
 fn theme_text(folders: &str, name: &str) -> Option<String> {
     folders
         .split(':')
         .filter(|folder| !folder.is_empty())
         .filter_map(|folder| theme_file(Path::new(folder), name))
-        .find_map(|file| std::fs::read_to_string(file).ok())
+        .find_map(|file| read_to_string(&file))
 }
 
-fn tokens_for(view: &View) -> Tokens {
+/// The tokens for a view: the theme its settings name, from the folders
+/// the face was told or, on a player, the ones the launcher names in
+/// `GLASS_FACES`.
+fn tokens_for(view: &View, faces: Option<&str>) -> Tokens {
     let text = view.settings.get("theme").and_then(|name| {
-        let folders = std::env::var("GLASS_FACES").ok()?;
+        let folders = match faces {
+            Some(folders) => folders.to_string(),
+            None => std::env::var("GLASS_FACES").ok()?,
+        };
         theme_text(&folders, name)
     });
     let theme = Theme::resolve(text.as_deref(), view.settings);
@@ -489,7 +501,47 @@ struct TrackLook {
     /// from; none before the first frame, so the first always resolves.
     cover: Option<String>,
     look: Look,
-    pending: Option<mpsc::Receiver<Option<Look>>>,
+    pending: Option<Reading>,
+}
+
+/// A cover being read for its colours. On a player a thread reads it and
+/// the frames go on; in a browser, where there is no thread to hand it to,
+/// it is read at the frame that asks, a sixty-fourth of the cover at most.
+#[cfg(not(target_arch = "wasm32"))]
+struct Reading(std::sync::mpsc::Receiver<Option<Look>>);
+#[cfg(target_arch = "wasm32")]
+struct Reading(Option<Look>);
+
+impl Reading {
+    #[cfg(not(target_arch = "wasm32"))]
+    fn of(path: PathBuf) -> Self {
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = send.send(read_art(&path, 64, 64, None).map(|cover| look::of_cover(&cover)));
+        });
+        Reading(receive)
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn of(path: PathBuf) -> Self {
+        Reading(read_art(&path, 64, 64, None).map(|cover| look::of_cover(&cover)))
+    }
+
+    /// What was read, once it has been: the cover's look, or none where
+    /// the cover could not be read. Nothing while the reading goes on.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn done(&mut self) -> Option<Option<Look>> {
+        match self.0.try_recv() {
+            Ok(found) => Some(found),
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => Some(None),
+            Err(std::sync::mpsc::TryRecvError::Empty) => None,
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn done(&mut self) -> Option<Option<Look>> {
+        Some(self.0.take())
+    }
 }
 
 impl Default for TrackLook {
@@ -518,35 +570,23 @@ impl TrackLook {
                 self.look = look::resolve(theme, None);
                 return self.look != before;
             }
-            let (send, receive) = mpsc::channel();
-            let path = PathBuf::from(cover);
-            std::thread::spawn(move || {
-                let _ =
-                    send.send(read_art(&path, 64, 64, None).map(|cover| look::of_cover(&cover)));
-            });
-            self.pending = Some(receive);
+            self.pending = Some(Reading::of(PathBuf::from(cover)));
         }
-        if let Some(receive) = self.pending.as_ref() {
-            match receive.try_recv() {
-                Ok(found) => {
-                    self.pending = None;
-                    let before = self.look;
-                    let from_cover = found.unwrap_or(look::NEUTRAL);
-                    self.look = Look {
-                        tint: match theme.tint {
-                            theme::Paint::Fixed(c) => c,
-                            theme::Paint::Artwork => from_cover.tint,
-                        },
-                        accent: match theme.accent {
-                            theme::Paint::Fixed(c) => c,
-                            theme::Paint::Artwork => from_cover.accent,
-                        },
-                    };
-                    return self.look != before;
-                }
-                Err(mpsc::TryRecvError::Disconnected) => self.pending = None,
-                Err(mpsc::TryRecvError::Empty) => {}
-            }
+        if let Some(found) = self.pending.as_mut().and_then(Reading::done) {
+            self.pending = None;
+            let before = self.look;
+            let from_cover = found.unwrap_or(look::NEUTRAL);
+            self.look = Look {
+                tint: match theme.tint {
+                    theme::Paint::Fixed(c) => c,
+                    theme::Paint::Artwork => from_cover.tint,
+                },
+                accent: match theme.accent {
+                    theme::Paint::Fixed(c) => c,
+                    theme::Paint::Artwork => from_cover.accent,
+                },
+            };
+            return self.look != before;
         }
         false
     }
@@ -645,6 +685,16 @@ impl Face {
         Self::default()
     }
 
+    /// The face told where its themes are kept: folders parted by a colon,
+    /// the user's before the ones that ship. In a browser, where no
+    /// launcher names them, the page's file table holds them under these.
+    pub fn with_faces(folders: &str) -> Self {
+        Self {
+            faces: Some(folders.to_string()),
+            ..Self::default()
+        }
+    }
+
     /// The commands queued so far, for a test to look at.
     pub fn pending(&self) -> &[Command] {
         &self.pending
@@ -685,32 +735,10 @@ fn place(frame: &mut Frame, icon: &Frame, rect: (i32, i32, u32, u32), alpha: u8)
     );
 }
 
-/// The time and the date in the player's own zone.
-fn local_time() -> Option<libc::tm> {
-    // SAFETY: localtime_r writes only into the tm handed to it and reads
-    // the clock; both live on this stack for the call.
-    unsafe {
-        let now = libc::time(std::ptr::null_mut());
-        let mut tm: libc::tm = std::mem::zeroed();
-        if libc::localtime_r(&now, &mut tm).is_null() {
-            return None;
-        }
-        Some(tm)
-    }
-}
-
 /// A time set in a pattern, as `strftime` reads it: `%H:%M`, `%-I:%M %p`,
 /// `%A %-d %B`. Nothing when the pattern cannot be read or gives nothing.
-pub fn format_time(pattern: &str, tm: &libc::tm) -> String {
-    let Ok(pattern) = std::ffi::CString::new(pattern) else {
-        return String::new();
-    };
-    let mut text = [0u8; 128];
-    // SAFETY: strftime writes at most the buffer's length into it, and
-    // reads the pattern, which ends in a nul, and the tm.
-    let written =
-        unsafe { libc::strftime(text.as_mut_ptr().cast(), text.len(), pattern.as_ptr(), tm) };
-    String::from_utf8_lossy(&text[..written]).trim().to_string()
+pub fn format_time(pattern: &str, wall: &Wall) -> String {
+    when::format(pattern, wall)
 }
 
 /// The size a line is set at so that it fits: the size wanted, or less by
@@ -948,7 +976,7 @@ impl ClockFace {
         theme: &Theme,
         glass: &mut Glass,
         below: u32,
-        tm: &libc::tm,
+        wall: &Wall,
     ) -> bool {
         let unit = view.height as f32 / 720.0 * view.scale.max(0.5);
         let px = |units: f32| (unit * units).round() as u32;
@@ -973,7 +1001,7 @@ impl ClockFace {
             let size = px(theme.measure_date).max(13);
             self.date.set(
                 view,
-                format_time(&theme.date_format, tm),
+                format_time(&theme.date_format, wall),
                 size,
                 theme.date_ink.unwrap_or(theme.ink),
                 if own("measure.date") {
@@ -999,7 +1027,7 @@ impl ClockFace {
             let size = px(theme.measure_clock).max(24);
             self.clock.set(
                 view,
-                format_time(&theme.clock_format, tm),
+                format_time(&theme.clock_format, wall),
                 size,
                 theme.clock_ink.unwrap_or(theme.ink),
                 if own("measure.clock") {
@@ -1087,7 +1115,11 @@ impl Face {
             // The bar is away, and the sheet with it.
             self.sheet_open = false;
         }
-        let theme = &self.tokens.get_or_insert_with(|| tokens_for(view)).theme;
+        let faces = self.faces.as_deref();
+        let theme = &self
+            .tokens
+            .get_or_insert_with(|| tokens_for(view, faces))
+            .theme;
         let clock = view.ours && !playing && (theme.clock_show || theme.date_show);
         (alpha, clock)
     }
@@ -1099,7 +1131,7 @@ impl Face {
     /// shows, what is pressed, the sheet, what each button and tile wears,
     /// the look of the track, the picture's size, and what the clock and
     /// the date say.
-    fn stamp(&self, view: &View, alpha: u8, time: Option<&libc::tm>) -> u64 {
+    fn stamp(&self, view: &View, alpha: u8, time: Option<&Wall>) -> u64 {
         let meta = &view.input.metadata;
         let mut h = DefaultHasher::new();
         (alpha, view.width, view.height, view.scale.to_bits()).hash(&mut h);
@@ -1149,8 +1181,8 @@ impl Overlay for Face {
                 self.accents = None;
             }
         }
-        let time = if clock { local_time() } else { None };
-        if self.drawn.is_some() && self.drawn == Some(self.stamp(view, alpha, time.as_ref())) {
+        let time = clock.then_some(view.wall);
+        if self.drawn.is_some() && self.drawn == Some(self.stamp(view, alpha, time)) {
             Cover::Same
         } else {
             Cover::New
@@ -1160,8 +1192,9 @@ impl Overlay for Face {
     fn draw(&mut self, frame: &mut Frame, view: &View) -> bool {
         let meta = &view.input.metadata;
         let (alpha, clock) = self.advance(view);
-        let time = if clock { local_time() } else { None };
-        let tokens = self.tokens.get_or_insert_with(|| tokens_for(view));
+        let time = clock.then_some(view.wall);
+        let faces = self.faces.as_deref();
+        let tokens = self.tokens.get_or_insert_with(|| tokens_for(view, faces));
         let theme = &tokens.theme;
         let frosted = tokens.frosted;
         let bar = Bar::measured(view.width, view.height, view.scale, theme.measure_bar);
@@ -1177,13 +1210,13 @@ impl Overlay for Face {
         // The clock and the date first, when the player stands still on the
         // display's own screen: the controls are drawn after and lie over them.
         if clock {
-            if let Some(tm) = time {
+            if let Some(wall) = time {
                 let mut glass = Glass {
                     look,
                     hairline: theme.hairline,
                     frost: frosted.then_some(&mut self.frost),
                 };
-                drawn |= self.clock.draw(frame, view, theme, &mut glass, bar.h, &tm);
+                drawn |= self.clock.draw(frame, view, theme, &mut glass, bar.h, wall);
             }
         }
         if alpha > 0 {
@@ -1310,7 +1343,7 @@ impl Overlay for Face {
             self.accents = Some(accents);
             drawn = true;
         }
-        self.drawn = drawn.then(|| self.stamp(view, alpha, time.as_ref()));
+        self.drawn = drawn.then(|| self.stamp(view, alpha, time));
         drawn
     }
 
@@ -1332,9 +1365,10 @@ impl Overlay for Face {
                 meta.status
             );
         }
+        let faces = self.faces.as_deref();
         let units = self
             .tokens
-            .get_or_insert_with(|| tokens_for(view))
+            .get_or_insert_with(|| tokens_for(view, faces))
             .theme
             .measure_bar;
         let bar = Bar::measured(view.width, view.height, view.scale, units);
@@ -1418,7 +1452,7 @@ impl Overlay for Face {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use glass::face::{Fonts, Input};
+    use overlay::face::{Fonts, Input};
     use std::collections::BTreeMap;
 
     static NO_SETTINGS: BTreeMap<String, String> = BTreeMap::new();
@@ -1441,6 +1475,11 @@ mod tests {
         }
     }
 
+    /// Thursday 1 October 2026, five past one in the afternoon and nine
+    /// seconds, an hour east of universal time.
+    static A_THURSDAY: std::sync::LazyLock<Wall> =
+        std::sync::LazyLock::new(|| Wall::at(1_790_856_309_000, 60, "BST"));
+
     fn view<'a>(input: &'a Input, fonts: &'a Fonts, now_ms: u64) -> View<'a> {
         View {
             input,
@@ -1448,6 +1487,7 @@ mod tests {
             width: 1280,
             height: 720,
             now_ms,
+            wall: &A_THURSDAY,
             ours: true,
             scale: 1.0,
             settings: &NO_SETTINGS,
@@ -1965,7 +2005,6 @@ mod tests {
         car.scale = 2.0;
         face.draw(&mut frame, &car);
         assert_eq!(face.icons.as_ref().map(|set| set.size()), Some(72));
-        assert!(local_time().is_some(), "the player's clock can be read");
     }
 
     #[test]
@@ -2155,45 +2194,29 @@ mod tests {
         );
     }
 
-    /// Thursday 1 October 2026, five past one in the afternoon and nine seconds.
-    fn a_thursday() -> libc::tm {
-        // SAFETY: a tm is plain numbers; all zero is a valid one.
-        let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-        tm.tm_year = 126;
-        tm.tm_mon = 9;
-        tm.tm_mday = 1;
-        tm.tm_wday = 4;
-        tm.tm_yday = 273;
-        tm.tm_hour = 13;
-        tm.tm_min = 5;
-        tm.tm_sec = 9;
-        tm
-    }
-
     #[test]
     fn a_time_and_a_date_are_set_in_the_pattern_given() {
-        let tm = a_thursday();
-        assert_eq!(format_time("%H:%M", &tm), "13:05");
-        assert_eq!(format_time("%H:%M:%S", &tm), "13:05:09");
-        assert_eq!(format_time("%-I:%M %p", &tm), "1:05 PM");
-        assert_eq!(format_time("%A %-d %B", &tm), "Thursday 1 October");
-        assert_eq!(format_time("%a %-d %b %Y", &tm), "Thu 1 Oct 2026");
-        assert_eq!(format_time("%d/%m/%Y", &tm), "01/10/2026");
-        assert_eq!(format_time("%m/%d/%Y", &tm), "10/01/2026");
-        assert_eq!(format_time("%Y-%m-%d", &tm), "2026-10-01");
+        let tm: &Wall = &A_THURSDAY;
+        assert_eq!(format_time("%H:%M", tm), "13:05");
+        assert_eq!(format_time("%H:%M:%S", tm), "13:05:09");
+        assert_eq!(format_time("%-I:%M %p", tm), "1:05 PM");
+        assert_eq!(format_time("%A %-d %B", tm), "Thursday 1 October");
+        assert_eq!(format_time("%a %-d %b %Y", tm), "Thu 1 Oct 2026");
+        assert_eq!(format_time("%d/%m/%Y", tm), "01/10/2026");
+        assert_eq!(format_time("%m/%d/%Y", tm), "10/01/2026");
+        assert_eq!(format_time("%Y-%m-%d", tm), "2026-10-01");
         assert_eq!(
-            format_time("%B %-d, %A", &tm),
+            format_time("%B %-d, %A", tm),
             "October 1, Thursday",
             "any order"
         );
-        assert_eq!(format_time("", &tm), "");
+        assert_eq!(format_time("", tm), "");
         assert_eq!(
-            format_time("a\0b", &tm),
+            format_time("a\0b", tm),
             "",
             "a pattern with a nul in it is no pattern"
         );
-        let mut midnight = a_thursday();
-        midnight.tm_hour = 0;
+        let midnight = Wall::at(1_790_856_309_000 - 13 * 3_600_000, 60, "BST");
         assert_eq!(format_time("%-I:%M %p", &midnight), "12:05 AM");
     }
 

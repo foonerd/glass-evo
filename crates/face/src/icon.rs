@@ -5,7 +5,7 @@
 //! picture to blit. No fonts and no files: any theme's fonts do, and a
 //! face size is one more raster.
 
-use glass::face::Frame;
+use overlay::face::Frame;
 
 /// What the face can show on a button or a tile.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
