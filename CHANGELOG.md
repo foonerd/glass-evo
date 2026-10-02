@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.20] - 2026-10-02
+
+The face on a remote display on Android. Built on Glass 0.8.24.
+
+- **A bundle for Android.** The release carries `glass-evo-<version>-android.apk`: Glass's remote app with the face in it (`bins/glass-evo-android`, the app's native side, enters the display through Glass's own Android entry with the face). It is the same app as the standalone, under the same identity and the same key, so it installs over the standalone and keeps its settings, and the standalone installs over it again; its version code is that of the Glass it is built on, as the standalone's is, and Android refuses the one built on an older Glass. The bar comes at a touch; the clock shows while the player stands still; the settings page has the choice of when. Android 7 or later, 64 bit arm, 32 bit arm or x86_64.
+- With this the bundle exists for every platform the standalone remote does: Linux, Windows and Android.
+
 ## [0.1.19] - 2026-10-02
 
 The face on a remote display on Windows. Built on Glass 0.8.23.
