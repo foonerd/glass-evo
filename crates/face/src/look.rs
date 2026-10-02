@@ -3,7 +3,7 @@
 //! the cover at thirty-two by thirty-two.
 
 use crate::theme::{Paint, Theme};
-use glass::face::{fit_art, Frame};
+use overlay::face::{fit_art, Frame};
 
 /// The colours in use for a track.
 #[derive(Clone, Copy, PartialEq, Debug)]

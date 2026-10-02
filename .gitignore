@@ -1,5 +1,7 @@
 /target
 /bin/
+# The browser module scripts/ship.sh builds
+/face/
 **/*.rs.bk
 .DS_Store
 dist/

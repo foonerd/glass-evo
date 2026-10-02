@@ -50,8 +50,8 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "bank"
-version = "0.8.3"
-source = "git+https://github.com/foonerd/glass?tag=v0.8.3#97fd229fbabc57ad2f691ebbc2a5aaf39ebadb11"
+version = "0.8.9"
+source = "git+https://github.com/foonerd/glass?tag=v0.8.9#42fe5431cc18d08e6574b8f0001b9cec3af215a6"
 dependencies = [
  "rustfft",
  "serde",
@@ -132,8 +132,8 @@ checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
 
 [[package]]
 name = "controls"
-version = "0.8.3"
-source = "git+https://github.com/foonerd/glass?tag=v0.8.3#97fd229fbabc57ad2f691ebbc2a5aaf39ebadb11"
+version = "0.8.9"
+source = "git+https://github.com/foonerd/glass?tag=v0.8.9#42fe5431cc18d08e6574b8f0001b9cec3af215a6"
 dependencies = [
  "expose",
  "intake",
@@ -197,8 +197,8 @@ dependencies = [
 
 [[package]]
 name = "expose"
-version = "0.8.3"
-source = "git+https://github.com/foonerd/glass?tag=v0.8.3#97fd229fbabc57ad2f691ebbc2a5aaf39ebadb11"
+version = "0.8.9"
+source = "git+https://github.com/foonerd/glass?tag=v0.8.9#42fe5431cc18d08e6574b8f0001b9cec3af215a6"
 dependencies = [
  "ab_glyph",
  "font8x8",
@@ -211,10 +211,10 @@ dependencies = [
 
 [[package]]
 name = "face"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
- "glass",
  "libc",
+ "overlay",
  "serde_json",
 ]
 
@@ -289,8 +289,8 @@ dependencies = [
 
 [[package]]
 name = "glass"
-version = "0.8.3"
-source = "git+https://github.com/foonerd/glass?tag=v0.8.3#97fd229fbabc57ad2f691ebbc2a5aaf39ebadb11"
+version = "0.8.9"
+source = "git+https://github.com/foonerd/glass?tag=v0.8.9#42fe5431cc18d08e6574b8f0001b9cec3af215a6"
 dependencies = [
  "controls",
  "crc32fast",
@@ -300,6 +300,7 @@ dependencies = [
  "lead",
  "libc",
  "logline",
+ "overlay",
  "pane",
  "plot",
  "serde",
@@ -311,10 +312,18 @@ dependencies = [
 
 [[package]]
 name = "glass-evo"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "face",
  "glass",
+]
+
+[[package]]
+name = "glass-evo-face"
+version = "0.1.14"
+dependencies = [
+ "face",
+ "page",
 ]
 
 [[package]]
@@ -375,8 +384,8 @@ checksum = "65b27460c2c92b037f3f94c538ed9a3342f3fdf923606781629ccb35f82d042a"
 
 [[package]]
 name = "intake"
-version = "0.8.3"
-source = "git+https://github.com/foonerd/glass?tag=v0.8.3#97fd229fbabc57ad2f691ebbc2a5aaf39ebadb11"
+version = "0.8.9"
+source = "git+https://github.com/foonerd/glass?tag=v0.8.9#42fe5431cc18d08e6574b8f0001b9cec3af215a6"
 dependencies = [
  "bank",
  "lead",
@@ -409,14 +418,14 @@ dependencies = [
 
 [[package]]
 name = "lazy_static"
-version = "1.5.0"
+version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
+checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 
 [[package]]
 name = "lead"
-version = "0.8.3"
-source = "git+https://github.com/foonerd/glass?tag=v0.8.3#97fd229fbabc57ad2f691ebbc2a5aaf39ebadb11"
+version = "0.8.9"
+source = "git+https://github.com/foonerd/glass?tag=v0.8.9#42fe5431cc18d08e6574b8f0001b9cec3af215a6"
 dependencies = [
  "bank",
  "serde",
@@ -436,8 +445,8 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "logline"
-version = "0.8.3"
-source = "git+https://github.com/foonerd/glass?tag=v0.8.3#97fd229fbabc57ad2f691ebbc2a5aaf39ebadb11"
+version = "0.8.9"
+source = "git+https://github.com/foonerd/glass?tag=v0.8.9#42fe5431cc18d08e6574b8f0001b9cec3af215a6"
 
 [[package]]
 name = "memchr"
@@ -518,6 +527,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
+name = "overlay"
+version = "0.8.9"
+source = "git+https://github.com/foonerd/glass?tag=v0.8.9#42fe5431cc18d08e6574b8f0001b9cec3af215a6"
+dependencies = [
+ "controls",
+ "expose",
+ "intake",
+ "lead",
+ "libc",
+]
+
+[[package]]
 name = "owned_ttf_parser"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -527,9 +548,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "page"
+version = "0.8.9"
+source = "git+https://github.com/foonerd/glass?tag=v0.8.9#42fe5431cc18d08e6574b8f0001b9cec3af215a6"
+dependencies = [
+ "controls",
+ "expose",
+ "intake",
+ "lead",
+ "overlay",
+ "plot",
+ "serde_json",
+]
+
+[[package]]
 name = "pane"
-version = "0.8.3"
-source = "git+https://github.com/foonerd/glass?tag=v0.8.3#97fd229fbabc57ad2f691ebbc2a5aaf39ebadb11"
+version = "0.8.9"
+source = "git+https://github.com/foonerd/glass?tag=v0.8.9#42fe5431cc18d08e6574b8f0001b9cec3af215a6"
 dependencies = [
  "expose",
  "plot",
@@ -550,8 +585,8 @@ checksum = "5be167a7af36ee22fe3115051bc51f6e6c7054c9348e28deb4f49bd6f705a315"
 
 [[package]]
 name = "plot"
-version = "0.8.3"
-source = "git+https://github.com/foonerd/glass?tag=v0.8.3#97fd229fbabc57ad2f691ebbc2a5aaf39ebadb11"
+version = "0.8.9"
+source = "git+https://github.com/foonerd/glass?tag=v0.8.9#42fe5431cc18d08e6574b8f0001b9cec3af215a6"
 dependencies = [
  "bank",
  "lead",
@@ -869,8 +904,8 @@ dependencies = [
 
 [[package]]
 name = "tap"
-version = "0.8.3"
-source = "git+https://github.com/foonerd/glass?tag=v0.8.3#97fd229fbabc57ad2f691ebbc2a5aaf39ebadb11"
+version = "0.8.9"
+source = "git+https://github.com/foonerd/glass?tag=v0.8.9#42fe5431cc18d08e6574b8f0001b9cec3af215a6"
 dependencies = [
  "bank",
  "libc",

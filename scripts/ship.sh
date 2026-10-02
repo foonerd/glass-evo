@@ -1,6 +1,7 @@
 #!/bin/bash
 # Build the face for each Volumio architecture and copy it into
-# bin/<arch>/glass-evo. Players run that file; they do not run cargo. The
+# bin/<arch>/glass-evo, and for a browser into face/glass-evo-face.wasm.
+# Players run those files; they do not run cargo. The
 # recipe is Glass's: the libraries the display links against (SDL2, ALSA)
 # come from Debian's own packages into a sysroot per architecture, so the
 # binaries need nothing newer than Volumio's glibc 2.36.
@@ -46,6 +47,13 @@ ship x86_64-unknown-linux-gnu x64 strip
 ship armv7-unknown-linux-gnueabihf armv7 arm-linux-gnueabihf-strip
 install -D -m 755 bin/armv7/glass-evo bin/arm/glass-evo
 ship aarch64-unknown-linux-gnu armv8 aarch64-linux-gnu-strip
+
+# The face for a browser: Glass's pipeline for a page with the face over
+# it, one file the Glass Manager serves to its Face tab and to Anymote in
+# the place of Glass's own module.
+echo "ship: browser module"
+cargo build --locked --profile face --target wasm32-unknown-unknown -p glass-evo-face
+install -D -m 644 target/wasm32-unknown-unknown/face/glass_evo_face.wasm face/glass-evo-face.wasm
 
 echo "ship: glibc"
 for bin in bin/*/glass-evo; do
