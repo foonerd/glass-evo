@@ -2,6 +2,15 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.11] - 2026-10-02
+
+Lighter on the player, and no clock between two tracks. Built on Glass 0.8.2. The figures are a Raspberry Pi 5 at sixty frames a second with a spectrum across the whole screen.
+
+- **No clock and no bar at a change of track.** The player says "stop" for a moment between two tracks, and the face took that for the player standing still: the clock flashed and the bar came up for two seconds, at every track. A stop that still names a track now counts only once it has lasted five seconds, as the plugin itself waits before it believes one; a pause counts at once, and so does the end of the queue. With a track change every ten seconds: 57 percent of a core before, 46.7 after.
+- **Nothing drawn costs nothing.** While music plays and the bar is away the face tells the display it has nothing to draw, and the display no longer copies the picture for it on every frame. Steady play: 52 percent of a core before, 46.5 after, the same as Glass with no face.
+- **A clock that says the same is not drawn again.** The face tells the display when it would draw what is on the screen already; a standing clock or bar is drawn when it changes, not sixty times a second.
+- **Standing still, fifteen frames a second.** Three seconds after the player last played or the screen was last touched the display slows down, and is back at its full rate with the next touch or the next note. Paused with the clock on the screen: 60 percent of a core before, 24 after.
+
 ## [0.1.10] - 2026-10-01
 
 Built on Glass 0.7.99, for players whose screen is reached through an X server.
