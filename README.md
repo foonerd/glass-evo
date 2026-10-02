@@ -1,12 +1,16 @@
 # glass-evo
 
-The native face for Volumio players: browse, queue and playback on the device's own screen, drawn by Glass's engine, with no browser on the device. Part of the [evo framework](https://evoframework.org) family, built to run on today's Volumio and at home on evo devices. A greenfield project: there is nothing to install yet.
+The Glass interface: a face for Volumio players, drawn by Glass's engine on the player's own screen, with no browser on the device. Part of the [evo framework](https://evoframework.org) family, built to run on today's Volumio and at home on evo devices.
 
-## What it will be
+It is a preview. The [Glass](https://github.com/foonerd/glass) Manager gets it and hands the player's screen to it, the Manager's Face tab and Anymote show it in a browser, and the releases here carry a bundle that puts it on Glass's remote displays. The [wiki](https://github.com/foonerd/glass-evo/wiki) has how to get it, choose it and theme it.
 
-Volumio installs and runs as it always has, Node backend and every plugin included; the [Glass](https://github.com/foonerd/glass) plugin is the driver. A switch in that plugin, "use the Glass interface", fetches glass-evo and hands the device screen to it, with the kiosk browser off while it is on, and back when it is off. On the screen: now playing with Glass's meters and themes, browse across every source a plugin provides, the queue, transport and volume, and every settings page, rendered from the same UIConfig data the web interface renders, so a plugin needs nothing of its own to appear. Phones and computers keep Volumio's web interface in their own browsers. Remotes show the same face through Glass's channel, and the browser is a second target from the start.
+## What it is
 
-The look follows the artwork: the cover fills the screen softly blurred, the controls sit on frosted glass above it, and the colours are sampled from the artwork, so the whole face changes mood with every album.
+Volumio installs and runs as it always has, Node backend and every plugin included; the Glass plugin is the driver. The Glass Manager gets glass-evo on its System tab, and its Screen tab hands the device screen to it, with the kiosk browser off while it holds the screen, and back when the screen is given back. Phones and computers keep Volumio's web interface in their own browsers.
+
+On the screen today: Glass's theme and meters with a bar of controls on demand (previous, play or pause, next, volume down and up, and More, a sheet with repeat, random and mute) and, when the player stands still, a clock and a date. To come: browse across every source a plugin provides, the queue, search, and the settings pages, rendered from the same UIConfig data the web interface renders, so a plugin needs nothing of its own to appear.
+
+The look follows the artwork: the controls sit on glass over the theme, frosted where the player has room for it, and the glass and what is lit take their colours from the cover, so the face changes mood with every album.
 
 ## Built for evo
 
