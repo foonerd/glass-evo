@@ -2,6 +2,16 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.13] - 2026-10-02
+
+One change, to how large the clock and the date may be.
+
+- **A size you set is the size you get.** The face set a clock or a date smaller than asked whenever it did not fit beside the margin and the glass's room, and never let the clock be taller than half the picture, so the upper part of the size's range did nothing: a clock could not be made to fill the screen. A size set by the user (`measure.clock`, `measure.date` among the face's settings) is now drawn as set, in the middle of its place; what does not fit on the picture runs over its edges, which is the user's to choose. The glass keeps the room designed about its words while there is that much beside them, and gives it up as they take more, the margin first, down to a sliver (6 units sideways, 4 above and below).
+- **A size a look comes with is still fitted**, so a look is right on a small or an upright screen without being touched: the date as before, the clock now in the whole width and in all the height the date and the bar leave, the margin and the glass's room giving way to it. A face theme may ask for a clock of up to 720 units (it was 360) and a date of up to 360 (200).
+- The frost under a glass that begins off the picture's left or top edge takes only the part on the picture.
+
+The Glass Manager's size control and its likeness follow from Glass 0.8.8.
+
 ## [0.1.12] - 2026-10-02
 
 Built on Glass 0.8.3, for its one fix.

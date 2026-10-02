@@ -211,7 +211,7 @@ dependencies = [
 
 [[package]]
 name = "face"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "glass",
  "libc",
@@ -311,7 +311,7 @@ dependencies = [
 
 [[package]]
 name = "glass-evo"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "face",
  "glass",

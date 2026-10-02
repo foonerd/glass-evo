@@ -583,9 +583,12 @@ fn band_sum(frame: &Frame, (x, y, w, h): Rect) -> u64 {
 impl Frost {
     /// Frost a rectangle of the frame in place, `alpha` of the way.
     fn apply(&mut self, frame: &mut Frame, x: i32, y: i32, w: u32, h: u32, alpha: u8) {
+        // The part of the band that lies on the picture.
+        let x1 = (x.saturating_add(w as i32)).clamp(0, frame.width as i32) as u32;
+        let y1 = (y.saturating_add(h as i32)).clamp(0, frame.height as i32) as u32;
         let x = x.clamp(0, frame.width as i32) as u32;
         let y = y.clamp(0, frame.height as i32) as u32;
-        let (w, h) = (w.min(frame.width - x), h.min(frame.height - y));
+        let (w, h) = (x1.saturating_sub(x), y1.saturating_sub(y));
         if w < 8 || h < 4 || alpha == 0 {
             return;
         }
@@ -719,6 +722,18 @@ fn fitted_size(wanted: u32, room: (u32, u32), most: (u32, u32)) -> u32 {
     }
     let by = (most.0 as f32 / room.0.max(1) as f32).min(most.1 as f32 / room.1.max(1) as f32);
     ((wanted as f32 * by).floor() as u32).max(12)
+}
+
+/// The least room a glass keeps about its words, in units of a 720th of
+/// the picture's height: sideways, and above and below. Words larger than
+/// fit beside the margins and the room designed take both, down to this.
+const LEAST_PAD: (f32, f32) = (6.0, 4.0);
+
+/// The room a glass keeps about words `words` long in a space `space`
+/// long: the room designed while that much is left on either side, and
+/// less as the words take more of the space, never under the least.
+fn pad_about(space: u32, words: u32, designed: u32, least: u32) -> u32 {
+    (space.saturating_sub(words) / 2).clamp(least.min(designed), designed)
 }
 
 /// A line set in type: rastered when its words, its size or its ink
@@ -883,7 +898,7 @@ fn idle_layout(
     let mut from = 0;
     if let (Some((w, h)), DatePlace::Top) = (date, place) {
         layout.top = Some((
-            (picture.0.saturating_sub(w) / 2) as i32,
+            (picture.0 as i32 - w as i32) / 2,
             (m.margin + m.pad.1) as i32,
             w,
             h,
@@ -901,14 +916,11 @@ fn idle_layout(
     if width == 0 {
         return layout;
     }
-    let x = (picture.0.saturating_sub(width) / 2) as i32;
-    let y = (from
-        + picture
-            .1
-            .saturating_sub(below)
-            .saturating_sub(from)
-            .saturating_sub(height)
-            / 2) as i32;
+    // In the middle of what is left, also where it is more than fits: words
+    // larger than the picture run over its edges by as much on either side.
+    let x = (picture.0 as i32 - width as i32) / 2;
+    let space = picture.1 as i32 - below as i32 - from as i32;
+    let y = from as i32 + (space - height as i32) / 2;
     layout.middle = Some((x, y, width, height));
     let date_first = place == DatePlace::Above;
     let mut at = y;
@@ -946,9 +958,16 @@ impl ClockFace {
             pad: (px(28.0), px(12.0)),
         };
         let pad = m.pad;
-        // No line is wider than the picture leaves beside its glass and the
-        // margins; the date is set first, and the clock takes what the date
-        // and the bar leave of the height.
+        let least = (px(LEAST_PAD.0), px(LEAST_PAD.1));
+        // A size the user set is the user's: the line is set at it, and what
+        // does not fit on the picture runs over its edges. A size the look
+        // comes with is fitted: the date no wider than the picture leaves
+        // beside its glass and the margins, the clock in the whole width
+        // and in what the date and the bar leave of the height, the margin
+        // and the glass's room giving way to it down to the least a glass
+        // keeps. The date is set first.
+        const ANY: (u32, u32) = (u32::MAX, u32::MAX);
+        let own = |key: &str| view.settings.contains_key(key);
         let widest = view.width.saturating_sub(2 * (m.margin + pad.0));
         let date = if theme.date_show {
             let size = px(theme.measure_date).max(13);
@@ -957,7 +976,11 @@ impl ClockFace {
                 format_time(&theme.date_format, tm),
                 size,
                 theme.date_ink.unwrap_or(theme.ink),
-                (widest, view.height / 4),
+                if own("measure.date") {
+                    ANY
+                } else {
+                    (widest, view.height / 4)
+                },
             )
         } else {
             None
@@ -972,14 +995,18 @@ impl ClockFace {
                 .height
                 .saturating_sub(below)
                 .saturating_sub(taken)
-                .saturating_sub(2 * (pad.1 + m.margin));
+                .saturating_sub(2 * least.1);
             let size = px(theme.measure_clock).max(24);
             self.clock.set(
                 view,
                 format_time(&theme.clock_format, tm),
                 size,
                 theme.clock_ink.unwrap_or(theme.ink),
-                (widest, tallest.min(view.height / 2)),
+                if own("measure.clock") {
+                    ANY
+                } else {
+                    (view.width.saturating_sub(2 * least.0), tallest)
+                },
             )
         } else {
             None
@@ -993,14 +1020,32 @@ impl ClockFace {
             theme.date_place,
         );
         if let Some((x, y, w, h)) = layout.top {
-            glass.behind(frame, (x, y, w, h), pad, theme.date_glass, theme.date_tint);
-            self.date.place(frame, x, y, w, theme.date_opacity);
-        }
-        if let Some((x, y, w, h)) = layout.middle {
+            let about = (pad_about(view.width, w, pad.0, least.0), pad.1);
             glass.behind(
                 frame,
                 (x, y, w, h),
-                pad,
+                about,
+                theme.date_glass,
+                theme.date_tint,
+            );
+            self.date.place(frame, x, y, w, theme.date_opacity);
+        }
+        if let Some((x, y, w, h)) = layout.middle {
+            // The glass keeps the room designed where there is that much
+            // beside the words, and what there is where they take more.
+            let from = match (date, theme.date_place) {
+                (Some((_, dh)), DatePlace::Top) => m.top_takes(dh),
+                _ => 0,
+            };
+            let space = view.height.saturating_sub(below).saturating_sub(from);
+            let about = (
+                pad_about(view.width, w, pad.0, least.0),
+                pad_about(space, h, pad.1, least.1),
+            );
+            glass.behind(
+                frame,
+                (x, y, w, h),
+                about,
                 theme.clock_glass,
                 theme.clock_tint,
             );
@@ -2153,6 +2198,60 @@ mod tests {
     }
 
     #[test]
+    fn the_frost_takes_the_part_of_a_band_that_lies_on_the_picture() {
+        let mut frame = Frame {
+            blend: Default::default(),
+            width: 64,
+            height: 32,
+            rgba: vec![128; 64 * 32 * 4],
+        };
+        let mut frost = Frost::default();
+        // A band that starts left of the picture and ends right of it, and
+        // one that starts above it: neither reaches past the picture.
+        frost.apply(&mut frame, -10, 4, 100, 8, 255);
+        frost.apply(&mut frame, -10, -4, 30, 16, 255);
+        frost.apply(&mut frame, 60, 28, 30, 30, 255);
+        let rects: Vec<(u32, u32, u32, u32)> = frost.held.iter().map(|(r, _, _)| *r).collect();
+        assert_eq!(
+            rects,
+            vec![(0, 4, 64, 8), (0, 0, 20, 12)],
+            "the third is too small to frost"
+        );
+    }
+
+    #[test]
+    fn a_glass_gives_its_room_to_words_wanted_larger() {
+        // A 1280 wide picture, the room designed 28, the least 6.
+        assert_eq!(
+            pad_about(1280, 600, 28, 6),
+            28,
+            "room to spare: as designed"
+        );
+        assert_eq!(
+            pad_about(1280, 1224, 28, 6),
+            28,
+            "exactly the room designed"
+        );
+        assert_eq!(
+            pad_about(1280, 1240, 28, 6),
+            20,
+            "the words take some of it"
+        );
+        assert_eq!(
+            pad_about(1280, 1268, 28, 6),
+            6,
+            "the words fill the width: the least"
+        );
+        assert_eq!(pad_about(1280, 1280, 28, 6), 6, "never under the least");
+        assert_eq!(pad_about(1280, 2000, 28, 6), 6);
+        assert_eq!(
+            pad_about(100, 10, 4, 6),
+            4,
+            "a room designed under the least stays as designed"
+        );
+    }
+
+    #[test]
     fn a_line_is_set_as_large_as_wanted_or_as_fits() {
         assert_eq!(
             fitted_size(288, (700, 340), (1184, 360)),
@@ -2193,6 +2292,14 @@ mod tests {
         };
         let lay = |c, d, place| idle_layout((1280, 720), 72, m, c, d, place);
         let top = lay(clock, date, DatePlace::Top);
+        // Words larger than the picture stand in its middle all the same,
+        // and run over its edges by as much on either side.
+        let huge = lay(Some((1600, 800)), None, DatePlace::Top);
+        assert_eq!(huge.middle, Some((-160, -76, 1600, 800)));
+        assert_eq!(
+            lay(None, Some((1500, 40)), DatePlace::Top).top,
+            Some((-110, 32, 1500, 40))
+        );
         assert_eq!(
             top.top,
             Some((490, 32, 300, 40)),

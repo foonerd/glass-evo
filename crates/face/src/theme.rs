@@ -314,13 +314,13 @@ impl Theme {
                 }
                 "date.opacity" => self.date_opacity = share(v).unwrap_or(self.date_opacity),
                 "measure.date" => {
-                    self.measure_date = units(v, 16.0, 200.0).unwrap_or(self.measure_date)
+                    self.measure_date = units(v, 16.0, 360.0).unwrap_or(self.measure_date)
                 }
                 "measure.bar" => {
                     self.measure_bar = units(v, 48.0, 240.0).unwrap_or(self.measure_bar)
                 }
                 "measure.clock" => {
-                    self.measure_clock = units(v, 48.0, 360.0).unwrap_or(self.measure_clock)
+                    self.measure_clock = units(v, 48.0, 720.0).unwrap_or(self.measure_clock)
                 }
                 _ => {}
             }
