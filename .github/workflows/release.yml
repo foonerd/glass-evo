@@ -49,7 +49,8 @@ jobs:
       - run: scripts/ship.sh
       - run: scripts/package.sh
       - name: The component names the commit it was built from
-        run: unzip -p dist/glass-evo-*.zip manifest.json | grep -F "\"commit\": \"$(git rev-parse --short HEAD)\""
+        run: |
+          unzip -p dist/glass-evo-*.zip manifest.json | grep -F "\"commit\": \"$(git rev-parse --short HEAD)\""
       - uses: actions/upload-artifact@v7
         with:
           name: release-component
