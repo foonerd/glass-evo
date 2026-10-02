@@ -4,6 +4,7 @@
 //! the Manager goes over it, key for key. Nothing here draws: the face
 //! reads a `Theme` and the look the artwork gives it.
 
+use crate::clock::{ClockKind, DialStyle, Paints};
 use std::collections::BTreeMap;
 
 /// A colour a theme fixes, or leaves to the artwork.
@@ -66,6 +67,27 @@ pub struct Theme {
     /// `clock.tint`: the colour of the clock's glass when it has its own;
     /// `tint` for the theme's.
     pub clock_tint: Option<[u8; 3]>,
+    /// `clock.face`: the clock set in `type`, or drawn: `seven` or
+    /// `sixteen` segments, a `flip` clock, or a `dial` with hands.
+    pub clock_face: ClockKind,
+    /// `clock.dial`: a dial's style: `station`, `numbers`, `roman`, `plain`.
+    pub clock_dial: DialStyle,
+    /// `clock.unlit`: how much of an unlit segment shows, 0 to 0.5.
+    pub clock_unlit: f32,
+    /// `clock.hands`, `clock.marks`: a dial's hands, and its marks and
+    /// numerals; `ink` for the clock's ink, but that a station dial has
+    /// dark ones of its own.
+    pub clock_hands: Option<[u8; 3]>,
+    pub clock_marks: Option<[u8; 3]>,
+    /// `clock.second`: the second hand: `accent` for the look's (a station
+    /// dial has a red one of its own), or a colour.
+    pub clock_second: Option<[u8; 3]>,
+    /// `clock.disc`: the disc behind a dial's hands: `style` for the
+    /// style's own (a station dial has a light one, the others none),
+    /// `none`, or a colour.
+    pub clock_disc: Disc,
+    /// `clock.card`: a flip clock's cards.
+    pub clock_card: [u8; 3],
     /// `date.show`: whether the date stands with the clock.
     pub date_show: bool,
     /// `date.format`: the date as a pattern, `%A %-d %B` for Thursday 1
@@ -108,6 +130,14 @@ impl Default for Theme {
             clock_opacity: 0.86,
             clock_glass: 0.55,
             clock_tint: None,
+            clock_face: ClockKind::Type,
+            clock_dial: DialStyle::Station,
+            clock_unlit: 0.08,
+            clock_hands: None,
+            clock_marks: None,
+            clock_second: None,
+            clock_disc: Disc::Style,
+            clock_card: [23, 23, 26],
             date_show: false,
             date_format: "%A %-d %B".to_string(),
             date_place: DatePlace::Top,
@@ -120,6 +150,14 @@ impl Default for Theme {
             measure_date: 40.0,
         }
     }
+}
+
+/// The disc behind a dial's hands: the style's own, none, or a colour.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Disc {
+    Style,
+    None,
+    Fixed([u8; 3]),
 }
 
 /// A pattern for a time or a date, as `strftime` reads it: short, and of
@@ -277,6 +315,45 @@ impl Theme {
                         colour(v).or(self.date_tint)
                     }
                 }
+                "clock.face" => self.clock_face = ClockKind::parse(v).unwrap_or(self.clock_face),
+                "clock.dial" => self.clock_dial = DialStyle::parse(v).unwrap_or(self.clock_dial),
+                "clock.unlit" => {
+                    self.clock_unlit = v
+                        .parse::<f32>()
+                        .ok()
+                        .filter(|n| n.is_finite())
+                        .map(|n| n.clamp(0.0, 0.5))
+                        .unwrap_or(self.clock_unlit)
+                }
+                "clock.hands" => {
+                    self.clock_hands = if v.eq_ignore_ascii_case("ink") {
+                        None
+                    } else {
+                        colour(v).or(self.clock_hands)
+                    }
+                }
+                "clock.marks" => {
+                    self.clock_marks = if v.eq_ignore_ascii_case("ink") {
+                        None
+                    } else {
+                        colour(v).or(self.clock_marks)
+                    }
+                }
+                "clock.second" => {
+                    self.clock_second = if v.eq_ignore_ascii_case("accent") {
+                        None
+                    } else {
+                        colour(v).or(self.clock_second)
+                    }
+                }
+                "clock.disc" => {
+                    self.clock_disc = match v.to_ascii_lowercase().as_str() {
+                        "style" => Disc::Style,
+                        "none" | "off" => Disc::None,
+                        _ => colour(v).map(Disc::Fixed).unwrap_or(self.clock_disc),
+                    }
+                }
+                "clock.card" => self.clock_card = colour(v).unwrap_or(self.clock_card),
                 "clock.show" => self.clock_show = switch(v).unwrap_or(self.clock_show),
                 "clock.format" => {
                     if let Some(format) = pattern(v) {
@@ -336,6 +413,32 @@ impl Theme {
         }
         theme.apply(settings);
         theme
+    }
+
+    /// The colours a drawn clock is drawn in: each the user's or the
+    /// theme's where one is said, else the face's own. A station dial comes
+    /// light, with dark hands and a red second hand; the other dials and
+    /// the segments come in the clock's ink, the second hand in `accent`,
+    /// the colour of what is lit in the look.
+    pub fn paints(&self, accent: [u8; 3]) -> Paints {
+        let ink = self.clock_ink.unwrap_or(self.ink);
+        let station = self.clock_face == ClockKind::Dial && self.clock_dial == DialStyle::Station;
+        let dark = [21, 21, 21];
+        Paints {
+            ink,
+            unlit: self.clock_unlit,
+            hands: self.clock_hands.unwrap_or(if station { dark } else { ink }),
+            marks: self.clock_marks.unwrap_or(if station { dark } else { ink }),
+            second: self
+                .clock_second
+                .unwrap_or(if station { [214, 42, 30] } else { accent }),
+            disc: match self.clock_disc {
+                Disc::Style => station.then_some([245, 245, 242]),
+                Disc::None => None,
+                Disc::Fixed(colour) => Some(colour),
+            },
+            card: self.clock_card,
+        }
     }
 
     /// Whether glass over a moving picture is frosted, given the plugin's
@@ -492,12 +595,20 @@ mod tests {
             "measure.date",
             "measure.bar",
             "measure.clock",
+            "clock.face",
+            "clock.dial",
+            "clock.unlit",
+            "clock.hands",
+            "clock.marks",
+            "clock.second",
+            "clock.disc",
+            "clock.card",
         ] {
             assert!(written.contains_key(key), "the example documents {key}");
         }
         assert_eq!(
             written.len(),
-            27,
+            35,
             "and nothing but what the face reads and the line for a list"
         );
     }
@@ -596,5 +707,87 @@ mod tests {
         );
         theme.frost = Frost::Off;
         assert!(!theme.frosted(&settings(&[("frost.suits", "true")])));
+    }
+
+    #[test]
+    fn a_drawn_clock_takes_its_colours_from_the_theme_and_its_face() {
+        let settings = |pairs: &[(&str, &str)]| -> BTreeMap<String, String> {
+            pairs
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect()
+        };
+        let accent = [10, 200, 30];
+        // As it comes: the clock in type, a station dial's colours its own.
+        let plain = Theme::default();
+        assert_eq!(
+            (plain.clock_face, plain.clock_dial),
+            (ClockKind::Type, DialStyle::Station)
+        );
+        let station = Theme::resolve(None, &settings(&[("clock.face", "dial")]));
+        let paints = station.paints(accent);
+        assert_eq!(paints.disc, Some([245, 245, 242]));
+        assert_eq!(
+            (paints.hands, paints.marks, paints.second),
+            ([21, 21, 21], [21, 21, 21], [214, 42, 30])
+        );
+        // Another dial: the clock's ink, the look's accent, no disc.
+        let roman = Theme::resolve(
+            None,
+            &settings(&[
+                ("clock.face", "dial"),
+                ("clock.dial", "roman"),
+                ("clock.ink", "#ffcc00"),
+            ]),
+        );
+        let paints = roman.paints(accent);
+        assert_eq!(
+            (paints.hands, paints.marks, paints.second, paints.disc),
+            ([255, 204, 0], [255, 204, 0], accent, None)
+        );
+        // The user's own word over all of it, and back to the face's own.
+        let own = Theme::resolve(
+            None,
+            &settings(&[
+                ("clock.face", "dial"),
+                ("clock.hands", "#112233"),
+                ("clock.marks", "#445566"),
+                ("clock.second", "#778899"),
+                ("clock.disc", "#000000"),
+                ("clock.unlit", "0.9"),
+                ("clock.card", "#202020"),
+            ]),
+        );
+        let paints = own.paints(accent);
+        assert_eq!(
+            (paints.hands, paints.marks, paints.second),
+            ([0x11, 0x22, 0x33], [0x44, 0x55, 0x66], [0x77, 0x88, 0x99])
+        );
+        assert_eq!(
+            (paints.disc, paints.unlit, paints.card),
+            (Some([0, 0, 0]), 0.5, [0x20, 0x20, 0x20])
+        );
+        let mut back = own.clone();
+        back.apply(&settings(&[
+            ("clock.hands", "ink"),
+            ("clock.second", "accent"),
+            ("clock.disc", "none"),
+        ]));
+        let paints = back.paints(accent);
+        assert_eq!(
+            (paints.hands, paints.second, paints.disc),
+            ([21, 21, 21], [214, 42, 30], None)
+        );
+        // A word that is none changes nothing.
+        let mut odd = station.clone();
+        odd.apply(&settings(&[
+            ("clock.face", "sundial"),
+            ("clock.dial", "cuckoo"),
+            ("clock.disc", "sky"),
+        ]));
+        assert_eq!(
+            (odd.clock_face, odd.clock_dial, odd.clock_disc),
+            (ClockKind::Dial, DialStyle::Station, Disc::Style)
+        );
     }
 }

@@ -211,7 +211,7 @@ dependencies = [
 
 [[package]]
 name = "face"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "libc",
  "overlay",
@@ -312,7 +312,7 @@ dependencies = [
 
 [[package]]
 name = "glass-evo"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "face",
  "glass",
@@ -320,10 +320,11 @@ dependencies = [
 
 [[package]]
 name = "glass-evo-face"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "face",
  "page",
+ "serde_json",
 ]
 
 [[package]]

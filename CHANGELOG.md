@@ -2,6 +2,15 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.15] - 2026-10-02
+
+Clock faces: the clock set in type as before, or drawn.
+
+- **Five faces** (`clock.face`): `type`, the time set in the theme's type; `seven` and `sixteen`, segments, with the unlit ones showing faintly (`clock.unlit`); `flip`, cards that fall as a number changes; `dial`, hands over a dial in four styles (`clock.dial`): `station`, bars and strong hands on a light disc with a red second hand, `numbers`, `roman`, and `plain`, marks alone. A dial has its second hand when the clock's pattern shows seconds, and a twelve hour pattern gives the segments and the cards their AM and PM (seven segments show the A and the P).
+- **Colours of their own**, each the user's or the theme's where one is said: the hands (`clock.hands`), the marks and numerals (`clock.marks`), the second hand (`clock.second`, the look's accent unless said), the disc behind the hands (`clock.disc`: a colour, `none`, or the style's own), a flip clock's cards (`clock.card`); the lit segments and the digits on a card are the clock's ink. The glass behind the clock, its size, its place and the date go with any face. A drawn face is as high as `measure.clock`, a dial twice that.
+- **Drawn, not pictured.** Segments, hands, marks and numerals are shapes rastered at the size wanted, as the bar's icons are: sharp at any size, no font and no file. What stands still is rastered once and kept (a character, a card, a dial with its marks), so a second costs a few copies and the hands; a falling card is drawn for under half a second and then stands.
+- The browser module has `clock_preview`: the clock alone as a look's keys draw it, for the Glass Manager's look panel to show a drawn face before it is saved (Glass 0.8.12).
+
 ## [0.1.14] - 2026-10-02
 
 The face made fit for a browser, and its module carried in the component. Nothing changes on the player's screen. Built on Glass 0.8.9.

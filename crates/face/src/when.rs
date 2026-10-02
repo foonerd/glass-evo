@@ -305,6 +305,12 @@ fn set(out: &mut String, pattern: &str, wall: &Wall) {
     }
 }
 
+/// Whether a pattern shows the seconds: whether a second later it reads
+/// otherwise.
+pub fn shows_seconds(pattern: &str) -> bool {
+    format(pattern, &Wall::at(0, 0, "")) != format(pattern, &Wall::at(1000, 0, ""))
+}
+
 /// A time set in a pattern. Nothing for a pattern that holds a nul or
 /// gives more than a line can hold, as the C library's gave nothing.
 pub fn format(pattern: &str, wall: &Wall) -> String {
@@ -402,6 +408,16 @@ mod tests {
             format("%I %p", &Wall::at(1_790_856_000_000, 0, "UTC")),
             "12 PM"
         );
+    }
+
+    #[test]
+    fn a_pattern_says_whether_it_shows_seconds() {
+        for with in ["%H:%M:%S", "%T", "%-I:%M:%S %p", "%r", "%c", "%s"] {
+            assert!(shows_seconds(with), "{with}");
+        }
+        for without in ["%H:%M", "%-I:%M %p", "%R", "%A %-d %B", ""] {
+            assert!(!shows_seconds(without), "{without}");
+        }
     }
 
     #[test]

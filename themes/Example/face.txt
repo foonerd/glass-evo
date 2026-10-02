@@ -52,6 +52,26 @@ opacity = 0.86
 glass = 0.55
 # That glass's colour: "tint" for the theme's tint, or a colour of its own.
 tint = tint
+# The clock's face: "type" sets the time in the theme's type; "seven" and
+# "sixteen" draw it in segments, "flip" on cards that fall, "dial" with
+# hands. A drawn face is as high as measure.clock, a dial twice that.
+face = type
+# A dial's style: "station" (bars and strong hands), "numbers", "roman", or
+# "plain" (marks alone). It has a second hand when the format shows seconds.
+dial = station
+# How much of an unlit segment shows, 0 to 0.5.
+unlit = 0.08
+# A dial's hands, and its marks and numerals: a colour, or "ink" for the
+# clock's ink (a station dial has dark ones of its own).
+hands = ink
+marks = ink
+# The second hand: a colour, or "accent" for the look's (red on a station dial).
+second = accent
+# The disc behind a dial's hands: "style" for the style's own (a station
+# dial has a light one, the others none), "none", or a colour.
+disc = style
+# A flip clock's cards.
+card = #17171a
 
 [date]
 # The date when nothing plays: on or off. Its place: "top" of the screen,
