@@ -5,32 +5,45 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
+# Both jobs run in Glass's builder image (scripts/builder/Dockerfile in
+# foonerd/glass, named here by its digest): the compilers and libraries are
+# in it, and a job installs no system package while it runs. Build caches
+# are written from main only and read by the release.
 jobs:
   check:
     name: format, lints, tests, docs
     runs-on: ubuntu-24.04
+    container: ghcr.io/foonerd/glass-builder@sha256:cdc7706f7cb2e06022a418ed257659d192e9b1d68d478e7885b110575620697a
     steps:
       - uses: actions/checkout@v7
-      - name: Toolchain from rust-toolchain.toml
+      - name: Toolchain from rust-toolchain.toml, in the image unless the file has moved on
         run: rustup toolchain install && rustup show active-toolchain
-      - name: System libraries the display links against, through Glass's pane and tap
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libsdl2-dev libasound2-dev
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: check
+          cache-bin: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: scripts/check.sh
 
   ship:
     name: cross builds and the component
     runs-on: ubuntu-24.04
     needs: check
+    container: ghcr.io/foonerd/glass-builder@sha256:cdc7706f7cb2e06022a418ed257659d192e9b1d68d478e7885b110575620697a
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install && rustup show active-toolchain
-      - name: Cross compilers and the libraries the host build links against
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu libc6-dev-armhf-cross libc6-dev-arm64-cross libsdl2-dev libasound2-dev
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ship
+          cache-bin: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: scripts/ship.sh
       - run: scripts/package.sh
       - uses: actions/upload-artifact@v7
