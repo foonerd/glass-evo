@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.21] - 2026-10-02
+
+Built on Glass 0.8.28; nothing of the face's own changes.
+
+- **The fanart slideshow carries on across a change of meter** where glass-evo is the display: on the player's screen, on a bundle remote, in the Face tab and in Anymote. With meters rotating, the artist's pictures started again at every change; Glass 0.8.26 keeps the show's place and its last advance, and this release is the face built on it.
+- **A snapshot of a theme carries no face** whatever binary takes it (`--snapshot`, Glass 0.8.25), so a theme's previews are the theme alone.
+
 ## [0.1.20] - 2026-10-02
 
 The face on a remote display on Android. Built on Glass 0.8.24.
