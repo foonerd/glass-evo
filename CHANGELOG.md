@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.12] - 2026-10-02
+
+Built on Glass 0.8.3, for its one fix.
+
+- **A two-sided spectrum keeps its two sides while the player stands still.** Stopped or paused, a look laid out for two channels fell back to one area in the one-channel palette, and a waterfall filled with that palette's lowest colour, green in a look that names only its two side palettes. Glass 0.8.3 leaves the layout as the look asks through silence.
+
 ## [0.1.11] - 2026-10-02
 
 Lighter on the player, and no clock between two tracks. Built on Glass 0.8.2. The figures are a Raspberry Pi 5 at sixty frames a second with a spectrum across the whole screen.
