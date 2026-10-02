@@ -1,28 +1,72 @@
 name: release
 
+# A tag builds the release: the check and the cross builds side by side in
+# Glass's builder image, then the component published. Run by hand it
+# builds everything and publishes nothing.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
 
-permissions:
-  contents: write
-
 jobs:
-  release:
-    name: check, cross builds, the component, the release
+  check:
+    name: format, lints, tests, docs
     runs-on: ubuntu-24.04
+    container: ghcr.io/foonerd/glass-builder@sha256:cdc7706f7cb2e06022a418ed257659d192e9b1d68d478e7885b110575620697a
+    steps:
+      - uses: actions/checkout@v7
+      - name: The tag names the version the workspace carries
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          [ "$GITHUB_REF_NAME" = "v$version" ] || { echo "the tag is $GITHUB_REF_NAME, the workspace is $version" >&2; exit 1; }
+      - run: rustup toolchain install && rustup show active-toolchain
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: check
+          cache-bin: false
+          save-if: false
+      - run: scripts/check.sh
+
+  component:
+    name: cross builds and the component
+    runs-on: ubuntu-24.04
+    container: ghcr.io/foonerd/glass-builder@sha256:cdc7706f7cb2e06022a418ed257659d192e9b1d68d478e7885b110575620697a
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install && rustup show active-toolchain
-      - name: Cross compilers and the libraries the host build links against
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu libc6-dev-armhf-cross libc6-dev-arm64-cross libsdl2-dev libasound2-dev
       - uses: Swatinem/rust-cache@v2
-      - run: scripts/check.sh
+        with:
+          shared-key: ship
+          cache-bin: false
+          save-if: false
       - run: scripts/ship.sh
       - run: scripts/package.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-component
+          path: dist/glass-evo-*.zip
+          if-no-files-found: error
+
+  publish:
+    name: publish
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [check, component]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-component
+          path: dist
       - name: Release notes from the changelog
         run: |
           v="${GITHUB_REF_NAME#v}"
