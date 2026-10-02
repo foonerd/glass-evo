@@ -10,26 +10,31 @@ ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 unset CARGO_TARGET_DIR
 
-# A library from Debian bookworm into the sysroot, and a link the linker
-# finds under its plain name. Looked for with -e, which follows links: a
+# A library from Debian bookworm into the sysroot, held against the digest
+# Debian's index gives for it, and a link the linker finds under its plain
+# name. Looked for with -e, which follows links: a
 # restored CI cache keeps the links and drops the files behind them, and
 # such a library counts as missing and is unpacked again.
 fetch() {
-  local deb_arch=$1 multiarch=$2 url=$3 soname=$4 plain=$5
+  local deb_arch=$1 multiarch=$2 url=$3 sha=$4 soname=$5 plain=$6
   local deb="target/sysroot/$(basename "$url")"
   local so="target/sysroot/$deb_arch/usr/lib/$multiarch/$soname"
   if [ ! -e "$so" ]; then
     mkdir -p "target/sysroot/$deb_arch"
-    "$ROOT/scripts/fetch.sh" "$url" "$deb"
+    "$ROOT/scripts/fetch.sh" "$url" "$deb" "$sha"
     dpkg-deb -x "$deb" "target/sysroot/$deb_arch"
   fi
   mkdir -p "target/sysroot/link-$deb_arch"
   ln -sf "$ROOT/$so" "target/sysroot/link-$deb_arch/$plain"
 }
-for pair in "armhf arm-linux-gnueabihf" "arm64 aarch64-linux-gnu"; do
-  set -- $pair
-  fetch "$1" "$2" "http://deb.debian.org/debian/pool/main/libs/libsdl2/libsdl2-2.0-0_2.26.5+dfsg-1_$1.deb" libSDL2-2.0.so.0 libSDL2.so
-  fetch "$1" "$2" "http://deb.debian.org/debian/pool/main/a/alsa-lib/libasound2_1.2.8-1+b1_$1.deb" libasound.so.2 libasound.so
+# Per architecture: its name in Debian, its library directory, the digests
+# of its SDL2 and its ALSA package.
+for row in \
+  "armhf arm-linux-gnueabihf b76abdb214e7213a1ea6542dd618c940d3b5601c14dcf88577db1d13d6a80ec7 97718ff5e552c9a7b9e77e8debbe219b0068a9ab5dcabedd0800c69dd8f0eb96" \
+  "arm64 aarch64-linux-gnu 7d875b119108a240015e7739c7a0de402616975281bcd8169cb434326fa93a66 9fa889400fcee4b92c8f4a2fafbb7f2cd33444d9ec1665a71002ab67c06114bb"; do
+  set -- $row
+  fetch "$1" "$2" "http://deb.debian.org/debian/pool/main/libs/libsdl2/libsdl2-2.0-0_2.26.5+dfsg-1_$1.deb" "$3" libSDL2-2.0.so.0 libSDL2.so
+  fetch "$1" "$2" "http://deb.debian.org/debian/pool/main/a/alsa-lib/libasound2_1.2.8-1+b1_$1.deb" "$4" libasound.so.2 libasound.so
 done
 export CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc
 export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
