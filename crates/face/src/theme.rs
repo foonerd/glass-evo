@@ -407,8 +407,14 @@ impl Theme {
     /// The tokens in use: the defaults, the theme's text over them, the
     /// user's settings over that.
     pub fn resolve(theme_text: Option<&str>, settings: &BTreeMap<String, String>) -> Self {
+        Self::layered(&[theme_text], settings)
+    }
+
+    /// The tokens in use where more than one text has a say: the defaults,
+    /// each text over what came before it, the user's settings over all.
+    pub fn layered(texts: &[Option<&str>], settings: &BTreeMap<String, String>) -> Self {
         let mut theme = Self::default();
-        if let Some(text) = theme_text {
+        for text in texts.iter().flatten() {
             theme.apply(&keys(text));
         }
         theme.apply(settings);

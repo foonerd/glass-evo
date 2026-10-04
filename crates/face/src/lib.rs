@@ -18,6 +18,7 @@ use overlay::face::{
 };
 use overlay::{Cover, Overlay, View};
 use std::collections::hash_map::DefaultHasher;
+use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
@@ -38,7 +39,7 @@ pub use overlay::Wall;
 /// a clock set in type, which a page sets in its own, or not shown.
 pub fn clock_preview<'a>(
     drawn: &'a mut clock::Drawn,
-    keys: &std::collections::BTreeMap<String, String>,
+    keys: &BTreeMap<String, String>,
     size: u32,
     wall: &Wall,
     now_ms: u64,
@@ -489,11 +490,14 @@ pub struct Face {
     faces: Option<String>,
 }
 
-/// The tokens in use, read on the first frame: the display starts again
-/// when a setting changes, so they stand while it runs.
+/// The tokens in use, read on the first frame, with what they were read
+/// for: the theme on show and the face's settings. They stand until a
+/// view names another theme or other settings.
 struct Tokens {
     theme: Theme,
     frosted: bool,
+    theme_dir: String,
+    settings: BTreeMap<String, String>,
 }
 
 /// A theme's text by its folder's name in one of the folders face themes
@@ -518,20 +522,45 @@ fn theme_text(folders: &str, name: &str) -> Option<String> {
         .find_map(|file| read_to_string(&file))
 }
 
-/// The tokens for a view: the theme its settings name, from the folders
-/// the face was told or, on a player, the ones the launcher names in
-/// `GLASS_FACES`.
+/// What the theme on show brings for the face: the `face.txt` beside its
+/// `meters.txt`, read where the display reads the theme's own files. None
+/// where no theme is on show or the theme brings none.
+fn brought_text(theme_dir: &str) -> Option<String> {
+    if theme_dir.is_empty() {
+        return None;
+    }
+    read_to_string(&Path::new(theme_dir).join("face.txt"))
+}
+
+/// The tokens for a view, three texts one over the other: the look its
+/// settings name, from the folders the face was told or, on a player, the
+/// ones the launcher names in `GLASS_FACES`; over it what the theme on
+/// show brings; over both the user's own settings.
 fn tokens_for(view: &View, faces: Option<&str>) -> Tokens {
-    let text = view.settings.get("theme").and_then(|name| {
+    let chosen = view.settings.get("theme").and_then(|name| {
         let folders = match faces {
             Some(folders) => folders.to_string(),
             None => std::env::var("GLASS_FACES").ok()?,
         };
         theme_text(&folders, name)
     });
-    let theme = Theme::resolve(text.as_deref(), view.settings);
+    let brought = brought_text(view.theme_dir);
+    let theme = Theme::layered(&[chosen.as_deref(), brought.as_deref()], view.settings);
     let frosted = theme.frosted(view.settings);
-    Tokens { theme, frosted }
+    Tokens {
+        theme,
+        frosted,
+        theme_dir: view.theme_dir.to_string(),
+        settings: view.settings.clone(),
+    }
+}
+
+impl Tokens {
+    /// Whether these are the tokens for a view: read for the theme it has
+    /// on show and from the settings it has.
+    fn stand_for(&self, view: &View) -> bool {
+        self.theme_dir == view.theme_dir && &self.settings == view.settings
+    }
 }
 
 /// The look of the track on show: read from the cover off the frame's
@@ -1186,13 +1215,27 @@ impl Face {
             // The bar is away, and the sheet with it.
             self.sheet_open = false;
         }
-        let faces = self.faces.as_deref();
-        let theme = &self
-            .tokens
-            .get_or_insert_with(|| tokens_for(view, faces))
-            .theme;
+        let theme = &self.tokens(view).theme;
         let clock = view.ours && !playing && (theme.clock_show || theme.date_show);
         (alpha, clock)
+    }
+
+    /// The tokens for a view: read on the first frame, and again when the
+    /// view names another theme or other settings, as happens under a face
+    /// that goes on while a page or a remote takes the player's new
+    /// configuration. What was made with the tokens before is then made
+    /// again: the track's look is read anew, the look in use standing until
+    /// it is in, and nothing counts as drawn.
+    fn tokens(&mut self, view: &View) -> &Tokens {
+        if !self.tokens.as_ref().is_some_and(|t| t.stand_for(view)) {
+            self.tokens = Some(tokens_for(view, self.faces.as_deref()));
+            self.track.cover = None;
+            self.track.pending = None;
+            self.accents = None;
+            self.clock = ClockFace::default();
+            self.drawn = None;
+        }
+        self.tokens.as_ref().expect("the tokens were read above")
     }
 }
 
@@ -1268,8 +1311,10 @@ impl Overlay for Face {
         let meta = &view.input.metadata;
         let (alpha, clock) = self.advance(view);
         let time = clock.then_some(view.wall);
-        let faces = self.faces.as_deref();
-        let tokens = self.tokens.get_or_insert_with(|| tokens_for(view, faces));
+        // The tokens are this view's: `advance` saw to it.
+        let Some(tokens) = self.tokens.as_ref() else {
+            return false;
+        };
         let theme = &tokens.theme;
         let frosted = tokens.frosted;
         let bar = Bar::measured(view.width, view.height, view.scale, theme.measure_bar);
@@ -1440,12 +1485,7 @@ impl Overlay for Face {
                 meta.status
             );
         }
-        let faces = self.faces.as_deref();
-        let units = self
-            .tokens
-            .get_or_insert_with(|| tokens_for(view, faces))
-            .theme
-            .measure_bar;
+        let units = self.tokens(view).theme.measure_bar;
         let bar = Bar::measured(view.width, view.height, view.scale, units);
         let on_bar = if self.presence.visible() {
             bar.button_at(x, y)
@@ -1532,7 +1572,6 @@ impl Overlay for Face {
 mod tests {
     use super::*;
     use overlay::face::{Fonts, Input};
-    use std::collections::BTreeMap;
 
     static NO_SETTINGS: BTreeMap<String, String> = BTreeMap::new();
 
@@ -1570,6 +1609,7 @@ mod tests {
             ours: true,
             scale: 1.0,
             settings: &NO_SETTINGS,
+            theme_dir: "",
         }
     }
 
@@ -2449,6 +2489,101 @@ mod tests {
             }
         );
         assert_eq!(lay(None, None, DatePlace::Below), IdleLayout::default());
+    }
+
+    /// A folder that holds a `face.txt` as a meter theme may: here the
+    /// one a shipped look is kept in, a taller bar on black glass.
+    const BRINGS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../themes/Night Drive");
+
+    #[test]
+    fn what_the_theme_on_show_brings_lies_over_the_look_and_under_the_settings() {
+        let shipped = concat!(env!("CARGO_MANIFEST_DIR"), "/../../themes");
+        let input = input("pause");
+        let fonts = Fonts::default();
+        // The look chosen is Warm: amber on brown, at the built-in measures.
+        let chosen = settings(&[("theme", "Warm")]);
+        let mut v = view(&input, &fonts, 0);
+        v.settings = &chosen;
+        let warm = tokens_for(&v, Some(shipped)).theme;
+        assert_eq!(warm.tint, theme::Paint::Fixed([0x28, 0x12, 0x06]));
+        assert_eq!(warm.measure_bar, 72.0);
+        // A theme on show that brings a look: what it says stands over
+        // Warm's, and Warm's stands where it says nothing.
+        v.theme_dir = BRINGS;
+        let brought = tokens_for(&v, Some(shipped)).theme;
+        assert_eq!(brought.tint, theme::Paint::Fixed([0, 0, 0]));
+        assert_eq!(brought.ink, [255, 255, 255]);
+        assert_eq!(brought.measure_bar, 100.0);
+        assert_eq!(
+            brought.accent,
+            theme::Paint::Fixed([0xff, 0xb3, 0x47]),
+            "the accent is Warm's: the theme on show names none"
+        );
+        // The user's own settings stand over both.
+        let own = settings(&[
+            ("theme", "Warm"),
+            ("measure.bar", "144"),
+            ("colours.ink", "#00ff00"),
+        ]);
+        v.settings = &own;
+        let adjusted = tokens_for(&v, Some(shipped)).theme;
+        assert_eq!(adjusted.measure_bar, 144.0);
+        assert_eq!(adjusted.ink, [0, 255, 0]);
+        assert_eq!(adjusted.tint, theme::Paint::Fixed([0, 0, 0]));
+        // With no look chosen it lies over the built-in one; a theme that
+        // brings nothing, and no theme at all, change nothing.
+        v.settings = &NO_SETTINGS;
+        assert_eq!(tokens_for(&v, Some(shipped)).theme.measure_bar, 100.0);
+        v.theme_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../themes");
+        assert_eq!(tokens_for(&v, Some(shipped)).theme, Theme::default());
+        v.theme_dir = "";
+        assert_eq!(tokens_for(&v, Some(shipped)).theme, Theme::default());
+    }
+
+    #[test]
+    fn the_look_is_read_again_when_the_theme_or_the_settings_change() {
+        let input = input("pause");
+        let fonts = Fonts::default();
+        let mut frame = blank();
+        let mut face = Face::new();
+        let mut v = view(&input, &fonts, 0);
+        assert!(face.draw(&mut frame, &v));
+        assert_eq!(face.icons.as_ref().map(|set| set.size()), Some(36));
+        assert_eq!(face.covers(&v), Cover::Same);
+        // Another theme comes on show under the same face, and brings a look.
+        v.theme_dir = BRINGS;
+        assert_eq!(
+            face.covers(&v),
+            Cover::New,
+            "nothing drawn in the look before counts as drawn"
+        );
+        assert!(face.draw(&mut frame, &v));
+        assert_eq!(
+            face.icons.as_ref().map(|set| set.size()),
+            Some(50),
+            "the bar is as tall as the theme on show asks"
+        );
+        // A touch where only the taller bar is, is the bar's.
+        assert!(face.pointer(PointerKind::Down, 320, 630, &v));
+        assert!(face.pointer(PointerKind::Up, 320, 630, &v));
+        assert_eq!(face.commands()[0].name, "toggle");
+        face.draw(&mut frame, &v);
+        assert_eq!(
+            face.covers(&v),
+            Cover::Same,
+            "the look stands while nothing changes"
+        );
+        // The settings change under the same face and the same theme.
+        let own = settings(&[("measure.bar", "144")]);
+        v.settings = &own;
+        assert_eq!(face.covers(&v), Cover::New);
+        face.draw(&mut frame, &v);
+        assert_eq!(face.icons.as_ref().map(|set| set.size()), Some(72));
+        // And back to a theme that brings nothing.
+        v.theme_dir = "";
+        v.settings = &NO_SETTINGS;
+        face.draw(&mut frame, &v);
+        assert_eq!(face.icons.as_ref().map(|set| set.size()), Some(36));
     }
 
     #[test]

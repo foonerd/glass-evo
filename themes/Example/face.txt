@@ -9,6 +9,12 @@
 # Install: copy the folder to /data/INTERNAL/glass/faces/ on the player and
 # choose it on the Manager's Screen tab. A theme there stands before a look
 # of the same name that glass-evo ships.
+#
+# A meter theme may bring a look of its own: a face.txt of this form beside
+# its meters.txt. While that theme is on show its keys go over the look
+# chosen in the Manager, key for key, and what the user sets there still
+# goes over both. It needs no installing and no choosing: it comes and goes
+# with the theme.
 
 [theme]
 # The theme's name, as its folder's, and a line about it: both for the

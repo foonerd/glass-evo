@@ -11,7 +11,7 @@ publish.workspace = true
 # display and the types it draws with. It knows no window, so the face
 # builds for the player's screen and for a browser alike. Pinned to a
 # Glass release.
-overlay = { git = "https://github.com/foonerd/glass", tag = "v0.8.49" }
+overlay = { git = "https://github.com/foonerd/glass", tag = "v0.8.50" }
 serde_json = "1"
 
 # The C library, only to hold the face's own reading of a time pattern

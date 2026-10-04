@@ -2,6 +2,14 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.26] - 2026-10-04
+
+Built on Glass 0.8.50, where a face is told which theme is on show.
+
+- **A meter theme may bring a look for the face.** A `face.txt` beside a theme's `meters.txt`, written as any face theme is (`themes/Example/face.txt` names every key), is read while that theme is on show. Three texts then lie one over the other: the look chosen on the Manager's Screen tab, the theme's own over it, and what the user set in the Manager over both, key for key. A theme that sets only its colours leaves the sizes, the clock and the rest as the user has them; one that sets everything draws the same on every player, but for what its user adjusted. The file is optional and a theme without one draws as before. It travels with the theme's folder, so a bundle remote and the browser views that carry the face draw the same look as the player's screen, and a theme cut to another size or packaged keeps it.
+- **The look follows a change of theme or of settings under a face that goes on.** The face read its look once and kept it while it ran, which holds on the player's screen, where the display starts again at every change. A page or a remote takes the player's new configuration under the same face: the look is now read again whenever the theme on show or the face's settings are not the ones it was read for.
+- From Glass 0.8.50 the Manager's look panel shows what the theme on show brings: the likeness is laid as the face lays it, and a line says that the theme brings a look of its own.
+
 ## [0.1.25] - 2026-10-04
 
 Built on Glass 0.8.49; nothing of the face's own changes. Where glass-evo is the display, on the player's screen, on a bundle remote and in the browser views, it brings:
