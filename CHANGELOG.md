@@ -2,6 +2,14 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.23] - 2026-10-04
+
+Built on Glass 0.8.35; nothing of the face's own changes. Where glass-evo is the display, on the player's screen, on a bundle remote and in the browser views, it brings:
+
+- **The sample rate line aligned as the theme says** (Glass 0.8.33): centred or right aligned in its box in a theme that centres or right aligns its texts, where it always stood at the left; `playinfo.samplerate.align` sets it by itself.
+- **The pictures fetched for the display kept to the newest 48** (Glass 0.8.32), where every cover and fanart picture was kept without end.
+- **A cover that keeps its place while the same track's next address is fetched** (Glass 0.8.34), for a player that gives one cover a new address at every state, as the Squeezelite plugin does with a Lyrion server's.
+
 ## [0.1.22] - 2026-10-04
 
 Built on Glass 0.8.31; nothing of the face's own changes.
