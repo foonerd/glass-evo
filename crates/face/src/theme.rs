@@ -109,6 +109,12 @@ pub struct Theme {
     pub measure_clock: f32,
     /// `measure.date`: the date's height, in the same units.
     pub measure_date: f32,
+    /// `idle.picture`: a picture of the user's own shown behind the clock
+    /// and the date when nothing plays, in the theme's place, by its file's
+    /// name in the folder such pictures are kept in; empty for none.
+    pub idle_picture: String,
+    /// `idle.dim`: how far that picture is darkened, 0 to 0.9.
+    pub idle_dim: f32,
 }
 
 impl Default for Theme {
@@ -148,6 +154,8 @@ impl Default for Theme {
             measure_bar: 72.0,
             measure_clock: 144.0,
             measure_date: 40.0,
+            idle_picture: String::new(),
+            idle_dim: 0.25,
         }
     }
 }
@@ -254,6 +262,8 @@ impl Theme {
             let v = value.as_str();
             match key.as_str() {
                 "theme.name" => self.name = v.to_string(),
+                "idle.picture" => self.idle_picture = v.trim().to_string(),
+                "idle.dim" => self.idle_dim = units(v, 0.0, 0.9).unwrap_or(self.idle_dim),
                 "colours.tint" | "colors.tint" => self.tint = paint(v).unwrap_or(self.tint),
                 "colours.accent" | "colors.accent" => self.accent = paint(v).unwrap_or(self.accent),
                 "colours.ink" | "colors.ink" => self.ink = colour(v).unwrap_or(self.ink),
@@ -614,7 +624,7 @@ mod tests {
         }
         assert_eq!(
             written.len(),
-            35,
+            37,
             "and nothing but what the face reads and the line for a list"
         );
     }

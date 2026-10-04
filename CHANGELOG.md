@@ -2,6 +2,14 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.32] - 2026-10-04
+
+Asked on the forum: a photograph of one's own behind the clock and the date when nothing plays. Built on Glass 0.8.63, whose Manager chooses and keeps the pictures.
+
+- **A picture of your own when nothing plays.** Where one is chosen (the Manager's Screen tab, "Picture when nothing plays"), the screen glass-evo holds shows it in the theme's place while the player stands still, with the clock, the date and the bar of controls over it as the look has them; when music plays the theme is back. The picture is scaled to cover the screen and cut from its middle, darkened as far as "Darken the picture" says, and the glass behind the clock and the date blurs it where blur is on. It is read once, off the frame loop, and the theme shows until it is in.
+- For a face theme: `[idle] picture` (a file's name in the player's `glass/backgrounds` folder) and `dim` (0 to 0.9); `themes/Example/face.txt` documents both.
+- Not yet on remote displays and in the browser views: they show the theme when nothing plays.
+
 ## [0.1.31] - 2026-10-04
 
 Built on Glass 0.8.61; nothing of the face's own changes.

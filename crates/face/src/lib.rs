@@ -14,7 +14,8 @@
 //! theme leaves to the artwork are read from the cover, once per track.
 
 use overlay::face::{
-    blur, fit_art, read_art, read_to_string, ui, Command, Frame, Metadata, PointerKind, TextStyle,
+    blur, fit_art, read_art, read_covering, read_to_string, ui, Command, Frame, Metadata,
+    PointerKind, TextStyle,
 };
 use overlay::{Cover, Overlay, View};
 use std::collections::hash_map::DefaultHasher;
@@ -488,6 +489,11 @@ pub struct Face {
     /// The folders face themes are kept in, where the face was told them;
     /// else the launcher's word, `GLASS_FACES`.
     faces: Option<String>,
+    /// The picture for when nothing plays, and the folder such pictures
+    /// are kept in, where the face was told it; else the launcher's word,
+    /// `GLASS_BACKGROUNDS`.
+    idle: IdlePicture,
+    backgrounds: Option<String>,
 }
 
 /// The tokens in use, read on the first frame, with what they were read
@@ -560,6 +566,104 @@ impl Tokens {
     /// on show and from the settings it has.
     fn stand_for(&self, view: &View) -> bool {
         self.theme_dir == view.theme_dir && &self.settings == view.settings
+    }
+}
+
+/// The picture of the user's own for when nothing plays, read for the
+/// screen's size and darkened once: on a player a thread reads it and the
+/// frames go on with the theme until it is in; in a browser it is read at
+/// the frame that asks.
+#[derive(Default)]
+struct IdlePicture {
+    /// The file, the size and the darkening the picture in hand was read for.
+    key: Option<(String, u32, u32, u32)>,
+    frame: Option<Frame>,
+    pending: Option<PictureReading>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+struct PictureReading(std::sync::mpsc::Receiver<Option<Frame>>);
+#[cfg(target_arch = "wasm32")]
+struct PictureReading(Option<Frame>);
+
+/// A picture file made to cover `w` by `h` and darkened by `dim`.
+fn idle_frame(path: &Path, w: u32, h: u32, dim: f32) -> Option<Frame> {
+    let mut frame = read_covering(path, w, h)?;
+    let keep = ((1.0 - dim.clamp(0.0, 0.9)) * 256.0) as u32;
+    for pixel in frame.rgba.as_chunks_mut::<4>().0 {
+        for channel in &mut pixel[..3] {
+            *channel = ((u32::from(*channel) * keep) >> 8) as u8;
+        }
+        pixel[3] = 255;
+    }
+    Some(frame)
+}
+
+impl PictureReading {
+    #[cfg(not(target_arch = "wasm32"))]
+    fn of(path: PathBuf, w: u32, h: u32, dim: f32) -> Self {
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = send.send(idle_frame(&path, w, h, dim));
+        });
+        PictureReading(receive)
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn of(path: PathBuf, w: u32, h: u32, dim: f32) -> Self {
+        PictureReading(idle_frame(&path, w, h, dim))
+    }
+
+    /// What was read, once it has been; none where the file is no picture.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn done(&mut self) -> Option<Option<Frame>> {
+        match self.0.try_recv() {
+            Ok(found) => Some(found),
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => Some(None),
+            Err(std::sync::mpsc::TryRecvError::Empty) => None,
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn done(&mut self) -> Option<Option<Frame>> {
+        Some(self.0.take())
+    }
+}
+
+/// The file of a picture by its name in the folder such pictures are kept
+/// in; a name that is not one file's name there is no picture.
+fn idle_file(folder: &str, name: &str) -> Option<PathBuf> {
+    let name = name.trim();
+    if folder.is_empty() || name.is_empty() || name.starts_with('.') || name.contains(['/', '\\']) {
+        return None;
+    }
+    Some(Path::new(folder).join(name))
+}
+
+impl IdlePicture {
+    /// Follow what is asked: the picture `file` for a screen of `w` by `h`,
+    /// darkened by `dim`, or none. Says whether a picture is in hand.
+    fn follow(&mut self, file: Option<PathBuf>, w: u32, h: u32, dim: f32) -> bool {
+        let Some(file) = file else {
+            *self = Self::default();
+            return false;
+        };
+        let key = (
+            file.to_string_lossy().into_owned(),
+            w,
+            h,
+            (dim * 1000.0) as u32,
+        );
+        if self.key.as_ref() != Some(&key) {
+            self.key = Some(key);
+            self.frame = None;
+            self.pending = Some(PictureReading::of(file, w, h, dim));
+        }
+        if let Some(found) = self.pending.as_mut().and_then(PictureReading::done) {
+            self.pending = None;
+            self.frame = found;
+        }
+        self.frame.is_some()
     }
 }
 
@@ -1194,7 +1298,7 @@ impl Face {
     /// what there is to draw: how much of the bar shows, and whether the
     /// clock stands. Asked twice for one frame it changes nothing the
     /// second time.
-    fn advance(&mut self, view: &View) -> (u8, bool) {
+    fn advance(&mut self, view: &View) -> (u8, bool, bool) {
         let meta = &view.input.metadata;
         let now = view.now_ms;
         // A change of track is not the player standing still: the bar does
@@ -1216,8 +1320,21 @@ impl Face {
             self.sheet_open = false;
         }
         let theme = &self.tokens(view).theme;
-        let clock = view.ours && !playing && (theme.clock_show || theme.date_show);
-        (alpha, clock)
+        let idle = view.ours && !playing;
+        let clock = idle && (theme.clock_show || theme.date_show);
+        // The picture for when nothing plays, where one is chosen and read.
+        let (name, dim) = (theme.idle_picture.clone(), theme.idle_dim);
+        let file = if idle && !name.is_empty() {
+            let folder = match self.backgrounds.as_deref() {
+                Some(folder) => Some(folder.to_string()),
+                None => std::env::var("GLASS_BACKGROUNDS").ok(),
+            };
+            folder.and_then(|folder| idle_file(&folder, &name))
+        } else {
+            None
+        };
+        let picture = self.idle.follow(file, view.width, view.height, dim);
+        (alpha, clock, picture)
     }
 
     /// The tokens for a view: read on the first frame, and again when the
@@ -1250,6 +1367,12 @@ impl Face {
         let mut h = DefaultHasher::new();
         (alpha, view.width, view.height, view.scale.to_bits()).hash(&mut h);
         (self.track.look.tint, self.track.look.accent).hash(&mut h);
+        // The picture for when nothing plays, where it is in hand.
+        self.idle
+            .frame
+            .as_ref()
+            .and(self.idle.key.as_ref())
+            .hash(&mut h);
         if alpha > 0 {
             self.pressed.map(|b| b as u8).hash(&mut h);
             self.pressed_tile.map(|t| t as u8).hash(&mut h);
@@ -1285,8 +1408,8 @@ impl Overlay for Face {
     /// says the same minute, a bar nobody touches, the display is told
     /// that too, and leaves the screen as it is.
     fn covers(&mut self, view: &View) -> Cover {
-        let (alpha, clock) = self.advance(view);
-        if alpha == 0 && !clock {
+        let (alpha, clock, picture) = self.advance(view);
+        if alpha == 0 && !clock && !picture {
             self.drawn = None;
             return Cover::Nothing;
         }
@@ -1309,7 +1432,7 @@ impl Overlay for Face {
 
     fn draw(&mut self, frame: &mut Frame, view: &View) -> bool {
         let meta = &view.input.metadata;
-        let (alpha, clock) = self.advance(view);
+        let (alpha, clock, picture) = self.advance(view);
         let time = clock.then_some(view.wall);
         // The tokens are this view's: `advance` saw to it.
         let Some(tokens) = self.tokens.as_ref() else {
@@ -1327,6 +1450,14 @@ impl Overlay for Face {
         let look = self.track.look;
         let ink = theme.buttons_ink.unwrap_or(theme.ink);
         let mut drawn = false;
+        // Nothing plays and a picture of the user's own is chosen: it stands
+        // in the theme's place, under everything the face draws.
+        if picture {
+            if let Some(own) = self.idle.frame.as_ref() {
+                ui::blit(frame, own, 0, 0, 255);
+                drawn = true;
+            }
+        }
         // The clock and the date first, when the player stands still on the
         // display's own screen: the controls are drawn after and lie over them.
         if clock {
@@ -2524,6 +2655,98 @@ mod tests {
     /// A folder that holds a `face.txt` as a meter theme may: here the
     /// one a shipped look is kept in, a taller bar on black glass.
     const BRINGS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../themes/Night Drive");
+
+    /// A picture one pixel large, red, as a PNG file's bytes.
+    const RED_PNG: [u8; 69] = [
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90,
+        0x77, 0x53, 0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0xf8,
+        0xcf, 0xc0, 0x00, 0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xdd, 0x8d, 0xb0, 0x00, 0x00, 0x00,
+        0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ];
+
+    #[test]
+    fn a_picture_of_the_users_own_stands_in_the_themes_place_when_nothing_plays() {
+        let dir = std::env::temp_dir().join(format!("glass-evo-idle-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("red.png"), RED_PNG).unwrap();
+        let folder = dir.to_string_lossy().into_owned();
+        let fonts = Fonts::default();
+        let at = |frame: &Frame, x: usize, y: usize| {
+            let i = (y * 1280 + x) * 4;
+            [
+                frame.rgba[i],
+                frame.rgba[i + 1],
+                frame.rgba[i + 2],
+                frame.rgba[i + 3],
+            ]
+        };
+        // Draw until the picture, read off the frame loop, is in hand.
+        let draw_idle = |pairs: &[(&str, &str)]| {
+            let paused = input("pause");
+            let set = settings(pairs);
+            let mut face = Face::new();
+            face.backgrounds = Some(folder.clone());
+            let mut frame = blank();
+            for step in 0..400u64 {
+                let mut v = view(&paused, &fonts, step * 16);
+                v.settings = &set;
+                frame = blank();
+                face.draw(&mut frame, &v);
+                if at(&frame, 5, 5)[3] != 0 {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            frame
+        };
+        // Chosen and not darkened: the whole picture is the user's, from the
+        // top to the foot, with the bar's glass over it there.
+        let plain = draw_idle(&[
+            ("idle.picture", "red.png"),
+            ("idle.dim", "0"),
+            ("clock.show", "off"),
+        ]);
+        assert_eq!(at(&plain, 5, 5), [255, 0, 0, 255]);
+        assert_eq!(at(&plain, 1270, 400), [255, 0, 0, 255]);
+        // Darkened by half.
+        let dark = draw_idle(&[
+            ("idle.picture", "red.png"),
+            ("idle.dim", "0.5"),
+            ("clock.show", "off"),
+        ]);
+        let half = at(&dark, 5, 5);
+        assert!(
+            (120..=135).contains(&half[0]) && half[1] == 0 && half[2] == 0,
+            "{half:?}"
+        );
+        // None chosen, a name that walks, a file that is no picture: the theme stays.
+        for pairs in [
+            vec![("clock.show", "off")],
+            vec![("idle.picture", "../red.png"), ("clock.show", "off")],
+            vec![("idle.picture", "absent.png"), ("clock.show", "off")],
+        ] {
+            assert_eq!(at(&draw_idle(&pairs), 5, 5)[3], 0, "{pairs:?}");
+        }
+        // While music plays the theme is the picture, whatever is chosen.
+        let playing = input("play");
+        let set = settings(&[("idle.picture", "red.png"), ("idle.dim", "0")]);
+        let mut face = Face::new();
+        face.backgrounds = Some(folder.clone());
+        let mut v = view(&playing, &fonts, 60_000);
+        v.settings = &set;
+        let mut frame = blank();
+        for _ in 0..50 {
+            face.draw(&mut frame, &v);
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        assert_eq!(at(&frame, 5, 5)[3], 0);
+        assert_eq!(idle_file(&folder, " red.png "), Some(dir.join("red.png")));
+        assert_eq!(idle_file(&folder, ".hidden.png"), None);
+        assert_eq!(idle_file("", "red.png"), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn what_the_theme_on_show_brings_lies_over_the_look_and_under_the_settings() {

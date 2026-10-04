@@ -99,3 +99,12 @@ tint = tint
 bar = 72
 clock = 144
 date = 40
+
+[idle]
+# When nothing plays: a picture of the user's own behind the clock and the
+# date, in the theme's place. The name of a file in the player's
+# glass/backgrounds folder (JPEG, PNG or WebP), chosen on the Manager's
+# Screen tab; empty for none, and the theme shows. It is scaled to cover the
+# screen and cut from its middle. dim darkens it, 0 to 0.9.
+picture =
+dim = 0.25
