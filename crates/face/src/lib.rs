@@ -1563,6 +1563,18 @@ impl Overlay for Face {
         Some(banner())
     }
 
+    /// Where the display built with this face is released: a remote that
+    /// is the bundle brings itself up to date from glass-evo's releases,
+    /// and so stays the bundle.
+    fn origin(&self) -> Option<overlay::Origin> {
+        Some(overlay::Origin {
+            repository: "foonerd/glass-evo".to_string(),
+            asset: "glass-evo-".to_string(),
+            binary: "glass-evo".to_string(),
+            version: VERSION.to_string(),
+        })
+    }
+
     fn commands(&mut self) -> Vec<Command> {
         std::mem::take(&mut self.pending)
     }
@@ -1625,6 +1637,24 @@ mod tests {
     #[test]
     fn the_banner_names_the_face_and_its_version() {
         assert_eq!(banner(), format!("glass-evo {}", env!("CARGO_PKG_VERSION")));
+    }
+
+    #[test]
+    fn the_face_says_where_its_display_is_released() {
+        let origin = Face::new().origin().expect("an origin");
+        assert_eq!(origin.repository, "foonerd/glass-evo");
+        // An archive is glass-evo-<version>-<arch>.tar.gz, the display in
+        // it bin/<arch>/glass-evo, and what it answers to --version ends in
+        // the version a release is tagged with.
+        assert_eq!(
+            format!("{}{}-x64.tar.gz", origin.asset, origin.version),
+            format!("glass-evo-{}-x64.tar.gz", env!("CARGO_PKG_VERSION"))
+        );
+        assert_eq!(origin.binary, "glass-evo");
+        assert_eq!(
+            banner().split_whitespace().last(),
+            Some(origin.version.as_str())
+        );
     }
 
     #[test]

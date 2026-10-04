@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.28] - 2026-10-04
+
+Built on Glass 0.8.54.
+
+- **A bundle remote on Linux brings itself up to date.** The face says where its display is released (`Overlay::origin`), so the Version panel on a bundle's settings page looks at glass-evo's latest release and upgrades to it: the archive checked against the release's checksum, the new binary tried before it takes the place, the one before kept and put back by itself if the new one cannot hold on. It follows glass-evo's releases, so a bundle stays a bundle. The mechanism is Glass's (0.8.54).
+
 ## [0.1.27] - 2026-10-04
 
 Built on Glass 0.8.51; nothing of the face's own changes.
