@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.30] - 2026-10-04
+
+Built on Glass 0.8.60; nothing of the face's own changes.
+
+- **A bundle remote on Windows brings itself up to date** (Glass 0.8.59): the Version panel on its settings page upgrades it from glass-evo's releases, as on Linux, the display before kept as `glass.prev.exe`. Tried under Wine, not yet on a Windows machine.
+- **A picture the theme brings stands in for a folder layer** (Glass 0.8.60): a skin's own sample back cover shows for the albums that have none.
+
 ## [0.1.29] - 2026-10-04
 
 Built on Glass 0.8.58; nothing of the face's own changes. Where glass-evo is the display, on the player's screen, on a bundle remote and in the browser views, it brings:
