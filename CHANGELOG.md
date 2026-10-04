@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.24] - 2026-10-04
+
+Built on Glass 0.8.46; nothing of the face's own changes.
+
+- **glass-evo takes the screen on a Raspberry Pi whose panel is on DSI, at every boot.** Whether the screen could be drawn on depended on the order the system listed its graphics cards in, which changes from boot to boot: SDL's search for the screen's card forgets the card it found when one with nothing connected is listed after it, and the face ended three starts with "kmsdrm not available" and gave the screen back to the kiosk. The display tells SDL the card now (Glass 0.8.46), and this release is the face built on it. With Glass 0.8.46 on the player an earlier glass-evo is told the card by the plugin as well.
+- The face's binary answers `--probe-graphics` as Glass's does (Glass 0.8.37): whether the system can draw on a screen without an X server, step by step.
+
 ## [0.1.23] - 2026-10-04
 
 Built on Glass 0.8.35; nothing of the face's own changes. Where glass-evo is the display, on the player's screen, on a bundle remote and in the browser views, it brings:
