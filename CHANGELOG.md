@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.22] - 2026-10-04
+
+Built on Glass 0.8.31; nothing of the face's own changes.
+
+- **Album art from a Lyrion server shows** where glass-evo is the display: on the player's screen and on a bundle remote. The Squeezelite plugin hands a Lyrion server's covers on with no `Content-Type`, and the display took only what a server called an image; Glass 0.8.31 tells a picture by its content, and this release is the face built on it. The Face tab and Anymote need only that Glass.
+
 ## [0.1.21] - 2026-10-02
 
 Built on Glass 0.8.28; nothing of the face's own changes.
