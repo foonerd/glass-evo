@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.29] - 2026-10-04
+
+Built on Glass 0.8.58; nothing of the face's own changes. Where glass-evo is the display, on the player's screen, on a bundle remote and in the browser views, it brings:
+
+- **Rotation quality paces the turning** (Glass 0.8.57): a record, a reel and turning art are drawn anew Low 4, Medium 8, High 15 times a second or at the custom number, as the setting says and as PeppyMeter Screensaver did, and stand between.
+- **A track of a cue sheet is of the type `cue`** (Glass 0.8.56): a theme's `cue.png` shows.
+
 ## [0.1.28] - 2026-10-04
 
 Built on Glass 0.8.54.
