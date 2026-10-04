@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.31] - 2026-10-04
+
+Built on Glass 0.8.61; nothing of the face's own changes.
+
+- **The Android bundle says when a later release is out** (Glass 0.8.61): the Version panel on its settings page links glass-evo's new package, and Android's installer installs it over the app with the settings kept. Not tried on a device.
+
 ## [0.1.30] - 2026-10-04
 
 Built on Glass 0.8.60; nothing of the face's own changes.
