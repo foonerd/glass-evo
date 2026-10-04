@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.27] - 2026-10-04
+
+Built on Glass 0.8.51; nothing of the face's own changes.
+
+- **No black frame at the end of a countdown.** With the persist display set to the countdown, the screen glass-evo holds, a bundle remote and the browser views that carry the face could turn black for a frame or a few when the countdown ran out, before the theme stood again under the clock; after a plugin that stopped in the middle of a countdown the black stayed until the next play. The theme stands throughout (Glass 0.8.51).
+
 ## [0.1.26] - 2026-10-04
 
 Built on Glass 0.8.50, where a face is told which theme is on show.
