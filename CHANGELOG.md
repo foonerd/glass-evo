@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.25] - 2026-10-04
+
+Built on Glass 0.8.49; nothing of the face's own changes. Where glass-evo is the display, on the player's screen, on a bundle remote and in the browser views, it brings:
+
+- **A bar dragged the way it is drawn** (Glass 0.8.48): a volume fader that moves up and down is dragged up and down, also where its box is wider than tall.
+- **A theme's format icon under the type's own name** (Glass 0.8.47): `webradio.png` in a theme's `format-icons` is found, as `radio.png` is.
+
 ## [0.1.24] - 2026-10-04
 
 Built on Glass 0.8.46; nothing of the face's own changes.
