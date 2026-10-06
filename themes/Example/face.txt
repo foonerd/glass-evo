@@ -108,3 +108,7 @@ date = 40
 # screen and cut from its middle. dim darkens it, 0 to 0.9.
 picture =
 dim = 0.25
+# Minutes with nothing playing and no touch after which the screen goes
+# black, for a screen that must not show the same picture for hours; a tap
+# wakes it, and so does music. 0: never.
+off = 0

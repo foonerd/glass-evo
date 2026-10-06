@@ -115,6 +115,9 @@ pub struct Theme {
     pub idle_picture: String,
     /// `idle.dim`: how far that picture is darkened, 0 to 0.9.
     pub idle_dim: f32,
+    /// `idle.off`: minutes with nothing playing and no touch after which
+    /// the screen goes black; 0 for never.
+    pub idle_off_min: u32,
 }
 
 impl Default for Theme {
@@ -156,6 +159,7 @@ impl Default for Theme {
             measure_date: 40.0,
             idle_picture: String::new(),
             idle_dim: 0.25,
+            idle_off_min: 0,
         }
     }
 }
@@ -264,6 +268,13 @@ impl Theme {
                 "theme.name" => self.name = v.to_string(),
                 "idle.picture" => self.idle_picture = v.trim().to_string(),
                 "idle.dim" => self.idle_dim = units(v, 0.0, 0.9).unwrap_or(self.idle_dim),
+                "idle.off" => {
+                    self.idle_off_min = v
+                        .trim()
+                        .parse::<u32>()
+                        .map(|m| m.min(1440))
+                        .unwrap_or(self.idle_off_min)
+                }
                 "colours.tint" | "colors.tint" => self.tint = paint(v).unwrap_or(self.tint),
                 "colours.accent" | "colors.accent" => self.accent = paint(v).unwrap_or(self.accent),
                 "colours.ink" | "colors.ink" => self.ink = colour(v).unwrap_or(self.ink),
@@ -624,7 +635,7 @@ mod tests {
         }
         assert_eq!(
             written.len(),
-            37,
+            38,
             "and nothing but what the face reads and the line for a list"
         );
     }

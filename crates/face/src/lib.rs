@@ -494,6 +494,13 @@ pub struct Face {
     /// `GLASS_BACKGROUNDS`.
     idle: IdlePicture,
     backgrounds: Option<String>,
+    /// When the player last came to stand still and when the screen was
+    /// last touched, for the screen's going black; whether it is black
+    /// now, and whether the press that wakes it is still down.
+    idle_since: Option<u64>,
+    touched_at: Option<u64>,
+    dark: bool,
+    waking: bool,
 }
 
 /// The tokens in use, read on the first frame, with what they were read
@@ -1298,7 +1305,7 @@ impl Face {
     /// what there is to draw: how much of the bar shows, and whether the
     /// clock stands. Asked twice for one frame it changes nothing the
     /// second time.
-    fn advance(&mut self, view: &View) -> (u8, bool, bool) {
+    fn advance(&mut self, view: &View) -> (u8, bool, bool, bool) {
         let meta = &view.input.metadata;
         let now = view.now_ms;
         // A change of track is not the player standing still: the bar does
@@ -1319,12 +1326,34 @@ impl Face {
             // The bar is away, and the sheet with it.
             self.sheet_open = false;
         }
-        let theme = &self.tokens(view).theme;
+        // What the look says of the idle screen, taken before anything else
+        // of the face is touched.
+        let (clock_show, date_show, off_min, name, dim) = {
+            let theme = &self.tokens(view).theme;
+            (
+                theme.clock_show,
+                theme.date_show,
+                theme.idle_off_min,
+                theme.idle_picture.clone(),
+                theme.idle_dim,
+            )
+        };
         let idle = view.ours && !playing;
-        let clock = idle && (theme.clock_show || theme.date_show);
+        let off_ms = u64::from(off_min) * 60_000;
+        // The screen goes black after the minutes the look names with
+        // nothing playing and no touch; music coming wakes it.
+        if idle {
+            let since = *self.idle_since.get_or_insert(now);
+            let last = since.max(self.touched_at.unwrap_or(0));
+            self.dark = off_ms > 0 && now.saturating_sub(last) >= off_ms;
+        } else {
+            self.idle_since = None;
+            self.dark = false;
+        }
+        let dark = self.dark;
+        let clock = idle && !dark && (clock_show || date_show);
         // The picture for when nothing plays, where one is chosen and read.
-        let (name, dim) = (theme.idle_picture.clone(), theme.idle_dim);
-        let file = if idle && !name.is_empty() {
+        let file = if idle && !dark && !name.is_empty() {
             let folder = match self.backgrounds.as_deref() {
                 Some(folder) => Some(folder.to_string()),
                 None => std::env::var("GLASS_BACKGROUNDS").ok(),
@@ -1334,7 +1363,7 @@ impl Face {
             None
         };
         let picture = self.idle.follow(file, view.width, view.height, dim);
-        (alpha, clock, picture)
+        (alpha, clock, picture, dark)
     }
 
     /// The tokens for a view: read on the first frame, and again when the
@@ -1367,6 +1396,7 @@ impl Face {
         let mut h = DefaultHasher::new();
         (alpha, view.width, view.height, view.scale.to_bits()).hash(&mut h);
         (self.track.look.tint, self.track.look.accent).hash(&mut h);
+        self.dark.hash(&mut h);
         // The picture for when nothing plays, where it is in hand.
         self.idle
             .frame
@@ -1408,8 +1438,8 @@ impl Overlay for Face {
     /// says the same minute, a bar nobody touches, the display is told
     /// that too, and leaves the screen as it is.
     fn covers(&mut self, view: &View) -> Cover {
-        let (alpha, clock, picture) = self.advance(view);
-        if alpha == 0 && !clock && !picture {
+        let (alpha, clock, picture, dark) = self.advance(view);
+        if alpha == 0 && !clock && !picture && !dark {
             self.drawn = None;
             return Cover::Nothing;
         }
@@ -1423,7 +1453,13 @@ impl Overlay for Face {
             }
         }
         let time = clock.then_some(view.wall);
-        if self.drawn.is_some() && self.drawn == Some(self.stamp(view, alpha, time)) {
+        // Black is one picture, whatever the bar would be under it.
+        let stamp = if dark {
+            self.stamp(view, 0, None)
+        } else {
+            self.stamp(view, alpha, time)
+        };
+        if self.drawn.is_some() && self.drawn == Some(stamp) {
             Cover::Same
         } else {
             Cover::New
@@ -1432,8 +1468,14 @@ impl Overlay for Face {
 
     fn draw(&mut self, frame: &mut Frame, view: &View) -> bool {
         let meta = &view.input.metadata;
-        let (alpha, clock, picture) = self.advance(view);
+        let (alpha, clock, picture, dark) = self.advance(view);
         let time = clock.then_some(view.wall);
+        // Black, and nothing on it: the screen is off as far as its pixels go.
+        if dark {
+            ui::fill(frame, 0, 0, frame.width, frame.height, [0, 0, 0, 255]);
+            self.drawn = Some(self.stamp(view, 0, None));
+            return true;
+        }
         // The tokens are this view's: `advance` saw to it.
         let Some(tokens) = self.tokens.as_ref() else {
             return false;
@@ -1600,6 +1642,14 @@ impl Overlay for Face {
 
     fn pointer(&mut self, kind: PointerKind, x: i32, y: i32, view: &View) -> bool {
         let now = view.now_ms;
+        // A touch keeps the screen on, and the press that wakes a black
+        // screen is the wake and nothing else, up to its lift.
+        self.touched_at = Some(now);
+        if self.dark || self.waking {
+            self.waking = kind != PointerKind::Up;
+            self.dark = false;
+            return true;
+        }
         let meta = &view.input.metadata;
         if verbose() {
             let kind_name = match kind {
@@ -2664,6 +2714,76 @@ mod tests {
         0xcf, 0xc0, 0x00, 0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xdd, 0x8d, 0xb0, 0x00, 0x00, 0x00,
         0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
     ];
+
+    #[test]
+    fn the_screen_goes_black_after_the_minutes_named_and_a_tap_wakes_it() {
+        let paused = input("pause");
+        let fonts = Fonts::default();
+        let set = settings(&[("idle.off", "2"), ("clock.show", "on")]);
+        let at = |ms: u64| {
+            let mut v = view(&paused, &fonts, ms);
+            v.settings = &set;
+            v
+        };
+        let mut face = Face::new();
+        let mut frame = blank();
+        // Standing still from the start: the clock, until two minutes have passed.
+        face.draw(&mut frame, &at(0));
+        assert!(frame.rgba.iter().any(|b| *b != 0), "the clock is drawn");
+        assert_ne!(face.covers(&at(119_000)), Cover::Nothing);
+        assert!(!face.dark);
+        assert_eq!(
+            face.covers(&at(120_000)),
+            Cover::New,
+            "black comes as a new picture"
+        );
+        let mut frame = blank();
+        assert!(face.draw(&mut frame, &at(120_000)));
+        assert!(face.dark);
+        assert!(
+            frame
+                .rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|p| p[0] == 0 && p[1] == 0 && p[2] == 0 && p[3] == 255),
+            "all black"
+        );
+        assert_eq!(
+            face.covers(&at(120_016)),
+            Cover::Same,
+            "and stays, costing nothing"
+        );
+        // A tap wakes it, and is the wake alone: no command, no bar brought up by it.
+        assert!(face.pointer(PointerKind::Down, 640, 690, &at(200_000)));
+        assert!(!face.dark);
+        assert!(face.pointer(PointerKind::Up, 640, 690, &at(200_050)));
+        assert!(
+            face.commands().is_empty(),
+            "the waking tap did not act on the bar"
+        );
+        assert_eq!(face.covers(&at(200_100)), Cover::New);
+        // Two minutes from that touch it goes black again; a touch within keeps it on.
+        assert!(!face.advance(&at(319_000)).3);
+        // (A touch beside the bar is the theme's, as ever; it still counts as a touch.)
+        let _ = face.pointer(PointerKind::Down, 10, 10, &at(319_000));
+        let _ = face.pointer(PointerKind::Up, 10, 10, &at(319_020));
+        assert!(!face.advance(&at(439_000)).3);
+        assert!(face.advance(&at(439_100)).3);
+        // Music wakes it, and while music plays it never goes black.
+        let playing = input("play");
+        let mut v = view(&playing, &fonts, 440_000);
+        v.settings = &set;
+        assert!(!face.advance(&v).3);
+        assert!(!face.dark);
+        let mut v = view(&playing, &fonts, 2_000_000);
+        v.settings = &set;
+        assert!(!face.advance(&v).3);
+        // Off by default: standing still for hours draws the clock.
+        let mut plain = Face::new();
+        let v = view(&paused, &fonts, 7_200_000);
+        assert!(!plain.advance(&v).3);
+    }
 
     #[test]
     fn a_picture_of_the_users_own_stands_in_the_themes_place_when_nothing_plays() {
