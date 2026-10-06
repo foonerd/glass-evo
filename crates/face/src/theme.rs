@@ -32,6 +32,95 @@ pub enum DatePlace {
     Below,
 }
 
+/// A block of the idle screen's grid, three rows by three columns in equal
+/// thirds above the bar: the rows and the columns an element occupies,
+/// each from one to another of the three (0, 1, 2), both ends included.
+/// One cell, a row, four cells, all nine.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Cells {
+    pub rows: (u8, u8),
+    pub columns: (u8, u8),
+}
+
+/// Where an element stands across what it occupies.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Across {
+    Left,
+    #[default]
+    Centre,
+    Right,
+}
+
+/// Where an element stands down what it occupies.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Down {
+    Top,
+    #[default]
+    Middle,
+    Bottom,
+}
+
+/// Where an element stands inside the cells it occupies: in their middle
+/// unless said.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct Align {
+    pub across: Across,
+    pub down: Down,
+}
+
+/// The cells a place names: `<rows> <columns>`, each one of the grid's
+/// names (`top`, `middle`, `bottom`; `left`, `centre`, `right`) or a range
+/// of them (`middle left-centre`, `top-bottom right`). Nothing for anything
+/// else, an empty value among it.
+pub fn cells(text: &str) -> Option<Cells> {
+    let mut words = text.split_whitespace();
+    let (rows, columns) = (words.next()?, words.next()?);
+    if words.next().is_some() {
+        return None;
+    }
+    let range = |word: &str, names: [&str; 3]| -> Option<(u8, u8)> {
+        let index = |name: &str| {
+            let name = name.to_ascii_lowercase();
+            let name = if name == "center" {
+                "centre"
+            } else {
+                name.as_str()
+            };
+            names.iter().position(|n| *n == name).map(|i| i as u8)
+        };
+        match word.split_once('-') {
+            Some((from, to)) => {
+                let (from, to) = (index(from)?, index(to)?);
+                Some((from.min(to), from.max(to)))
+            }
+            None => index(word).map(|i| (i, i)),
+        }
+    };
+    Some(Cells {
+        rows: range(rows, ["top", "middle", "bottom"])?,
+        columns: range(columns, ["left", "centre", "right"])?,
+    })
+}
+
+/// An alignment as written: `left`, `centre` or `right` and `top`,
+/// `middle` or `bottom`, in either order; a side not named is the middle.
+/// Nothing where a word is none of these.
+pub fn align(text: &str) -> Option<Align> {
+    let mut align = Align::default();
+    for word in text.split_whitespace() {
+        match word.to_ascii_lowercase().as_str() {
+            "left" => align.across = Across::Left,
+            "centre" | "center" => align.across = Across::Centre,
+            "right" => align.across = Across::Right,
+            "top" => align.down = Down::Top,
+            "middle" => align.down = Down::Middle,
+            "bottom" => align.down = Down::Bottom,
+            _ => return None,
+        }
+    }
+    Some(align)
+}
+
 /// The tokens, with the defaults of the design language.
 #[derive(Clone, PartialEq, Debug)]
 pub struct Theme {
@@ -55,6 +144,12 @@ pub struct Theme {
     pub buttons_opacity: f32,
     /// `clock.show`: whether there is a clock when nothing plays.
     pub clock_show: bool,
+    /// `clock.place`: the cells of the grid the clock occupies. None is
+    /// the arrangement before the grid: the middle of what the date and
+    /// the bar leave.
+    pub clock_cells: Option<Cells>,
+    /// `clock.align`: where the clock stands inside the cells it occupies.
+    pub clock_align: Align,
     /// `clock.format`: the time as a pattern, `%H:%M` for 13:05,
     /// `%-I:%M %p` for 1:05 PM, `%H:%M:%S` with the seconds.
     pub clock_format: String,
@@ -137,6 +232,8 @@ impl Default for Theme {
             buttons_ink: None,
             buttons_opacity: 1.0,
             clock_show: true,
+            clock_cells: None,
+            clock_align: Align::default(),
             clock_format: "%H:%M".to_string(),
             clock_ink: None,
             clock_opacity: 0.86,
@@ -387,6 +484,9 @@ impl Theme {
                 }
                 "clock.card" => self.clock_card = colour(v).unwrap_or(self.clock_card),
                 "clock.show" => self.clock_show = switch(v).unwrap_or(self.clock_show),
+                // Empty, or anything that names no cells: as before the grid.
+                "clock.place" => self.clock_cells = cells(v),
+                "clock.align" => self.clock_align = align(v).unwrap_or(self.clock_align),
                 "clock.format" => {
                     if let Some(format) = pattern(v) {
                         self.clock_format = format;
@@ -501,6 +601,66 @@ mod tests {
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect()
+    }
+
+    #[test]
+    fn a_place_names_cells_of_the_grid_and_an_alignment_inside_them() {
+        let one = |rows, columns| Cells { rows, columns };
+        assert_eq!(cells("middle right"), Some(one((1, 1), (2, 2))));
+        assert_eq!(
+            cells("middle left-right"),
+            Some(one((1, 1), (0, 2))),
+            "a row"
+        );
+        assert_eq!(
+            cells("Middle-Bottom center-right"),
+            Some(one((1, 2), (1, 2))),
+            "four cells, in any case and either spelling"
+        );
+        assert_eq!(
+            cells("bottom-top right-left"),
+            Some(one((0, 2), (0, 2))),
+            "all nine, either way round"
+        );
+        for none in ["", "top", "middle left right", "upper left", "top-low left"] {
+            assert_eq!(cells(none), None, "{none:?} names no cells");
+        }
+        assert_eq!(align(""), Some(Align::default()));
+        assert_eq!(
+            align("bottom right"),
+            Some(Align {
+                across: Across::Right,
+                down: Down::Bottom
+            }),
+            "either order"
+        );
+        assert_eq!(
+            align("left"),
+            Some(Align {
+                across: Across::Left,
+                down: Down::Middle
+            })
+        );
+        assert_eq!(align("leftish"), None);
+        let mut theme = Theme::default();
+        assert_eq!(theme.clock_cells, None, "off the grid until placed on it");
+        theme.apply(&settings(&[
+            ("clock.place", "middle-bottom centre-right"),
+            ("clock.align", "right bottom"),
+        ]));
+        assert_eq!(theme.clock_cells, cells("middle-bottom centre-right"));
+        assert_eq!(
+            theme.clock_align,
+            Align {
+                across: Across::Right,
+                down: Down::Bottom
+            }
+        );
+        theme.apply(&settings(&[("clock.place", "")]));
+        assert_eq!(
+            theme.clock_cells, None,
+            "an empty place takes it off the grid"
+        );
     }
 
     #[test]
@@ -626,6 +786,8 @@ mod tests {
             "date.show",
             "date.format",
             "date.place",
+            "clock.place",
+            "clock.align",
             "date.ink",
             "date.opacity",
             "date.glass",
@@ -646,7 +808,7 @@ mod tests {
         }
         assert_eq!(
             written.len(),
-            39,
+            41,
             "and nothing but what the face reads and the line for a list"
         );
     }

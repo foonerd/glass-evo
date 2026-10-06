@@ -30,7 +30,7 @@ pub mod theme;
 pub mod when;
 use icon::Icon;
 use look::Look;
-use theme::{DatePlace, Theme};
+use theme::{Across, Align, Cells, DatePlace, Down, Theme};
 
 pub use overlay::Wall;
 
@@ -1153,9 +1153,67 @@ fn idle_layout(
     layout
 }
 
+/// The idle screen's grid: three rows by three columns in equal thirds
+/// over the picture above the bar. The lines between the cells and the
+/// edges, in pixels.
+#[derive(Debug, PartialEq)]
+struct Grid {
+    xs: [i32; 4],
+    ys: [i32; 4],
+}
+
+impl Grid {
+    fn new(picture: (u32, u32), below: u32) -> Self {
+        let lines = |whole: u32| {
+            let at = |share: f32| (whole as f32 * share).round() as i32;
+            [0, at(1.0 / 3.0), at(2.0 / 3.0), whole as i32]
+        };
+        Self {
+            xs: lines(picture.0),
+            ys: lines(picture.1.saturating_sub(below)),
+        }
+    }
+
+    /// The rectangle a block of cells covers.
+    fn area(&self, on: Cells) -> (i32, i32, u32, u32) {
+        let (x, y) = (self.xs[on.columns.0 as usize], self.ys[on.rows.0 as usize]);
+        let (right, foot) = (
+            self.xs[on.columns.1 as usize + 1],
+            self.ys[on.rows.1 as usize + 1],
+        );
+        (x, y, (right - x).max(0) as u32, (foot - y).max(0) as u32)
+    }
+}
+
+/// Where words `size` large stand in an area by their alignment: `keep`
+/// from the side they are aligned to, or in the middle. Words larger than
+/// the area run over it, by as much on either side when in the middle.
+fn aligned(
+    area: (i32, i32, u32, u32),
+    size: (u32, u32),
+    align: Align,
+    keep: (u32, u32),
+) -> (i32, i32) {
+    let (x, y, w, h) = (area.0, area.1, area.2 as i32, area.3 as i32);
+    let (sw, sh, kx, ky) = (size.0 as i32, size.1 as i32, keep.0 as i32, keep.1 as i32);
+    let across = match align.across {
+        Across::Left => x + kx,
+        Across::Centre => x + (w - sw) / 2,
+        Across::Right => x + w - kx - sw,
+    };
+    let down = match align.down {
+        Down::Top => y + ky,
+        Down::Middle => y + (h - sh) / 2,
+        Down::Bottom => y + h - ky - sh,
+    };
+    (across, down)
+}
+
 impl ClockFace {
     /// Draw what the theme shows of the clock and the date, above a bar
-    /// `below` high; whether anything was drawn.
+    /// `below` high; whether anything was drawn. A clock the look places on
+    /// the grid stands in its cells; the date stands as before, and where
+    /// it was placed with the clock it has the middle to itself.
     fn draw(
         &mut self,
         frame: &mut Frame,
@@ -1200,7 +1258,7 @@ impl ClockFace {
         } else {
             None
         };
-        let clock = if theme.clock_show {
+        let clock = if theme.clock_show && theme.clock_cells.is_none() {
             let taken = match (date, theme.date_place) {
                 (Some((_, h)), DatePlace::Top) => m.top_takes(h),
                 (Some((_, h)), _) => h + m.gap,
@@ -1212,36 +1270,12 @@ impl ClockFace {
                 .saturating_sub(taken)
                 .saturating_sub(2 * least.1);
             let size = px(theme.measure_clock).max(24);
-            let text = format_time(&theme.clock_format, wall);
             let most = if own("measure.clock") {
                 ANY
             } else {
                 (view.width.saturating_sub(2 * least.0), tallest)
             };
-            if theme.clock_face == clock::ClockKind::Type {
-                self.clock
-                    .set(view, text, size, theme.clock_ink.unwrap_or(theme.ink), most)
-            } else {
-                // A drawn face: fitted by the room it takes at the size
-                // wanted, every digit an 8 so the room stands still.
-                let widest: String = text
-                    .chars()
-                    .map(|c| if c.is_ascii_digit() { '8' } else { c })
-                    .collect();
-                let size = fitted_size(size, clock::room(theme.clock_face, &widest, size), most);
-                self.drawn.set(
-                    &clock::Asked {
-                        kind: theme.clock_face,
-                        dial: theme.clock_dial,
-                        paints: theme.paints(glass.look.accent),
-                        text: &text,
-                        wall,
-                        seconds: when::shows_seconds(&theme.clock_format),
-                        now_ms: view.now_ms,
-                    },
-                    size,
-                )
-            }
+            self.set_clock(view, theme, glass.look.accent, wall, size, most)
         } else {
             None
         };
@@ -1284,23 +1318,105 @@ impl ClockFace {
                 theme.clock_tint,
             );
             if let Some(at) = layout.clock_y {
-                if theme.clock_face == clock::ClockKind::Type {
-                    self.clock.place(frame, x, at, w, theme.clock_opacity);
-                } else if let Some(drawn) = self.drawn.frame() {
-                    ui::blit(
-                        frame,
-                        drawn,
-                        x + (w as i32 - drawn.width as i32) / 2,
-                        at,
-                        share(theme.clock_opacity, 255),
-                    );
-                }
+                self.put_clock(frame, x, at, w, theme);
             }
             if let Some(at) = layout.date_y {
                 self.date.place(frame, x, at, w, theme.date_opacity);
             }
         }
-        clock.is_some() || date.is_some()
+        let mut drawn = clock.is_some() || date.is_some();
+        // The clock on the grid: in the cells it occupies, where it is
+        // aligned inside them. A size that came with the look is fitted to
+        // the cells less a margin and the least a glass keeps; a size the
+        // user set is the user's, and runs over the cells and the screen's
+        // edges where it is larger, as it does off the grid.
+        if let (true, Some(on)) = (theme.clock_show, theme.clock_cells) {
+            let area = Grid::new((view.width, view.height), below).area(on);
+            let most = if own("measure.clock") {
+                ANY
+            } else {
+                (
+                    area.2.saturating_sub(2 * (m.margin + least.0)),
+                    area.3.saturating_sub(2 * (m.margin + least.1)),
+                )
+            };
+            let size = px(theme.measure_clock).max(24);
+            if let Some((w, h)) = self.set_clock(view, theme, glass.look.accent, wall, size, most) {
+                let about = (
+                    pad_about(area.2.saturating_sub(2 * m.margin), w, pad.0, least.0),
+                    pad_about(area.3.saturating_sub(2 * m.margin), h, pad.1, least.1),
+                );
+                let (x, y) = aligned(
+                    area,
+                    (w, h),
+                    theme.clock_align,
+                    (m.margin + about.0, m.margin + about.1),
+                );
+                glass.behind(
+                    frame,
+                    (x, y, w, h),
+                    about,
+                    theme.clock_glass,
+                    theme.clock_tint,
+                );
+                self.put_clock(frame, x, y, w, theme);
+                drawn = true;
+            }
+        }
+        drawn
+    }
+
+    /// Set the clock, in type or drawn, at a size or the largest that fits
+    /// `most`; the room it takes.
+    fn set_clock(
+        &mut self,
+        view: &View,
+        theme: &Theme,
+        accent: [u8; 3],
+        wall: &Wall,
+        size: u32,
+        most: (u32, u32),
+    ) -> Option<(u32, u32)> {
+        let text = format_time(&theme.clock_format, wall);
+        if theme.clock_face == clock::ClockKind::Type {
+            return self
+                .clock
+                .set(view, text, size, theme.clock_ink.unwrap_or(theme.ink), most);
+        }
+        // A drawn face: fitted by the room it takes at the size wanted,
+        // every digit an 8 so the room stands still.
+        let widest: String = text
+            .chars()
+            .map(|c| if c.is_ascii_digit() { '8' } else { c })
+            .collect();
+        let size = fitted_size(size, clock::room(theme.clock_face, &widest, size), most);
+        self.drawn.set(
+            &clock::Asked {
+                kind: theme.clock_face,
+                dial: theme.clock_dial,
+                paints: theme.paints(accent),
+                text: &text,
+                wall,
+                seconds: when::shows_seconds(&theme.clock_format),
+                now_ms: view.now_ms,
+            },
+            size,
+        )
+    }
+
+    /// The clock as it was set, in the middle of a width.
+    fn put_clock(&self, frame: &mut Frame, x: i32, y: i32, width: u32, theme: &Theme) {
+        if theme.clock_face == clock::ClockKind::Type {
+            self.clock.place(frame, x, y, width, theme.clock_opacity);
+        } else if let Some(drawn) = self.drawn.frame() {
+            ui::blit(
+                frame,
+                drawn,
+                x + (width as i32 - drawn.width as i32) / 2,
+                y,
+                share(theme.clock_opacity, 255),
+            );
+        }
     }
 }
 
@@ -2685,6 +2801,123 @@ mod tests {
             fitted_size(40, (4000, 40), (100, 100)),
             12,
             "never under twelve pixels"
+        );
+    }
+
+    #[test]
+    fn the_grid_is_three_by_three_above_the_bar_and_the_clock_takes_a_block_of_it() {
+        // 1280 by 720 with a bar of 72: thirds of 1280 across, of 648 down.
+        let grid = Grid::new((1280, 720), 72);
+        assert_eq!(grid.xs, [0, 427, 853, 1280]);
+        assert_eq!(grid.ys, [0, 216, 432, 648]);
+        let on = |text: &str| grid.area(theme::cells(text).unwrap());
+        assert_eq!(on("middle right"), (853, 216, 427, 216), "one cell");
+        assert_eq!(
+            on("middle left-right"),
+            (0, 216, 1280, 216),
+            "a row: the flip clock's"
+        );
+        assert_eq!(
+            on("middle-bottom centre-right"),
+            (427, 216, 853, 432),
+            "four cells: the dial's"
+        );
+        assert_eq!(
+            on("top-bottom left-right"),
+            (0, 0, 1280, 648),
+            "all nine, the bar left out"
+        );
+    }
+
+    #[test]
+    fn the_clock_is_aligned_inside_what_it_occupies() {
+        let area = (400, 200, 600, 300);
+        let at = |text: &str| aligned(area, (200, 100), theme::align(text).unwrap(), (20, 10));
+        assert_eq!(at(""), (600, 300), "in the middle unless said");
+        assert_eq!(
+            at("left top"),
+            (420, 210),
+            "a margin from the sides it is aligned to"
+        );
+        assert_eq!(at("right bottom"), (780, 390));
+        assert_eq!(at("left"), (420, 300));
+        assert_eq!(at("bottom"), (600, 390));
+        // Larger than its cells and in the middle: over the edges by as
+        // much on either side.
+        assert_eq!(
+            aligned(area, (800, 100), Align::default(), (20, 10)),
+            (300, 300)
+        );
+    }
+
+    #[test]
+    fn a_clock_on_the_grid_stands_in_its_cells_and_off_it_nothing_moves() {
+        let fonts = Fonts::default();
+        let stopped = input("stop");
+        let ink = |frame: &Frame, (x, y, w, h): (i32, i32, u32, u32)| {
+            let mut inked = 0;
+            for row in y.max(0) as u32..(y.max(0) as u32 + h).min(frame.height) {
+                for column in x.max(0) as u32..(x.max(0) as u32 + w).min(frame.width) {
+                    if frame.rgba[((row * frame.width + column) * 4 + 3) as usize] > 0 {
+                        inked += 1;
+                    }
+                }
+            }
+            inked
+        };
+        let drawn = |pairs: &[(&str, &str)]| {
+            let set = settings(pairs);
+            let mut v = view(&stopped, &fonts, 0);
+            v.settings = &set;
+            let mut frame = blank();
+            Face::new().draw(&mut frame, &v);
+            frame
+        };
+        // A dial, so there is something to see with no font to set type in.
+        let dial = [("clock.face", "dial"), ("glass.frost", "off")];
+        let before = drawn(&dial);
+        let placed = drawn(&[dial[0], dial[1], ("clock.place", "top left")]);
+        assert!(
+            ink(&placed, (0, 0, 427, 216)) > 2000,
+            "the dial stands in the top left cell"
+        );
+        assert_eq!(
+            ink(&placed, (427, 0, 853, 648)) + ink(&placed, (0, 216, 427, 432)),
+            0,
+            "and nowhere else above the bar"
+        );
+        assert!(
+            ink(&before, (427, 216, 426, 216)) > 2000,
+            "with no place it is in the middle, as before the grid"
+        );
+        assert_eq!(
+            drawn(&[dial[0], dial[1], ("clock.place", "")]).rgba,
+            before.rgba,
+            "an empty place: as it was, to the pixel"
+        );
+        // A size the user set is the user's: larger than its cell, the dial
+        // runs over the cell's edges, as it would over the screen's.
+        let large = drawn(&[
+            dial[0],
+            dial[1],
+            ("clock.place", "top left"),
+            ("measure.clock", "400"),
+        ]);
+        assert!(
+            ink(&large, (427, 0, 853, 648)) + ink(&large, (0, 216, 427, 432)) > 2000,
+            "ink outside the cell"
+        );
+        // The date placed with a clock that is on the grid has the middle to itself.
+        let with_date = drawn(&[
+            dial[0],
+            dial[1],
+            ("clock.place", "top left"),
+            ("date.show", "on"),
+            ("date.place", "below"),
+        ]);
+        assert!(
+            ink(&with_date, (0, 0, 427, 216)) > 2000,
+            "the dial where it was placed"
         );
     }
 

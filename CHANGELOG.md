@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.39] - 2026-10-07
+
+The first step of the idle screen's grid, at Andrew's word: "introduce grid. We will test only clock in grid end-to-end. Move clock to grid." Built on Glass 0.8.71.
+
+- **The clock on a grid.** Three rows by three columns in equal thirds above the bar: `top`, `middle`, `bottom` by `left`, `centre`, `right`. `[clock] place` names the cells the clock occupies, rows then columns, each a name or a range: `middle left-right` is the middle row, `middle-bottom centre-right` four cells, `top-bottom left-right` all nine. `[clock] align` is where it stands inside those cells: `left`, `centre` or `right` and `top`, `middle` or `bottom`, the middle unless said. A size that came with the look is fitted to the cells; a size the user set is kept and runs over them where it is larger.
+- **Nothing else moves.** A clock with no place stands as before, in the middle of what the date and the bar leave, to the pixel. The date stands as before; placed above or below a clock that is on the grid, it has the middle to itself.
+
 ## [0.1.38] - 2026-10-06
 
 Built on Glass 0.8.71, with what 0.8.70 and 0.8.71 bring to the display.

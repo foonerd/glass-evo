@@ -48,6 +48,17 @@ opacity = 1.0
 [clock]
 # The clock shows when nothing plays: on or off.
 show = on
+# Where it stands, on the idle screen's grid: three rows (top, middle,
+# bottom) by three columns (left, centre, right) in equal thirds above the
+# bar. place names the cells it occupies, rows then columns, each one name
+# or a range: "middle left-right" is the middle row, "middle-bottom
+# centre-right" four cells, "top-bottom left-right" all nine. Empty: in the
+# middle of what the date and the bar leave, as before the grid. align is
+# where it stands inside its cells: left, centre or right, and top, middle
+# or bottom. A size the look comes with is fitted to the cells; one the
+# user set is kept, and runs over them where it is larger.
+place =
+align = centre middle
 # The time as a pattern (strftime's): %H:%M is 13:05, %H:%M:%S adds the
 # seconds, %-I:%M %p is 1:05 PM.
 format = %H:%M
