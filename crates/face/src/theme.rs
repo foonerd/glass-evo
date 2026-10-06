@@ -150,6 +150,10 @@ pub struct Theme {
     pub clock_cells: Option<Cells>,
     /// `clock.align`: where the clock stands inside the cells it occupies.
     pub clock_align: Align,
+    /// `clock.margin`: units of a 720th of the picture's height between the
+    /// clock's glass and the sides of its cells it is aligned to; 0 puts it
+    /// in the corner.
+    pub clock_margin: f32,
     /// `clock.format`: the time as a pattern, `%H:%M` for 13:05,
     /// `%-I:%M %p` for 1:05 PM, `%H:%M:%S` with the seconds.
     pub clock_format: String,
@@ -234,6 +238,7 @@ impl Default for Theme {
             clock_show: true,
             clock_cells: None,
             clock_align: Align::default(),
+            clock_margin: 20.0,
             clock_format: "%H:%M".to_string(),
             clock_ink: None,
             clock_opacity: 0.86,
@@ -487,6 +492,9 @@ impl Theme {
                 // Empty, or anything that names no cells: as before the grid.
                 "clock.place" => self.clock_cells = cells(v),
                 "clock.align" => self.clock_align = align(v).unwrap_or(self.clock_align),
+                "clock.margin" => {
+                    self.clock_margin = units(v, 0.0, 200.0).unwrap_or(self.clock_margin)
+                }
                 "clock.format" => {
                     if let Some(format) = pattern(v) {
                         self.clock_format = format;
@@ -656,7 +664,10 @@ mod tests {
                 down: Down::Bottom
             }
         );
-        theme.apply(&settings(&[("clock.place", "")]));
+        theme.apply(&settings(&[("clock.place", ""), ("clock.margin", "0")]));
+        assert_eq!(theme.clock_margin, 0.0, "no margin: the corner");
+        theme.apply(&settings(&[("clock.margin", "wide")]));
+        assert_eq!(theme.clock_margin, 0.0, "a word is no margin");
         assert_eq!(
             theme.clock_cells, None,
             "an empty place takes it off the grid"
@@ -788,6 +799,7 @@ mod tests {
             "date.place",
             "clock.place",
             "clock.align",
+            "clock.margin",
             "date.ink",
             "date.opacity",
             "date.glass",
@@ -808,7 +820,7 @@ mod tests {
         }
         assert_eq!(
             written.len(),
-            41,
+            42,
             "and nothing but what the face reads and the line for a list"
         );
     }

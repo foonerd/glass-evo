@@ -1332,25 +1332,26 @@ impl ClockFace {
         // edges where it is larger, as it does off the grid.
         if let (true, Some(on)) = (theme.clock_show, theme.clock_cells) {
             let area = Grid::new((view.width, view.height), below).area(on);
+            let margin = px(theme.clock_margin);
             let most = if own("measure.clock") {
                 ANY
             } else {
                 (
-                    area.2.saturating_sub(2 * (m.margin + least.0)),
-                    area.3.saturating_sub(2 * (m.margin + least.1)),
+                    area.2.saturating_sub(2 * (margin + least.0)),
+                    area.3.saturating_sub(2 * (margin + least.1)),
                 )
             };
             let size = px(theme.measure_clock).max(24);
             if let Some((w, h)) = self.set_clock(view, theme, glass.look.accent, wall, size, most) {
                 let about = (
-                    pad_about(area.2.saturating_sub(2 * m.margin), w, pad.0, least.0),
-                    pad_about(area.3.saturating_sub(2 * m.margin), h, pad.1, least.1),
+                    pad_about(area.2.saturating_sub(2 * margin), w, pad.0, least.0),
+                    pad_about(area.3.saturating_sub(2 * margin), h, pad.1, least.1),
                 );
                 let (x, y) = aligned(
                     area,
                     (w, h),
                     theme.clock_align,
-                    (m.margin + about.0, m.margin + about.1),
+                    (margin + about.0, margin + about.1),
                 );
                 glass.behind(
                     frame,
@@ -2918,6 +2919,31 @@ mod tests {
         assert!(
             ink(&with_date, (0, 0, 427, 216)) > 2000,
             "the dial where it was placed"
+        );
+        // No margin: the glass stands in the corner of its cell.
+        let corner = drawn(&[
+            dial[0],
+            dial[1],
+            ("clock.place", "top right"),
+            ("clock.align", "right top"),
+            ("clock.margin", "0"),
+            ("clock.glass", "1"),
+        ]);
+        assert!(
+            ink(&corner, (1270, 0, 10, 10)) > 50,
+            "the glass touches the top right corner"
+        );
+        let kept = drawn(&[
+            dial[0],
+            dial[1],
+            ("clock.place", "top right"),
+            ("clock.align", "right top"),
+            ("clock.glass", "1"),
+        ]);
+        assert_eq!(
+            ink(&kept, (1270, 0, 10, 10)),
+            0,
+            "with the margin of 20 it stops short"
         );
     }
 

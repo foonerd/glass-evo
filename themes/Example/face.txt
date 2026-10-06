@@ -56,9 +56,12 @@ show = on
 # middle of what the date and the bar leave, as before the grid. align is
 # where it stands inside its cells: left, centre or right, and top, middle
 # or bottom. A size the look comes with is fitted to the cells; one the
-# user set is kept, and runs over them where it is larger.
+# user set is kept, and runs over them where it is larger. margin is the
+# room, in units of a 720th of the picture's height, between its glass and
+# the sides of its cells it is aligned to; 0 puts it in the corner.
 place =
 align = centre middle
+margin = 20
 # The time as a pattern (strftime's): %H:%M is 13:05, %H:%M:%S adds the
 # seconds, %-I:%M %p is 1:05 PM.
 format = %H:%M

@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.40] - 2026-10-07
+
+Andrew, placing the clock in a corner of the grid and finding it twenty units short: "Perhaps a margin should be introduced?" and "meant user controlled margins!"
+
+- **The clock's margin on the grid is the user's.** `[clock] margin`, in units of a 720th of the picture's height: the room between the clock's glass and the sides of its cells it is aligned to. 20 unless said, as before; 0 puts the glass in the corner.
+
 ## [0.1.39] - 2026-10-07
 
 The first step of the idle screen's grid, at Andrew's word: "introduce grid. We will test only clock in grid end-to-end. Move clock to grid." Built on Glass 0.8.71.
