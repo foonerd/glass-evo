@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.37] - 2026-10-06
+
+Built on Glass 0.8.69, which redraws the radio icons and takes on the FM STEREO word.
+
+- **The radio icons as Glass 0.8.69 draws them**, and a station the radio plugin names `FM STEREO` with its signal gets the stereo icon at that level, as a mono one does.
+
 ## [0.1.36] - 2026-10-06
 
 Asked by Andrew on the screen-off: gradual, not abrupt. Built on Glass 0.8.68, whose look panel has the setting.
