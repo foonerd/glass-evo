@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.38] - 2026-10-06
+
+Built on Glass 0.8.71, with what 0.8.70 and 0.8.71 bring to the display.
+
+- **A text field takes a font of its own.** `playinfo.title.font` and `playinfo.title.fontsize` in a meter theme, and the same for artist, album and the other text fields, as the time fields have.
+- **A meter stepped to in the Manager's Face tab is shown on the screen too.** A `meter.next` button pressed in the browser moves the player's screen, and every view that follows it.
+
 ## [0.1.37] - 2026-10-06
 
 Built on Glass 0.8.69, which redraws the radio icons and takes on the FM STEREO word.
