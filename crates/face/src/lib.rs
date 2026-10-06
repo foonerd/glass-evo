@@ -501,6 +501,11 @@ pub struct Face {
     touched_at: Option<u64>,
     dark: bool,
     waking: bool,
+    /// When the screen began to go black, and when it began to come back,
+    /// for the fade between.
+    dark_since: Option<u64>,
+    wake_since: Option<u64>,
+    fade_ms: u32,
 }
 
 /// The tokens in use, read on the first frame, with what they were read
@@ -1328,20 +1333,23 @@ impl Face {
         }
         // What the look says of the idle screen, taken before anything else
         // of the face is touched.
-        let (clock_show, date_show, off_min, name, dim) = {
+        let (clock_show, date_show, off_min, fade_ms, name, dim) = {
             let theme = &self.tokens(view).theme;
             (
                 theme.clock_show,
                 theme.date_show,
                 theme.idle_off_min,
+                theme.idle_fade_ms,
                 theme.idle_picture.clone(),
                 theme.idle_dim,
             )
         };
+        self.fade_ms = fade_ms;
         let idle = view.ours && !playing;
         let off_ms = u64::from(off_min) * 60_000;
         // The screen goes black after the minutes the look names with
         // nothing playing and no touch; music coming wakes it.
+        let was_dark = self.dark;
         if idle {
             let since = *self.idle_since.get_or_insert(now);
             let last = since.max(self.touched_at.unwrap_or(0));
@@ -1350,7 +1358,17 @@ impl Face {
             self.idle_since = None;
             self.dark = false;
         }
-        let dark = self.dark;
+        // Going black begins now; coming back begins the moment it stops.
+        if self.dark && !was_dark {
+            self.dark_since = Some(now);
+            self.wake_since = None;
+        } else if !self.dark && was_dark {
+            self.wake_since = Some(now);
+            self.dark_since = None;
+        }
+        // Black that has come whole: nothing under it is drawn. While it
+        // fades, in or out, what is under it is.
+        let dark = self.black(now) == 255;
         let clock = idle && !dark && (clock_show || date_show);
         // The picture for when nothing plays, where one is chosen and read.
         let file = if idle && !dark && !name.is_empty() {
@@ -1364,6 +1382,23 @@ impl Face {
         };
         let picture = self.idle.follow(file, view.width, view.height, dim);
         (alpha, clock, picture, dark)
+    }
+
+    /// How black the screen is at `now`, 0 to 255: going black over the
+    /// fade from the moment it began, back over the fade from the moment it
+    /// stopped, and 0 or 255 outside those.
+    fn black(&self, now: u64) -> u8 {
+        let fade = u64::from(self.fade_ms);
+        let share = |since: u64| {
+            (now.saturating_sub(since) * 255)
+                .checked_div(fade)
+                .map_or(255, |s| s.min(255) as u8)
+        };
+        if self.dark {
+            self.dark_since.map_or(255, share)
+        } else {
+            self.wake_since.map_or(0, |since| 255 - share(since))
+        }
     }
 
     /// The tokens for a view: read on the first frame, and again when the
@@ -1439,7 +1474,7 @@ impl Overlay for Face {
     /// that too, and leaves the screen as it is.
     fn covers(&mut self, view: &View) -> Cover {
         let (alpha, clock, picture, dark) = self.advance(view);
-        if alpha == 0 && !clock && !picture && !dark {
+        if alpha == 0 && !clock && !picture && !dark && self.black(view.now_ms) == 0 {
             self.drawn = None;
             return Cover::Nothing;
         }
@@ -1453,9 +1488,15 @@ impl Overlay for Face {
             }
         }
         let time = clock.then_some(view.wall);
-        // Black is one picture, whatever the bar would be under it.
+        // Black is one picture, whatever the bar would be under it; on its
+        // way, in or out, it is another picture every frame.
+        let black = self.black(view.now_ms);
         let stamp = if dark {
             self.stamp(view, 0, None)
+        } else if black > 0 {
+            let mut h = DefaultHasher::new();
+            (self.stamp(view, alpha, time), view.now_ms).hash(&mut h);
+            h.finish()
         } else {
             self.stamp(view, alpha, time)
         };
@@ -1476,6 +1517,7 @@ impl Overlay for Face {
             self.drawn = Some(self.stamp(view, 0, None));
             return true;
         }
+        let black = self.black(view.now_ms);
         // The tokens are this view's: `advance` saw to it.
         let Some(tokens) = self.tokens.as_ref() else {
             return false;
@@ -1636,6 +1678,15 @@ impl Overlay for Face {
             self.accents = Some(accents);
             drawn = true;
         }
+        // On its way to black or back from it: black over everything, by
+        // how far it has come.
+        if black > 0 {
+            ui::fill(frame, 0, 0, frame.width, frame.height, [0, 0, 0, black]);
+            let mut h = DefaultHasher::new();
+            (self.stamp(view, alpha, time), view.now_ms).hash(&mut h);
+            self.drawn = Some(h.finish());
+            return true;
+        }
         self.drawn = drawn.then(|| self.stamp(view, alpha, time));
         drawn
     }
@@ -1647,7 +1698,11 @@ impl Overlay for Face {
         self.touched_at = Some(now);
         if self.dark || self.waking {
             self.waking = kind != PointerKind::Up;
-            self.dark = false;
+            if self.dark {
+                self.dark = false;
+                self.wake_since = Some(now);
+                self.dark_since = None;
+            }
             return true;
         }
         let meta = &view.input.metadata;
@@ -2719,7 +2774,8 @@ mod tests {
     fn the_screen_goes_black_after_the_minutes_named_and_a_tap_wakes_it() {
         let paused = input("pause");
         let fonts = Fonts::default();
-        let set = settings(&[("idle.off", "2"), ("clock.show", "on")]);
+        // At once, no fade: the timeout alone is under test here.
+        let set = settings(&[("idle.off", "2"), ("idle.fade", "0"), ("clock.show", "on")]);
         let at = |ms: u64| {
             let mut v = view(&paused, &fonts, ms);
             v.settings = &set;
@@ -2779,6 +2835,42 @@ mod tests {
         let mut v = view(&playing, &fonts, 2_000_000);
         v.settings = &set;
         assert!(!face.advance(&v).3);
+        // With a fade, black comes and goes by degrees: half way at half the fade.
+        let faded = settings(&[
+            ("idle.off", "1"),
+            ("idle.fade", "1000"),
+            ("clock.show", "off"),
+        ]);
+        let at_f = |ms: u64| {
+            let mut v = view(&paused, &fonts, ms);
+            v.settings = &faded;
+            v
+        };
+        let mut face = Face::new();
+        face.draw(&mut blank(), &at_f(0));
+        face.advance(&at_f(60_000));
+        assert_eq!(face.black(60_000), 0);
+        assert_eq!(face.covers(&at_f(60_500)), Cover::New);
+        let mut frame = blank();
+        face.draw(&mut frame, &at_f(60_500));
+        let half = frame.rgba[3];
+        assert!((120..=135).contains(&half), "half way: {half}");
+        face.draw(&mut frame, &at_f(61_000));
+        assert_eq!(face.black(61_000), 255);
+        assert_eq!(
+            face.covers(&at_f(61_100)),
+            Cover::Same,
+            "black whole stands"
+        );
+        assert!(face.pointer(PointerKind::Down, 10, 10, &at_f(70_000)));
+        assert!(face.pointer(PointerKind::Up, 10, 10, &at_f(70_020)));
+        assert_eq!(face.black(70_500), 128);
+        assert_eq!(face.black(71_000), 0);
+        assert_eq!(
+            face.covers(&at_f(70_500)),
+            Cover::New,
+            "on its way back it is drawn"
+        );
         // Off by default: standing still for hours draws the clock.
         let mut plain = Face::new();
         let v = view(&paused, &fonts, 7_200_000);

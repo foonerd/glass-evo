@@ -112,3 +112,6 @@ dim = 0.25
 # black, for a screen that must not show the same picture for hours; a tap
 # wakes it, and so does music. 0: never.
 off = 0
+# Milliseconds the screen takes to go black and to come back, up to 120000
+# (two minutes); 0 for at once.
+fade = 500

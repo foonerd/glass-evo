@@ -118,6 +118,9 @@ pub struct Theme {
     /// `idle.off`: minutes with nothing playing and no touch after which
     /// the screen goes black; 0 for never.
     pub idle_off_min: u32,
+    /// `idle.fade`: milliseconds the screen takes to go black and to come
+    /// back, up to two minutes; 0 for at once.
+    pub idle_fade_ms: u32,
 }
 
 impl Default for Theme {
@@ -160,6 +163,7 @@ impl Default for Theme {
             idle_picture: String::new(),
             idle_dim: 0.25,
             idle_off_min: 0,
+            idle_fade_ms: 500,
         }
     }
 }
@@ -268,6 +272,13 @@ impl Theme {
                 "theme.name" => self.name = v.to_string(),
                 "idle.picture" => self.idle_picture = v.trim().to_string(),
                 "idle.dim" => self.idle_dim = units(v, 0.0, 0.9).unwrap_or(self.idle_dim),
+                "idle.fade" => {
+                    self.idle_fade_ms = v
+                        .trim()
+                        .parse::<u32>()
+                        .map(|ms| ms.min(120_000))
+                        .unwrap_or(self.idle_fade_ms)
+                }
                 "idle.off" => {
                     self.idle_off_min = v
                         .trim()
@@ -635,7 +646,7 @@ mod tests {
         }
         assert_eq!(
             written.len(),
-            38,
+            39,
             "and nothing but what the face reads and the line for a list"
         );
     }

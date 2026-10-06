@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.36] - 2026-10-06
+
+Asked by Andrew on the screen-off: gradual, not abrupt. Built on Glass 0.8.68, whose look panel has the setting.
+
+- **The screen goes black and comes back over a fade.** "Over, milliseconds" beside "Screen off after": 500 unless said, 0 for at once, up to 120000. On its way the face draws black over everything by how far it has come, every frame; whole, it is drawn once and stands. A tap during the fade wakes the screen as a tap on black does.
+- For a face theme: `[idle] fade`, milliseconds.
+
 ## [0.1.35] - 2026-10-06
 
 Asked by a user with an AMOLED screen, which must not show the same picture for hours. Built on Glass 0.8.67, whose look panel has the setting.
