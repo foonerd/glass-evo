@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.3] - 2026-10-07
+
+Built on Glass 0.9.3: a face theme's own skies reach the browser views, the remote displays and the look panel's likeness.
+
+- **The likeness draws the look's own skies.** `forecast_preview` takes the folders face themes are kept in and looks for the chosen look's skies there, as the screen does; the Manager's look panel puts the look's sky files into the module's table under the look's folder.
+- **A bundle remote brings a look's skies** beside its `face.txt`, by the files the player's configuration lists (Glass 0.9.3), and the Face tab and Anymote have them in their table before the first frame.
+
 ## [0.2.2] - 2026-10-07
 
 Gelo5 on the forum: "where are the weather icons located?" Andrew: "lets take on weather icons first". Built on Glass 0.9.2.

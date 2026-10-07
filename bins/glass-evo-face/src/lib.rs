@@ -206,6 +206,7 @@ mod preview {
                         size.clamp(8, 2000),
                         &wall,
                         epoch_ms,
+                        "/glass/faces:/glass/faces-shipped",
                     )
                 });
                 match line.as_ref() {

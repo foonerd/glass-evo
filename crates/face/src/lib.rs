@@ -2080,8 +2080,9 @@ fn idle_layout(
 
 /// Today's forecast set for a page, as the face sets it on the screen: the
 /// look's keys for the size and the ink, the player's reading, `size`
-/// pixels high, at a moment; nothing where the look hides it or the fonts
-/// have no bold face.
+/// pixels high, at a moment, the look's own skies from the folders face
+/// themes are kept in (parted by a colon); nothing where the look hides it
+/// or the fonts have no bold face.
 pub fn forecast_preview(
     fonts: &Fonts,
     keys: &BTreeMap<String, String>,
@@ -2089,6 +2090,7 @@ pub fn forecast_preview(
     size: u32,
     _wall: &Wall,
     t_ms: u64,
+    faces: &str,
 ) -> Option<Frame> {
     const ANY: (u32, u32) = (u32::MAX, u32::MAX);
     let theme = Theme::resolve(None, keys);
@@ -2097,6 +2099,14 @@ pub fn forecast_preview(
     }
     let ink = theme.weather_ink.unwrap_or(theme.ink);
     let mut line = ForecastLine::default();
+    // The look's own skies, where the page keeps the look under the faces
+    // folder it names; the built-in look has none.
+    let look_dir = keys
+        .get("theme")
+        .and_then(|name| theme_folder(faces, name))
+        .map(|dir| dir.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    line.sources(&[String::new(), look_dir]);
     line.drama(
         theme.weather_motion,
         theme.weather_thunder,
