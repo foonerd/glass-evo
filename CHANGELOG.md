@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.1] - 2026-10-07
+
+Built on Glass 0.9.1, for the browser views: a text or time field's own font file, named in a meter theme as `fonts/font.ttf`, is found in the page's table as in a theme folder on the player, so the Face tab and Anymote draw the field in the theme's font. Nothing of the face itself changes.
+
 ## [0.2.0] - 2026-10-07
 
 glass-evo 0.2.0 gathers the 0.1 series since the first pair users got, 0.1.10 with Glass 0.8.0 on 1 October 2026, into one release with Glass 0.9.0. Every change below has its own entry under its number.
