@@ -7,8 +7,9 @@
 //! with, as the launcher names two folders on a player.
 //!
 //! Beside the pipeline's exports the module has `clock_preview`, the clock
-//! alone as a look's keys draw it, for the Manager's look panel to show a
-//! drawn clock face before it is saved.
+//! alone as a look's keys draw it, and `line_preview`, the date or a clock
+//! in type set in the look's font, for the Manager's look panel to show the
+//! idle screen before it is saved, drawn as the face draws it.
 
 page::exports!(|| Some(Box::new(face::Face::with_faces(
     "/glass/faces:/glass/faces-shipped"
@@ -28,6 +29,105 @@ mod preview {
     thread_local! {
         static DRAWN: RefCell<face::clock::Drawn> = RefCell::new(face::clock::Drawn::default());
         static SIZE: RefCell<(u32, u32)> = const { RefCell::new((0, 0)) };
+        static LINE: RefCell<Option<Frame>> = const { RefCell::new(None) };
+        static LINE_SIZE: RefCell<(u32, u32)> = const { RefCell::new((0, 0)) };
+        static FONTS: RefCell<Option<Fonts>> = const { RefCell::new(None) };
+    }
+
+    use face::{FaceFonts as Fonts, FaceFrame as Frame, FontFiles};
+
+    /// The look's bold font, as the page put it at `fonts/bold.ttf` under
+    /// the module's home before asking for a line; loaded once, for every
+    /// style.
+    fn bold_font() -> String {
+        format!("{}/fonts/bold.ttf", page::HOME)
+    }
+
+    /// The page's keys as the face reads them.
+    fn keys_of(json: *const u8, len: usize) -> BTreeMap<String, String> {
+        let text = if len == 0 {
+            String::new()
+        } else {
+            // SAFETY: the caller names a buffer of the module's `alloc`.
+            String::from_utf8_lossy(unsafe { std::slice::from_raw_parts(json, len) }).into_owned()
+        };
+        serde_json::from_str::<serde_json::Value>(&text)
+            .ok()
+            .and_then(|value| value.as_object().cloned())
+            .map(|object| {
+                object
+                    .into_iter()
+                    .map(|(key, value)| {
+                        let said = value
+                            .as_str()
+                            .map_or_else(|| value.to_string(), str::to_string);
+                        (key, said)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// A line of type, for a page: `line_preview(json, len, which, size,
+    /// epoch_ms, offset_minutes)` sets the date (`which` 0) or the clock in
+    /// type (1) as a look's keys describe it, `size` pixels high, in the
+    /// font the page put at `fonts/bold.ttf` under its home, and answers a pointer
+    /// to its RGBA, straight alpha, `line_preview_width` by
+    /// `line_preview_height`; null where there is no font, the piece is not
+    /// shown, or the clock is drawn and not set. The bytes stand until the
+    /// next call.
+    ///
+    /// # Safety
+    /// The pointer names a buffer of the module's `alloc` of the given length.
+    #[no_mangle]
+    pub unsafe extern "C" fn line_preview(
+        json: *const u8,
+        len: usize,
+        which: u32,
+        size: u32,
+        epoch_ms: u64,
+        offset_minutes: i32,
+    ) -> *const u8 {
+        let keys = keys_of(json, len);
+        let wall = face::Wall::at(epoch_ms as i64, offset_minutes, "");
+        let which = if which == 1 { "clock" } else { "date" };
+        FONTS.with(|fonts| {
+            let mut fonts = fonts.borrow_mut();
+            let fonts = fonts.get_or_insert_with(|| {
+                Fonts::load(&FontFiles {
+                    light: bold_font(),
+                    regular: bold_font(),
+                    bold: bold_font(),
+                    italic: bold_font(),
+                    digi: bold_font(),
+                    fallback: String::new(),
+                })
+            });
+            LINE.with(|line| {
+                let mut line = line.borrow_mut();
+                *line = face::line_preview(fonts, &keys, which, size.clamp(8, 2000), &wall);
+                match line.as_ref() {
+                    Some(picture) => {
+                        LINE_SIZE.with(|slot| *slot.borrow_mut() = (picture.width, picture.height));
+                        picture.rgba.as_ptr()
+                    }
+                    None => {
+                        LINE_SIZE.with(|slot| *slot.borrow_mut() = (0, 0));
+                        std::ptr::null()
+                    }
+                }
+            })
+        })
+    }
+
+    #[no_mangle]
+    pub extern "C" fn line_preview_width() -> u32 {
+        LINE_SIZE.with(|slot| slot.borrow().0)
+    }
+
+    #[no_mangle]
+    pub extern "C" fn line_preview_height() -> u32 {
+        LINE_SIZE.with(|slot| slot.borrow().1)
     }
 
     /// # Safety

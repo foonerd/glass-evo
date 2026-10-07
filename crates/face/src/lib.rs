@@ -14,10 +14,14 @@
 //! theme leaves to the artwork are read from the cover, once per track.
 
 use overlay::face::{
-    blur, fit_art, read_art, read_covering, read_to_string, ui, Command, Frame, Metadata,
+    blur, fit_art, read_art, read_covering, read_to_string, ui, Command, Fonts, Frame, Metadata,
     PointerKind, TextStyle,
 };
 use overlay::{Cover, Overlay, View};
+
+/// What a page's module needs of the face's types to load fonts and hand
+/// pictures back: the files a set of fonts comes from, the fonts, a picture.
+pub use overlay::face::{FontFiles, Fonts as FaceFonts, Frame as FaceFrame};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
@@ -75,6 +79,58 @@ pub fn clock_preview<'a>(
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The line the binary prints to say what it is.
+/// A line of the idle screen set in type, for a page: the date or the
+/// clock in type as a look's keys describe them, `size` pixels high at a
+/// moment, in the room its widest shape takes (every digit an 8) with the
+/// words in the middle of it, as the face places a line. The fonts are the
+/// page's, brought from the player; nothing where they have no bold face,
+/// where the piece is not shown, or where the clock is drawn and not set.
+pub fn line_preview(
+    fonts: &Fonts,
+    keys: &BTreeMap<String, String>,
+    which: &str,
+    size: u32,
+    wall: &Wall,
+) -> Option<Frame> {
+    let theme = Theme::resolve(None, keys);
+    let (shown, text, ink) = match which {
+        "date" => (
+            theme.date_show,
+            format_time(&theme.date_format, wall),
+            theme.date_ink.unwrap_or(theme.ink),
+        ),
+        "clock" => (
+            theme.clock_show && theme.clock_face == clock::ClockKind::Type,
+            format_time(&theme.clock_format, wall),
+            theme.clock_ink.unwrap_or(theme.ink),
+        ),
+        _ => return None,
+    };
+    if !shown || text.is_empty() {
+        return None;
+    }
+    let widest: String = text
+        .chars()
+        .map(|c| if c.is_ascii_digit() { '8' } else { c })
+        .collect();
+    let room = ui::line(fonts, TextStyle::Bold, size, ink, &widest)?;
+    let words = ui::line(fonts, TextStyle::Bold, size, ink, &text)?;
+    let mut frame = Frame {
+        blend: Default::default(),
+        width: room.width,
+        height: room.height,
+        rgba: vec![0; (room.width * room.height * 4) as usize],
+    };
+    ui::blit(
+        &mut frame,
+        &words,
+        (room.width as i32 - words.width as i32) / 2,
+        0,
+        255,
+    );
+    Some(frame)
+}
+
 pub fn banner() -> String {
     format!("glass-evo {VERSION}")
 }
@@ -2019,7 +2075,7 @@ impl Overlay for Face {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use overlay::face::{Fonts, Input};
+    use overlay::face::Input;
 
     static NO_SETTINGS: BTreeMap<String, String> = BTreeMap::new();
 

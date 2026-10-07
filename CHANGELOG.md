@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.43] - 2026-10-07
+
+Andrew, on the date on the grid, set in the browser's type in the likeness and in the face's on the glass: "Rejected. I requested date to be wired exactly as the clock is." and, before, "module works better like clock, why date is not a module?" Built on Glass 0.8.78.
+
+- **The module sets a line of type for a page.** `line_preview` sets the date, or the clock in type, as a look's keys describe it, in the font the page put at `/glass/fonts/bold.ttf`, in the room its widest shape takes with the words in the middle, as the face places a line on the screen. The Manager's look panel draws the date and a clock in type through it, in the look's own font, pixel for pixel as the screen.
+
 ## [0.1.42] - 2026-10-07
 
 Andrew, on the accepted clock: "Now - wire date exactly the same way in grid. We are moving the face to grid and only." Built on Glass 0.8.75.
