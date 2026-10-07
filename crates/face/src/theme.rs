@@ -294,6 +294,11 @@ pub struct Theme {
     /// `idle.fade`: milliseconds the screen takes to go black and to come
     /// back, up to two minutes; 0 for at once.
     pub idle_fade_ms: u32,
+    /// `idle.wait`: `persist` for the idle screen to wait while the plugin
+    /// keeps the display after a pause or a stop (its "Keep Display Active
+    /// After Pause/Stop"), the theme standing with its countdown until the
+    /// period ends; `none` (unless said) for the idle screen at once.
+    pub idle_wait_persist: bool,
 }
 
 impl Default for Theme {
@@ -361,6 +366,7 @@ impl Default for Theme {
             idle_dim: 0.25,
             idle_off_min: 0,
             idle_fade_ms: 500,
+            idle_wait_persist: false,
         }
     }
 }
@@ -483,6 +489,7 @@ impl Theme {
                         .map(|m| m.min(1440))
                         .unwrap_or(self.idle_off_min)
                 }
+                "idle.wait" => self.idle_wait_persist = v.trim().eq_ignore_ascii_case("persist"),
                 "colours.tint" | "colors.tint" => self.tint = paint(v).unwrap_or(self.tint),
                 "colours.accent" | "colors.accent" => self.accent = paint(v).unwrap_or(self.accent),
                 "colours.ink" | "colors.ink" => self.ink = colour(v).unwrap_or(self.ink),
@@ -1012,7 +1019,7 @@ mod tests {
         }
         assert_eq!(
             written.len(),
-            62,
+            63,
             "and nothing but what the face reads and the line for a list"
         );
     }

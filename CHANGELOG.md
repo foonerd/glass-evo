@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.53] - 2026-10-08
+
+Andrew: "I selected to wait 15 second - NO LONGER RESPECTED! THIS SHOULD BE A SWITCH IN SCREEN - IMMEDIATE - RESPECT TIMEOUT". The face had decided idle by its own rule since 0.1.11 and never read the plugin's persist period. Built on Glass 0.8.88.
+
+- **The idle screen can wait for the persist period.** `[idle] wait = persist`: while the plugin keeps the display after a pause or a stop ("Keep Display Active After Pause/Stop" on its settings page, a mode named and seconds left), the player does not count as standing still: the theme stays, with its countdown where that setting says so, and the clock, the date, the forecast and the picture come when the period ends. `none`, unless said, is the idle screen at once, as before. The five-second grace for a stop between two tracks is unchanged.
+
 ## [0.1.52] - 2026-10-08
 
 Andrew: "REMOTE AND FACE AND ANYMOTE - ALL LOST CUSTOM BACKGROUND", on the picture when nothing plays, which 0.1.32 drew on the player's own screen alone ("Not yet on remote displays and in the browser views"). Built on Glass 0.8.87.

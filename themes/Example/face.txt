@@ -176,3 +176,8 @@ off = 0
 # Milliseconds the screen takes to go black and to come back, up to 120000
 # (two minutes); 0 for at once.
 fade = 500
+# When the player stops: none, the clock and the rest at once (as before);
+# persist, they wait while the plugin keeps the display after a pause or a
+# stop ("Keep Display Active After Pause/Stop" on its settings page), the
+# theme standing with its countdown until that period ends.
+wait = none

@@ -2435,7 +2435,7 @@ impl Face {
         }
         // What the look says of the idle screen, taken before anything else
         // of the face is touched.
-        let (clock_show, date_show, off_min, fade_ms, name, dim) = {
+        let (clock_show, date_show, off_min, fade_ms, name, dim, waits) = {
             let theme = &self.tokens(view).theme;
             (
                 theme.clock_show,
@@ -2445,10 +2445,15 @@ impl Face {
                 theme.idle_fade_ms,
                 theme.idle_picture.clone(),
                 theme.idle_dim,
+                theme.idle_wait_persist,
             )
         };
         self.fade_ms = fade_ms;
-        let idle = view.ours && !playing;
+        // By the look's word, the player is not standing still while the
+        // plugin keeps the display after a pause or a stop: the theme stays,
+        // with its countdown, until that period ends.
+        let held = waits && !meta.persist_mode.is_empty() && meta.persist_left > 0;
+        let idle = view.ours && !playing && !held;
         let off_ms = u64::from(off_min) * 60_000;
         // The screen goes black after the minutes the look names with
         // nothing playing and no touch; music coming wakes it.
@@ -4303,6 +4308,41 @@ mod tests {
         theme.weather_ink = Some(ink);
         let heat = Heat::from(&theme, &weather).unwrap();
         assert_eq!(heat.of(53.6), ink, "53.6 °F is 12 °C: the forecast's ink");
+    }
+
+    #[test]
+    fn the_idle_screen_waits_for_the_persist_period_by_the_looks_word() {
+        let fonts = Fonts::default();
+        let waits: BTreeMap<String, String> =
+            BTreeMap::from([("idle.wait".to_string(), "persist".to_string())]);
+        let mut input = input("play");
+        input.metadata.title = "One".to_string();
+        let mut face = Face::new();
+        let mut v = view(&input, &fonts, 0);
+        v.settings = &waits;
+        face.covers(&v);
+        // Paused, with the plugin keeping the display for ten seconds more:
+        // nothing of the idle screen, the theme and its countdown stand.
+        input.metadata.status = "pause".to_string();
+        input.metadata.persist_mode = "countdown".to_string();
+        input.metadata.persist_left = 10;
+        let mut v = view(&input, &fonts, 1000);
+        v.settings = &waits;
+        let (_, clock, _, _) = face.advance(&v);
+        assert!(!clock, "the clock waits while the period runs");
+        // The period over: the idle screen.
+        input.metadata.persist_left = 0;
+        input.metadata.persist_mode = String::new();
+        let mut v = view(&input, &fonts, 11_000);
+        v.settings = &waits;
+        let (_, clock, _, _) = face.advance(&v);
+        assert!(clock, "and comes when the period ends");
+        // Without the look's word a pause brings it at once, as before.
+        input.metadata.persist_mode = "countdown".to_string();
+        input.metadata.persist_left = 10;
+        let mut at_once = Face::new();
+        let (_, clock, _, _) = at_once.advance(&view(&input, &fonts, 1000));
+        assert!(clock, "none: the clock at once");
     }
 
     #[test]
