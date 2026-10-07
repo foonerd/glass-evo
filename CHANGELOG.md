@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.52] - 2026-10-08
+
+Andrew: "REMOTE AND FACE AND ANYMOTE - ALL LOST CUSTOM BACKGROUND", on the picture when nothing plays, which 0.1.32 drew on the player's own screen alone ("Not yet on remote displays and in the browser views"). Built on Glass 0.8.87.
+
+- **The picture when nothing plays, on the browser views and the remote displays.** The face asks the host for the picture the look names before it looks in the folder its launcher names: in the Face tab and on Anymote the page brings it (`overlay::face::host_picture`, wanted from the Manager as the album art is), on a remote display the sync brings it beside the faces and names the folder. The theme shows until the picture is in, as on the player; the stamp carries its arrival, so the screen redraws the moment it is.
+
 ## [0.1.51] - 2026-10-08
 
 Andrew's step 4 of the weather: "Now - Dramatise icons. Snow, thunderstorm, rain, drizzle, heat, etc. I am sure we can add some light frame animations here." and "If Dramatise is off - should not affect current refresh rate." Built on Glass 0.8.86.

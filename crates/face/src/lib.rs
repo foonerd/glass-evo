@@ -14,8 +14,8 @@
 //! theme leaves to the artwork are read from the cover, once per track.
 
 use overlay::face::{
-    blur, fit_art, read_art, read_covering, read_to_string, sky_of, ui, Command, Fonts, Frame,
-    Metadata, PointerKind, Sky, TextStyle, Weather,
+    blur, fit_art, host_picture, read_art, read_covering, read_to_string, sky_of, ui, Command,
+    Fonts, Frame, Metadata, PointerKind, Sky, TextStyle, Weather,
 };
 use overlay::{Cover, Overlay, View};
 
@@ -2473,13 +2473,17 @@ impl Face {
         // fades, in or out, what is under it is.
         let dark = self.black(now) == 255;
         let clock = idle && !dark && (clock_show || date_show);
-        // The picture for when nothing plays, where one is chosen and read.
+        // The picture for when nothing plays, where one is chosen and read:
+        // in a browser the page brings it (none until it is in), on a
+        // machine it is read from the folder the launcher names.
         let file = if idle && !dark && !name.is_empty() {
-            let folder = match self.backgrounds.as_deref() {
-                Some(folder) => Some(folder.to_string()),
-                None => std::env::var("GLASS_BACKGROUNDS").ok(),
-            };
-            folder.and_then(|folder| idle_file(&folder, &name))
+            host_picture(&name).map(PathBuf::from).or_else(|| {
+                let folder = match self.backgrounds.as_deref() {
+                    Some(folder) => Some(folder.to_string()),
+                    None => std::env::var("GLASS_BACKGROUNDS").ok(),
+                };
+                folder.and_then(|folder| idle_file(&folder, &name))
+            })
         } else {
             None
         };
