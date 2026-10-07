@@ -2866,12 +2866,13 @@ mod tests {
             (420, 210),
             "its left edge and its top the margin from the cells'"
         );
+        assert_eq!(big(""), (300, 150), "in the middle, over both sides alike");
         assert!(
-            big("left").0 < at("").0 && big("right").0 > at("").0,
+            big("left").0 < big("").0 && big("right").0 > big("").0,
             "left of the middle, right of it"
         );
         assert!(
-            big("top").1 < at("").1 && big("bottom").1 > at("").1,
+            big("top").1 < big("").1 && big("bottom").1 > big("").1,
             "above the middle, below it"
         );
     }
