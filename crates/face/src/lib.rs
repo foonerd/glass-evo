@@ -2694,6 +2694,9 @@ impl Overlay for Face {
                 Some(set) if set.is(size, look.accent) => set,
                 _ => icon::Set::new(size, look.accent),
             };
+            // The bar's and the sheet's glass in the buttons' own colour where
+            // the look names one, else the look's tint.
+            let bar_tint = theme.buttons_tint.unwrap_or(look.tint);
             let glass = |frame: &mut Frame, x: i32, y: i32, w: u32, h: u32, opacity: f32| {
                 ui::fill(
                     frame,
@@ -2701,12 +2704,7 @@ impl Overlay for Face {
                     y,
                     w,
                     h,
-                    [
-                        look.tint[0],
-                        look.tint[1],
-                        look.tint[2],
-                        share(opacity, alpha),
-                    ],
+                    [bar_tint[0], bar_tint[1], bar_tint[2], share(opacity, alpha)],
                 );
                 ui::fill(
                     frame,
@@ -2722,7 +2720,14 @@ impl Overlay for Face {
             if frosted {
                 self.frost.apply(frame, bar.x, bar.y, bar.w, bar.h, alpha);
             }
-            glass(frame, bar.x, bar.y, bar.w, bar.h, theme.bar);
+            glass(
+                frame,
+                bar.x,
+                bar.y,
+                bar.w,
+                bar.h,
+                theme.buttons_glass.unwrap_or(theme.bar),
+            );
             for (i, button) in BUTTONS.iter().enumerate() {
                 let rect = bar.button_rect(i);
                 if self.pressed == Some(*button) {
@@ -4308,6 +4313,52 @@ mod tests {
         theme.weather_ink = Some(ink);
         let heat = Heat::from(&theme, &weather).unwrap();
         assert_eq!(heat.of(53.6), ink, "53.6 °F is 12 °C: the forecast's ink");
+    }
+
+    #[test]
+    fn the_buttons_take_a_background_of_their_own() {
+        let fonts = Fonts::default();
+        let own: BTreeMap<String, String> = BTreeMap::from([
+            ("buttons.tint".to_string(), "#ff0000".to_string()),
+            ("buttons.glass".to_string(), "1.0".to_string()),
+        ]);
+        let mut input = input("pause");
+        input.metadata.title = "One".to_string();
+        let at = |f: &Frame, x: i32, y: i32| {
+            let i = ((y as u32 * f.width + x as u32) * 4) as usize;
+            [f.rgba[i], f.rgba[i + 1], f.rgba[i + 2]]
+        };
+        let bar = Bar::for_picture(1280, 720, 1.0);
+        let (x, y) = (bar.x + 3, bar.y + bar.h as i32 / 2);
+        // With the look's word: the bar solid and red.
+        let mut face = Face::new();
+        let mut frame = blank();
+        for now in [0, FADE_MS + 1000] {
+            let mut v = view(&input, &fonts, now);
+            v.settings = &own;
+            face.draw(&mut frame, &v);
+        }
+        let px = at(&frame, x, y);
+        assert!(
+            px[0] > 200 && px[1] < 60 && px[2] < 60,
+            "the bar in the buttons' own colour, as solid as said: {px:?}"
+        );
+        // Without it: the look's tint, as solid as How solid says.
+        let mut plain = Face::new();
+        let mut frame = blank();
+        for now in [0, FADE_MS + 1000] {
+            plain.draw(&mut frame, &view(&input, &fonts, now));
+        }
+        let px = at(&frame, x, y);
+        assert!(px[0] < 120, "the look's own tint without the word: {px:?}");
+        let theme = Theme::resolve(
+            None,
+            &BTreeMap::from([
+                ("buttons.glass".to_string(), "bar".to_string()),
+                ("buttons.tint".to_string(), "tint".to_string()),
+            ]),
+        );
+        assert_eq!((theme.buttons_glass, theme.buttons_tint), (None, None));
     }
 
     #[test]

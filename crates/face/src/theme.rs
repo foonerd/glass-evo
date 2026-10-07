@@ -165,6 +165,12 @@ pub struct Theme {
     /// `buttons.ink`, `buttons.opacity`: the icons, when they have their own.
     pub buttons_ink: Option<[u8; 3]>,
     pub buttons_opacity: f32,
+    /// `buttons.glass`: how solid the bar's glass is, 0 to 1, when the
+    /// buttons have their own; none for the look's `glass.bar`.
+    pub buttons_glass: Option<f32>,
+    /// `buttons.tint`: the bar's and the sheet's colour when the buttons
+    /// have their own; none for the look's tint.
+    pub buttons_tint: Option<[u8; 3]>,
     /// `clock.show`: whether there is a clock when nothing plays.
     pub clock_show: bool,
     /// `clock.place`: the cells of the grid the clock occupies. None is
@@ -314,6 +320,8 @@ impl Default for Theme {
             frost: Frost::Auto,
             buttons_ink: None,
             buttons_opacity: 1.0,
+            buttons_glass: None,
+            buttons_tint: None,
             clock_show: true,
             clock_cells: None,
             clock_align: Align::default(),
@@ -520,6 +528,20 @@ impl Theme {
                 }
                 "buttons.opacity" => {
                     self.buttons_opacity = share(v).unwrap_or(self.buttons_opacity)
+                }
+                "buttons.glass" => {
+                    self.buttons_glass = if v.trim().eq_ignore_ascii_case("bar") {
+                        None
+                    } else {
+                        share(v).or(self.buttons_glass)
+                    }
+                }
+                "buttons.tint" => {
+                    self.buttons_tint = if v.eq_ignore_ascii_case("tint") {
+                        None
+                    } else {
+                        colour(v).or(self.buttons_tint)
+                    }
                 }
                 "clock.ink" => {
                     self.clock_ink = if v.eq_ignore_ascii_case("ink") {
@@ -1019,7 +1041,7 @@ mod tests {
         }
         assert_eq!(
             written.len(),
-            63,
+            65,
             "and nothing but what the face reads and the line for a list"
         );
     }

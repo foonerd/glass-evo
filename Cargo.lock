@@ -211,7 +211,7 @@ dependencies = [
 
 [[package]]
 name = "face"
-version = "0.1.53"
+version = "0.1.54"
 dependencies = [
  "libc",
  "overlay",
@@ -313,7 +313,7 @@ dependencies = [
 
 [[package]]
 name = "glass-evo"
-version = "0.1.53"
+version = "0.1.54"
 dependencies = [
  "face",
  "glass",
@@ -321,7 +321,7 @@ dependencies = [
 
 [[package]]
 name = "glass-evo-android"
-version = "0.1.53"
+version = "0.1.54"
 dependencies = [
  "face",
  "glass",
@@ -329,7 +329,7 @@ dependencies = [
 
 [[package]]
 name = "glass-evo-face"
-version = "0.1.53"
+version = "0.1.54"
 dependencies = [
  "face",
  "page",

@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.54] - 2026-10-08
+
+Andrew: "FIX - never reported: Screen -> Buttons - does not have custom background override like all other element have." Built on Glass 0.8.90.
+
+- **The buttons' own background.** `[buttons] glass`: how solid the bar's glass is, 0 to 1, or `bar` (unless said) for the look's `[glass] bar`; `[buttons] tint`: the bar's and the More sheet's colour, or `tint` (unless said) for the look's. As the clock, the date and the forecast have theirs. A look that says neither draws as before.
+
 ## [0.1.53] - 2026-10-08
 
 Andrew: "I selected to wait 15 second - NO LONGER RESPECTED! THIS SHOULD BE A SWITCH IN SCREEN - IMMEDIATE - RESPECT TIMEOUT". The face had decided idle by its own rule since 0.1.11 and never read the plugin's persist period. Built on Glass 0.8.88.

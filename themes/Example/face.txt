@@ -44,6 +44,11 @@ frost = auto
 # The icons on their own: a colour, or "ink" for the theme's ink.
 ink = ink
 opacity = 1.0
+# The bar's glass: how solid, 0 to 1, or "bar" for the look's How solid
+# ([glass] bar); its colour, or "tint" for the look's tint. The More sheet
+# takes the colour too; its solidity is [glass] sheet.
+glass = bar
+tint = tint
 
 [clock]
 # The clock shows when nothing plays: on or off.
