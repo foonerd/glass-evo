@@ -45,6 +45,20 @@ mod preview {
         format!("{}/fonts/bold.ttf", page::HOME)
     }
 
+    /// The page's reading as the face reads it: the `weather` line's JSON,
+    /// or nothing for an empty or broken one.
+    ///
+    /// # Safety
+    /// The pointer names a buffer of the module's `alloc` of the given
+    /// length, or the length is zero.
+    unsafe fn reading_of(reading: *const u8, len: usize) -> Option<face::FaceWeather> {
+        if len == 0 || reading.is_null() {
+            return None;
+        }
+        let text = String::from_utf8_lossy(unsafe { std::slice::from_raw_parts(reading, len) });
+        serde_json::from_str::<face::FaceWeather>(&text).ok()
+    }
+
     /// The page's keys as the face reads them.
     fn keys_of(json: *const u8, len: usize) -> BTreeMap<String, String> {
         let text = if len == 0 {
@@ -70,10 +84,12 @@ mod preview {
             .unwrap_or_default()
     }
 
-    /// A line of type, for a page: `line_preview(json, len, which, size,
-    /// epoch_ms, offset_minutes)` sets the date (`which` 0) or the clock in
-    /// type (1) as a look's keys describe it, `size` pixels high, in the
-    /// font the page put at `fonts/bold.ttf` under its home, and answers a pointer
+    /// A line of type, for a page: `line_preview(json, len, reading,
+    /// reading_len, which, size, epoch_ms, offset_minutes)` sets the date
+    /// (`which` 0) or the clock in type (1) as a look's keys describe it,
+    /// `size` pixels high, in the font the page put at `fonts/bold.ttf`
+    /// under its home; the reading (the `weather` line's JSON, or nothing)
+    /// colours the date where the look's heatmap reaches it. Answers a pointer
     /// to its RGBA, straight alpha, `line_preview_width` by
     /// `line_preview_height`; null where there is no font, the piece is not
     /// shown, or the clock is drawn and not set. The bytes stand until the
@@ -85,12 +101,16 @@ mod preview {
     pub unsafe extern "C" fn line_preview(
         json: *const u8,
         len: usize,
+        reading: *const u8,
+        reading_len: usize,
         which: u32,
         size: u32,
         epoch_ms: u64,
         offset_minutes: i32,
     ) -> *const u8 {
         let keys = keys_of(json, len);
+        // SAFETY: the caller names a buffer of the module's `alloc`, or none.
+        let weather = unsafe { reading_of(reading, reading_len) };
         let wall = face::Wall::at(epoch_ms as i64, offset_minutes, "");
         let which = if which == 1 { "clock" } else { "date" };
         FONTS.with(|fonts| {
@@ -107,7 +127,14 @@ mod preview {
             });
             LINE.with(|line| {
                 let mut line = line.borrow_mut();
-                *line = face::line_preview(fonts, &keys, which, size.clamp(8, 2000), &wall);
+                *line = face::line_preview(
+                    fonts,
+                    &keys,
+                    which,
+                    size.clamp(8, 2000),
+                    &wall,
+                    weather.as_ref(),
+                );
                 match line.as_ref() {
                     Some(picture) => {
                         LINE_SIZE.with(|slot| *slot.borrow_mut() = (picture.width, picture.height));
@@ -154,14 +181,8 @@ mod preview {
         offset_minutes: i32,
     ) -> *const u8 {
         let keys = keys_of(json, len);
-        let text = if reading_len == 0 {
-            String::new()
-        } else {
-            // SAFETY: the caller names a buffer of the module's `alloc`.
-            String::from_utf8_lossy(unsafe { std::slice::from_raw_parts(reading, reading_len) })
-                .into_owned()
-        };
-        let weather = serde_json::from_str::<face::FaceWeather>(&text).ok();
+        // SAFETY: the caller names a buffer of the module's `alloc`, or none.
+        let weather = unsafe { reading_of(reading, reading_len) };
         let wall = face::Wall::at(epoch_ms as i64, offset_minutes, "");
         FONTS.with(|fonts| {
             let mut fonts = fonts.borrow_mut();

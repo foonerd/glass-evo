@@ -124,6 +124,16 @@ show = on
 # What it shows: today as a line; the next 24 hours every 2, 3, 4 or 6 hours
 # (hours2, hours3, hours4, hours6) as columns; or the week as seven columns.
 span = today
+# The heatmap: the temperatures in the colour of their degree, from cold at
+# -10 °C through the forecast's own ink at 12 to warm at 30 (a reading in
+# Fahrenheit is converted). Numbers only; off unless said. heat.days colours
+# the week's lows and highs too; heat.date sets the date in the colour of
+# the temperature now, the one link between pieces, by the user's switch.
+heat = off
+cold = #3b8bff
+warm = #ff4b2b
+heat.days = off
+heat.date = off
 place = bottom left-right
 align = centre middle
 margin = 20

@@ -232,6 +232,17 @@ pub struct Theme {
     pub weather_tint: Option<[u8; 3]>,
     /// `weather.span`: what the forecast shows, today unless said.
     pub weather_span: Span,
+    /// `weather.heat`: the temperatures in the colour of their degree, from
+    /// `weather.cold` at -10 °C through the forecast's ink at 12 to
+    /// `weather.warm` at 30; off unless said. `weather.heat.days` colours
+    /// the week's lows and highs too; `weather.heat.date` sets the date in
+    /// the colour of the temperature now: the one link between pieces, by
+    /// the user's switch.
+    pub weather_heat: bool,
+    pub weather_cold: [u8; 3],
+    pub weather_warm: [u8; 3],
+    pub weather_heat_days: bool,
+    pub weather_heat_date: bool,
     /// `date.format`: the date as a pattern, `%A %-d %B` for Thursday 1
     /// October, `%d/%m/%Y` for 01/10/2026.
     pub date_format: String,
@@ -315,6 +326,11 @@ impl Default for Theme {
             weather_glass: 0.55,
             weather_tint: None,
             weather_span: Span::Today,
+            weather_heat: false,
+            weather_cold: [59, 139, 255],
+            weather_warm: [255, 75, 43],
+            weather_heat_days: false,
+            weather_heat_date: false,
             date_format: "%A %-d %B".to_string(),
             date_place: DatePlace::Top,
             date_cells: None,
@@ -569,6 +585,15 @@ impl Theme {
                 "date.show" => self.date_show = switch(v).unwrap_or(self.date_show),
                 "weather.show" => self.weather_show = switch(v).unwrap_or(self.weather_show),
                 "weather.span" => self.weather_span = span(v).unwrap_or(self.weather_span),
+                "weather.heat" => self.weather_heat = switch(v).unwrap_or(self.weather_heat),
+                "weather.cold" => self.weather_cold = colour(v).unwrap_or(self.weather_cold),
+                "weather.warm" => self.weather_warm = colour(v).unwrap_or(self.weather_warm),
+                "weather.heat.days" => {
+                    self.weather_heat_days = switch(v).unwrap_or(self.weather_heat_days)
+                }
+                "weather.heat.date" => {
+                    self.weather_heat_date = switch(v).unwrap_or(self.weather_heat_date)
+                }
                 // Cells of the grid, or nothing: the forecast has no place off it.
                 "weather.place" => {
                     self.weather_cells = if v.trim().is_empty() {
@@ -932,6 +957,11 @@ mod tests {
             "date.show",
             "weather.show",
             "weather.span",
+            "weather.heat",
+            "weather.cold",
+            "weather.warm",
+            "weather.heat.days",
+            "weather.heat.date",
             "date.format",
             "date.place",
             "date.align",
@@ -959,7 +989,7 @@ mod tests {
         }
         assert_eq!(
             written.len(),
-            54,
+            59,
             "and nothing but what the face reads and the line for a list"
         );
     }

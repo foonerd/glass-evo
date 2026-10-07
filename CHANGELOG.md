@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.50] - 2026-10-07
+
+Andrew's step 3 of the weather: "Forecast - add Heatmap toggle/slider - perhaps color picker for start and end? with some logical defaults? This is for numbers only. Also, second toggle - apply to days, still forecast. Apply to date - override date with heatmap - first override exception." Built on Glass 0.8.85.
+
+- **The heatmap.** `[weather] heat` sets every temperature the forecast shows in the colour of its degree, numbers only: from `cold` at -10 °C, through the forecast's own ink at 12, to `warm` at 30, straight between and held beyond, Celsius inside and a Fahrenheit reading converted. `heat.days` colours the week's lows and highs too, each its own. `heat.date` sets the date in the colour of the temperature now, with the date's own ink in the middle of the scale: the one link between pieces, by the user's switch, and only while the player holds a reading. Every switch is off unless said; `cold` is `#3b8bff` and `warm` `#ff4b2b` unless said.
+- **For a page** `line_preview` takes the player's reading beside the keys, so the likeness colours the date as the screen does.
+
 ## [0.1.49] - 2026-10-07
 
 Andrew: "The slider for the forecast is still regressed. Today - as every other slider should permit spill over the screen... REQUIREMENT - restore slider function exactly like it was." Built on Glass 0.8.84.

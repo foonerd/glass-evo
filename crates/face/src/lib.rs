@@ -93,13 +93,14 @@ pub fn line_preview(
     which: &str,
     size: u32,
     wall: &Wall,
+    weather: Option<&Weather>,
 ) -> Option<Frame> {
     let theme = Theme::resolve(None, keys);
     let (shown, text, ink) = match which {
         "date" => (
             theme.date_show,
             format_time(&theme.date_format, wall),
-            theme.date_ink.unwrap_or(theme.ink),
+            date_ink(&theme, weather),
         ),
         "clock" => (
             theme.clock_show && theme.clock_face == clock::ClockKind::Type,
@@ -1123,14 +1124,18 @@ struct ForecastLine {
 #[derive(Default)]
 struct Column {
     label: Line,
-    figure: Line,
+    /// The figure in parts: one for an hour's temperature; the low, the
+    /// slash and the high for a day, so each temperature can take its own
+    /// colour.
+    parts: Vec<Line>,
     sky: Option<Frame>,
     sky_for: Option<(u8, bool, u32, [u8; 3])>,
 }
 
-/// What a column says: its label, its figure, the weather's code and
+/// What a column says: its label, its figure in parts (each its words and
+/// the temperature it is, none for the slash), the weather's code and
 /// whether it is day.
-type Entry = (String, String, u8, bool);
+type Entry = (String, Vec<(String, Option<f32>)>, u8, bool);
 
 /// The forecast's proportions, Andrew's choices of 2026-10-07 (T21 and C4).
 /// Today's size is its numbers' size, as it always was, so the size's
@@ -1143,6 +1148,67 @@ const TODAY_CAPTION: f32 = 18.0 / 48.0;
 const TODAY_CAPTION_UP: f32 = 6.0 / 48.0;
 const FIGURE: f32 = 0.54;
 const LABEL: f32 = 0.4;
+
+/// The heatmap: the colour of a temperature, from the cold colour at
+/// -10 °C through an ink at 12 to the warm colour at 30, straight between
+/// the stops and held beyond them; read in Celsius.
+fn heat_colour(celsius: f32, cold: [u8; 3], ink: [u8; 3], warm: [u8; 3]) -> [u8; 3] {
+    let mix = |a: [u8; 3], b: [u8; 3], t: f32| -> [u8; 3] {
+        let t = t.clamp(0.0, 1.0);
+        [0, 1, 2].map(|i| (a[i] as f32 + (b[i] as f32 - a[i] as f32) * t).round() as u8)
+    };
+    if celsius <= 12.0 {
+        mix(cold, ink, (celsius + 10.0) / 22.0)
+    } else {
+        mix(ink, warm, (celsius - 12.0) / 18.0)
+    }
+}
+
+/// The heatmap as the look sets it for a reading: its ends, the ink in the
+/// middle, whether the week's days take it, and the reading's unit.
+#[derive(Clone, Copy)]
+struct Heat {
+    cold: [u8; 3],
+    ink: [u8; 3],
+    warm: [u8; 3],
+    days: bool,
+    fahrenheit: bool,
+}
+
+impl Heat {
+    fn from(theme: &Theme, weather: &Weather) -> Option<Heat> {
+        theme.weather_heat.then_some(Heat {
+            cold: theme.weather_cold,
+            ink: theme.weather_ink.unwrap_or(theme.ink),
+            warm: theme.weather_warm,
+            days: theme.weather_heat_days,
+            fahrenheit: weather.unit.eq_ignore_ascii_case("F"),
+        })
+    }
+
+    /// The colour of a temperature in the reading's unit.
+    fn of(&self, temp: f32) -> [u8; 3] {
+        let celsius = if self.fahrenheit {
+            (temp - 32.0) * 5.0 / 9.0
+        } else {
+            temp
+        };
+        heat_colour(celsius, self.cold, self.ink, self.warm)
+    }
+}
+
+/// The date's ink: its own, or, where the look's `weather.heat.date` is on
+/// and the player holds a reading, the heat colour of the temperature now
+/// with the date's own ink as the middle of the scale.
+fn date_ink(theme: &Theme, weather: Option<&Weather>) -> [u8; 3] {
+    let own = theme.date_ink.unwrap_or(theme.ink);
+    match weather.and_then(|w| w.now.map(|now| (now, w))) {
+        Some((now, w)) if theme.weather_heat_date => {
+            Heat::from(theme, w).map_or(own, |heat| Heat { ink: own, ..heat }.of(now))
+        }
+        _ => own,
+    }
+}
 
 /// A share of a size, in whole pixels and never under eight: a size of
 /// type or of a sky.
@@ -1242,7 +1308,7 @@ impl ForecastLine {
                     } else {
                         format!("{:02}", h.hour)
                     };
-                    (label, degrees(h.temp), h.code, h.day)
+                    (label, vec![(degrees(h.temp), Some(h.temp))], h.code, h.day)
                 })
                 .collect(),
             Span::Week => weather
@@ -1252,7 +1318,11 @@ impl ForecastLine {
                 .map(|d| {
                     (
                         when::day_name(d.weekday, true).to_string(),
-                        format!("{} / {}", degrees(d.low), degrees(d.high)),
+                        vec![
+                            (degrees(d.low), Some(d.low)),
+                            (" / ".to_string(), None),
+                            (degrees(d.high), Some(d.high)),
+                        ],
                         d.code,
                         true,
                     )
@@ -1265,21 +1335,23 @@ impl ForecastLine {
     /// largest at which it fits in `most`: today's line, or a span's
     /// columns; the room it takes, or nothing with no face to set it in
     /// or nothing to say.
+    #[allow(clippy::too_many_arguments)]
     fn set(
         &mut self,
         fonts: &Fonts,
         weather: &Weather,
         span: Span,
         twelve: bool,
+        heat: Option<Heat>,
         wanted: u32,
         ink: [u8; 3],
         most: (u32, u32),
     ) -> Option<(u32, u32)> {
         self.spanned = span != Span::Today;
         if self.spanned {
-            self.set_columns(fonts, weather, span, twelve, wanted, ink, most)
+            self.set_columns(fonts, weather, span, twelve, heat, wanted, ink, most)
         } else {
-            self.set_line(fonts, weather, wanted, ink, most)
+            self.set_line(fonts, weather, heat, wanted, ink, most)
         }
     }
 
@@ -1292,11 +1364,14 @@ impl ForecastLine {
         &mut self,
         fonts: &Fonts,
         weather: &Weather,
+        heat: Option<Heat>,
         wanted: u32,
         ink: [u8; 3],
         most: (u32, u32),
     ) -> Option<(u32, u32)> {
         const ANY: (u32, u32) = (u32::MAX, u32::MAX);
+        // Each number in the colour of its degree where the heatmap is on.
+        let ink_of = |temp: f32| heat.map_or(ink, |heat| heat.of(temp));
         let (lo_words, hi_words) = (degrees(weather.low), degrees(weather.high));
         let now_words = weather.now.map(degrees);
         let words = (
@@ -1332,12 +1407,16 @@ impl ForecastLine {
         };
         let side = part(size, TODAY_SKY);
         let number = size;
-        let lo = self.lo.set(fonts, lo_words, number, ink, ANY)?;
+        let lo = self
+            .lo
+            .set(fonts, lo_words, number, ink_of(weather.low), ANY)?;
         let slash = self.slash.set(fonts, " / ".to_string(), number, ink, ANY)?;
-        let hi = self.hi.set(fonts, hi_words, number, ink, ANY)?;
-        let now = match now_words {
-            Some(text) => self.now.set(fonts, text, number, ink, ANY),
-            None => None,
+        let hi = self
+            .hi
+            .set(fonts, hi_words, number, ink_of(weather.high), ANY)?;
+        let now = match (now_words, weather.now) {
+            (Some(text), Some(temp)) => self.now.set(fonts, text, number, ink_of(temp), ANY),
+            _ => None,
         };
         self.has_now = now.is_some();
         let cap = part(size, TODAY_CAPTION);
@@ -1370,13 +1449,17 @@ impl ForecastLine {
 
     /// A span as columns, as wide as the widest of them, at the size
     /// wanted or the largest at which they all fit in `most`: the skies
-    /// at the size, the figures and the labels their shares of it.
+    /// at the size, the figures and the labels their shares of it; each
+    /// temperature in the colour of its degree where the heatmap is on,
+    /// the week's where it is on for the days too.
+    #[allow(clippy::too_many_arguments)]
     fn set_columns(
         &mut self,
         fonts: &Fonts,
         weather: &Weather,
         span: Span,
         twelve: bool,
+        heat: Option<Heat>,
         wanted: u32,
         ink: [u8; 3],
         most: (u32, u32),
@@ -1387,13 +1470,18 @@ impl ForecastLine {
             return None;
         }
         let count = entries.len() as u32;
+        let heat = heat.filter(|heat| span != Span::Week || heat.days);
+        let ink_of = |temp: Option<f32>| match (heat, temp) {
+            (Some(heat), Some(temp)) => heat.of(temp),
+            _ => ink,
+        };
         let size = match &self.columns_for {
             Some((s, e, w, m, size)) if (*s, e, *w, *m) == (span, &entries, wanted, most) => *size,
             _ => {
                 // Measured at the size wanted, every digit an 8, the widest
                 // label or figure making every column's width.
                 let (mut width, mut label_h, mut figure_h) = (0, 0, 0);
-                for (label, figure, _, _) in &entries {
+                for (label, parts, _, _) in &entries {
                     let l = ui::line(
                         fonts,
                         TextStyle::Bold,
@@ -1401,16 +1489,21 @@ impl ForecastLine {
                         ink,
                         &widest(label),
                     )?;
-                    let f = ui::line(
-                        fonts,
-                        TextStyle::Bold,
-                        part(wanted, FIGURE),
-                        ink,
-                        &widest(figure),
-                    )?;
-                    width = width.max(l.width).max(f.width);
+                    let (mut fw, mut fh) = (0, 0);
+                    for (words, _) in parts {
+                        let f = ui::line(
+                            fonts,
+                            TextStyle::Bold,
+                            part(wanted, FIGURE),
+                            ink,
+                            &widest(words),
+                        )?;
+                        fw += f.width;
+                        fh = fh.max(f.height);
+                    }
+                    width = width.max(l.width).max(fw);
                     label_h = label_h.max(l.height);
-                    figure_h = figure_h.max(f.height);
+                    figure_h = figure_h.max(fh);
                 }
                 let room = Self::columns_room(count, wanted, label_h, figure_h, width.max(wanted));
                 let size = fitted_size(wanted, room, most);
@@ -1420,16 +1513,20 @@ impl ForecastLine {
         };
         self.columns.resize_with(entries.len(), Column::default);
         let (mut width, mut label_h, mut figure_h) = (0, 0, 0);
-        for (column, (label, figure, _, _)) in self.columns.iter_mut().zip(&entries) {
+        for (column, (label, parts, _, _)) in self.columns.iter_mut().zip(&entries) {
             let l = column
                 .label
                 .set(fonts, label.clone(), part(size, LABEL), ink, ANY)?;
-            let f = column
-                .figure
-                .set(fonts, figure.clone(), part(size, FIGURE), ink, ANY)?;
-            width = width.max(l.0).max(f.0);
+            column.parts.resize_with(parts.len(), Line::default);
+            let (mut fw, mut fh) = (0, 0);
+            for (line, (words, temp)) in column.parts.iter_mut().zip(parts) {
+                let f = line.set(fonts, words.clone(), part(size, FIGURE), ink_of(*temp), ANY)?;
+                fw += f.0;
+                fh = fh.max(f.1);
+            }
+            width = width.max(l.0).max(fw);
             label_h = label_h.max(l.1);
-            figure_h = figure_h.max(f.1);
+            figure_h = figure_h.max(fh);
         }
         let width = width.max(size);
         for (column, (_, _, code, day)) in self.columns.iter_mut().zip(&entries) {
@@ -1528,13 +1625,14 @@ impl ForecastLine {
                     alpha,
                 );
             }
-            column.figure.place(
-                frame,
-                at,
-                y + (label_h + between + side + between) as i32,
-                column_width,
-                opacity,
-            );
+            // The figure's parts side by side, the whole in the middle of the column.
+            let figure_w: u32 = column.parts.iter().map(|p| p.room.0).sum();
+            let mut px = at + (column_width as i32 - figure_w as i32) / 2;
+            let fy = y + (label_h + between + side + between) as i32;
+            for line in &column.parts {
+                line.place(frame, px, fy, line.room.0, opacity);
+                px += line.room.0 as i32;
+            }
             at += (column_width + gap) as i32;
         }
     }
@@ -1703,7 +1801,17 @@ pub fn forecast_preview(
     let ink = theme.weather_ink.unwrap_or(theme.ink);
     let mut line = ForecastLine::default();
     let twelve = twelve_hour(&theme.clock_format);
-    let (width, height) = line.set(fonts, weather, theme.weather_span, twelve, size, ink, ANY)?;
+    let heat = Heat::from(&theme, weather);
+    let (width, height) = line.set(
+        fonts,
+        weather,
+        theme.weather_span,
+        twelve,
+        heat,
+        size,
+        ink,
+        ANY,
+    )?;
     let mut frame = Frame {
         blend: Default::default(),
         width,
@@ -1823,7 +1931,7 @@ impl ClockFace {
                 view.fonts,
                 format_time(&theme.date_format, wall),
                 size,
-                theme.date_ink.unwrap_or(theme.ink),
+                date_ink(theme, view.input.weather.as_ref()),
                 if own("measure.date") {
                     ANY
                 } else {
@@ -1960,11 +2068,13 @@ impl ClockFace {
                 let size = px(theme.measure_weather).max(13);
                 let ink = theme.weather_ink.unwrap_or(theme.ink);
                 let twelve = twelve_hour(&theme.clock_format);
+                let heat = Heat::from(theme, weather);
                 if let Some(sized) = self.forecast.set(
                     view.fonts,
                     weather,
                     theme.weather_span,
                     twelve,
+                    heat,
                     size,
                     ink,
                     most,
@@ -2088,7 +2198,7 @@ impl ClockFace {
             view.fonts,
             format_time(&theme.date_format, wall),
             size,
-            theme.date_ink.unwrap_or(theme.ink),
+            date_ink(theme, view.input.weather.as_ref()),
             most,
         )
     }
@@ -3917,7 +4027,7 @@ mod tests {
         );
         let figures: Vec<String> = ForecastLine::entries(&weather, Span::Week, false)
             .into_iter()
-            .map(|e| e.1)
+            .map(|e| e.1.iter().map(|p| p.0.as_str()).collect::<String>())
             .collect();
         assert_eq!(figures[0], "8° / 15°");
         assert!(twelve_hour("%-I:%M %p") && twelve_hour("%l:%M"));
@@ -3946,6 +4056,59 @@ mod tests {
             (43, 32),
             "a span's figures and labels"
         );
+    }
+
+    #[test]
+    fn the_heatmap_runs_from_cold_through_the_ink_to_warm_and_the_date_may_take_it() {
+        let (cold, ink, warm) = ([0, 0, 255], [100, 100, 100], [255, 0, 0]);
+        assert_eq!(heat_colour(-20.0, cold, ink, warm), cold, "held below -10");
+        assert_eq!(heat_colour(-10.0, cold, ink, warm), cold);
+        assert_eq!(heat_colour(12.0, cold, ink, warm), ink, "the ink at 12");
+        assert_eq!(heat_colour(30.0, cold, ink, warm), warm);
+        assert_eq!(heat_colour(40.0, cold, ink, warm), warm, "held above 30");
+        assert_eq!(
+            heat_colour(1.0, cold, ink, warm),
+            [50, 50, 178],
+            "halfway to the ink"
+        );
+        assert_eq!(
+            heat_colour(21.0, cold, ink, warm),
+            [178, 50, 50],
+            "halfway to warm"
+        );
+        let mut theme = Theme {
+            weather_cold: cold,
+            weather_warm: warm,
+            ..Theme::default()
+        };
+        let mut weather = forecast();
+        weather.now = Some(86.0);
+        weather.unit = "F".to_string();
+        assert_eq!(
+            date_ink(&theme, Some(&weather)),
+            theme.ink,
+            "the date keeps its ink with the heatmap off"
+        );
+        theme.weather_heat = true;
+        assert_eq!(
+            date_ink(&theme, Some(&weather)),
+            theme.ink,
+            "and with the date's switch off"
+        );
+        theme.weather_heat_date = true;
+        assert_eq!(
+            date_ink(&theme, Some(&weather)),
+            warm,
+            "86 °F is 30 °C: warm"
+        );
+        assert_eq!(
+            date_ink(&theme, None),
+            theme.ink,
+            "no reading, the date's own"
+        );
+        theme.weather_ink = Some(ink);
+        let heat = Heat::from(&theme, &weather).unwrap();
+        assert_eq!(heat.of(53.6), ink, "53.6 °F is 12 °C: the forecast's ink");
     }
 
     #[test]
