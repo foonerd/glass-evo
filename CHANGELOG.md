@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.2] - 2026-10-07
+
+Gelo5 on the forum: "where are the weather icons located?" Andrew: "lets take on weather icons first". Built on Glass 0.9.2.
+
+- **A theme's own skies.** A `skies` folder beside a `face.txt`, the meter theme's on show first and then the chosen look's, holds one picture per sky, PNG, animated GIF, WebP or JPEG, square, fitted to the sky's side: `clear-day`, `clear-hot`, `clear-night`, `partly-day`, `partly-night`, `cloudy`, `fog`, `drizzle`, `rain`, `rain-heavy`, `snow`, `snow-heavy`, `thunder`, `thunder-night`. A missing name falls back along a short chain (hot, heavy and a night's thunder to the plain name; a night sky never to a day's) and then to the drawn sky, so a theme may replace one or all. An animated GIF keeps its motion by its own delays while the skies move, the frame picked by the wall clock as the drawn skies' is; `Skies move` off shows its first frame. The colour and heat switches leave a theme's pictures as they are. A meter theme's skies travel with the theme to the Face tab, Anymote and the remotes; a face theme's skies reach those, and the look panel's likeness, in the next step.
+
 ## [0.2.1] - 2026-10-07
 
 Built on Glass 0.9.1, for the browser views: a text or time field's own font file, named in a meter theme as `fonts/font.ttf`, is found in the page's table as in a theme folder on the player, so the Face tab and Anymote draw the field in the theme's font. Nothing of the face itself changes.

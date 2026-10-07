@@ -14,8 +14,8 @@
 //! theme leaves to the artwork are read from the cover, once per track.
 
 use overlay::face::{
-    blur, fit_art, host_picture, read_art, read_covering, read_to_string, sky_of, ui, Command,
-    Fonts, Frame, Metadata, PointerKind, Sky, TextStyle, Weather,
+    blur, fit_art, host_picture, is_file, read_art, read_covering, read_frames, read_to_string,
+    sky_of, ui, Command, Fonts, Frame, Metadata, PointerKind, Sky, TextStyle, Weather,
 };
 use overlay::{Cover, Overlay, View};
 
@@ -574,6 +574,9 @@ struct Tokens {
     theme: Theme,
     frosted: bool,
     theme_dir: String,
+    /// The chosen look's folder, where its `face.txt` was read; empty for
+    /// the built-in look.
+    look_dir: String,
     settings: BTreeMap<String, String>,
 }
 
@@ -599,6 +602,79 @@ fn theme_text(folders: &str, name: &str) -> Option<String> {
         .find_map(|file| read_to_string(&file))
 }
 
+/// A theme's own folder, the first of the folders that holds its `face.txt`.
+fn theme_folder(folders: &str, name: &str) -> Option<PathBuf> {
+    folders
+        .split(':')
+        .filter(|folder| !folder.is_empty())
+        .filter_map(|folder| theme_file(Path::new(folder), name))
+        .find(|file| is_file(file))
+        .and_then(|file| file.parent().map(Path::to_path_buf))
+}
+
+/// The names a sky's picture may have in a theme's `skies` folder, the
+/// most telling first: a hot, heavy or night sky falls back to the plain
+/// one, a night sky never to a day's.
+fn sky_names(sky: Sky, day: bool, hot: bool, heavy: bool) -> Vec<&'static str> {
+    match (sky, day) {
+        (Sky::Clear, true) if hot => vec!["clear-hot", "clear-day"],
+        (Sky::Clear, true) => vec!["clear-day"],
+        (Sky::Clear, false) => vec!["clear-night"],
+        (Sky::Partly, true) => vec!["partly-day"],
+        (Sky::Partly, false) => vec!["partly-night"],
+        (Sky::Cloudy, _) => vec!["cloudy"],
+        (Sky::Fog, _) => vec!["fog"],
+        (Sky::Drizzle, _) => vec!["drizzle"],
+        (Sky::Rain, _) if heavy => vec!["rain-heavy", "rain"],
+        (Sky::Rain, _) => vec!["rain"],
+        (Sky::Snow, _) if heavy => vec!["snow-heavy", "snow"],
+        (Sky::Snow, _) => vec!["snow"],
+        (Sky::Thunder, true) => vec!["thunder"],
+        (Sky::Thunder, false) => vec!["thunder-night", "thunder"],
+    }
+}
+
+/// A sky's picture of a theme's own: the first of the names found in the
+/// first of the folders that has it, `skies/<name>` with a picture's
+/// ending beside a `face.txt`, read where the display reads its files.
+/// Its frames with their delays, fitted to the side; none where no theme
+/// brings one, and the sky is drawn.
+fn theme_sky(sources: &[String], names: &[&str], side: u32) -> Option<Vec<(Frame, u32)>> {
+    for dir in sources.iter().filter(|dir| !dir.is_empty()) {
+        for name in names {
+            for ending in ["gif", "png", "webp", "jpg", "jpeg"] {
+                let path = Path::new(dir)
+                    .join("skies")
+                    .join(format!("{name}.{ending}"));
+                if is_file(&path) {
+                    if let Some(frames) = read_frames(&path, side) {
+                        return Some(frames);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// The frame of a cycle with its own delays a moment falls on; the first
+/// for a cycle of one frame.
+fn frame_for(t_ms: u64, delays: &[u32]) -> usize {
+    let total: u64 = delays.iter().map(|&d| u64::from(d.max(1))).sum();
+    if delays.len() < 2 || total == 0 {
+        return 0;
+    }
+    let mut t = t_ms % total;
+    for (i, &d) in delays.iter().enumerate() {
+        let d = u64::from(d.max(1));
+        if t < d {
+            return i;
+        }
+        t -= d;
+    }
+    0
+}
+
 /// What the theme on show brings for the face: the `face.txt` beside its
 /// `meters.txt`, read where the display reads the theme's own files. None
 /// where no theme is on show or the theme brings none.
@@ -621,6 +697,18 @@ fn tokens_for(view: &View, faces: Option<&str>) -> Tokens {
         };
         theme_text(&folders, name)
     });
+    let look_dir = view
+        .settings
+        .get("theme")
+        .and_then(|name| {
+            let folders = match faces {
+                Some(folders) => folders.to_string(),
+                None => std::env::var("GLASS_FACES").ok()?,
+            };
+            theme_folder(&folders, name)
+        })
+        .map(|dir| dir.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let brought = brought_text(view.theme_dir);
     let theme = Theme::layered(&[chosen.as_deref(), brought.as_deref()], view.settings);
     let frosted = theme.frosted(view.settings);
@@ -628,6 +716,7 @@ fn tokens_for(view: &View, faces: Option<&str>) -> Tokens {
         theme,
         frosted,
         theme_dir: view.theme_dir.to_string(),
+        look_dir,
         settings: view.settings.clone(),
     }
 }
@@ -1102,6 +1191,9 @@ struct ForecastLine {
     motion: bool,
     flashes: bool,
     colour: bool,
+    /// The folders a theme's own skies are looked for in: the meter theme's
+    /// on show, then the chosen look's.
+    sources: Vec<String>,
     /// NOW, MIN and MAX, set letter by letter with room between, for a
     /// size and an ink; and how far up into the numbers' descent they sit.
     captions: Option<(u32, [u8; 3], [Frame; 3])>,
@@ -1144,7 +1236,7 @@ type SkyKey = (u8, bool, bool, bool, u32, bool, [u8; 3]);
 /// sky is on show; thunder's two frames, dark and lit.
 #[derive(Default)]
 struct Skies {
-    frames: HashMap<SkyKey, (Sky, Vec<Frame>)>,
+    frames: HashMap<SkyKey, (Sky, Vec<Frame>, Option<Vec<u32>>)>,
 }
 
 impl Skies {
@@ -1170,9 +1262,14 @@ impl Skies {
         )
     }
 
-    /// Have the cycle for a key rastered.
-    fn keep(&mut self, key: SkyKey, sky: Sky) {
+    /// Have the cycle for a key in hand: a theme's own frames with their
+    /// delays where the theme brings the sky, else the drawn cycle.
+    fn keep(&mut self, key: SkyKey, sky: Sky, theme: impl FnOnce() -> Option<Vec<(Frame, u32)>>) {
         self.frames.entry(key).or_insert_with(|| {
+            if let Some(own) = theme() {
+                let (frames, delays): (Vec<Frame>, Vec<u32>) = own.into_iter().unzip();
+                return (sky, frames, Some(delays));
+            }
             let (_, day, hot, heavy, side, colour, ink) = key;
             let palette = if colour {
                 icon::Palette::colour(ink)
@@ -1192,18 +1289,20 @@ impl Skies {
                     })
                     .collect()
             };
-            (sky, frames)
+            (sky, frames, None)
         });
     }
 
     /// Which frame of a key stands at a moment: 0 while the skies do not
     /// move, thunder's lit frame in a flash, else the cycle's.
     fn index(&self, key: SkyKey, t_ms: u64, motion: bool, flashes: bool) -> usize {
-        let Some((sky, frames)) = self.frames.get(&key) else {
+        let Some((sky, frames, delays)) = self.frames.get(&key) else {
             return 0;
         };
         if !motion {
             0
+        } else if let Some(delays) = delays {
+            frame_for(t_ms, delays).min(frames.len().saturating_sub(1))
         } else if *sky == Sky::Thunder {
             usize::from(flashes && icon::flash_at(t_ms))
         } else {
@@ -1213,7 +1312,7 @@ impl Skies {
 
     /// The frame of a key at a moment.
     fn at(&self, key: SkyKey, t_ms: u64, motion: bool, flashes: bool) -> Option<&Frame> {
-        let (_, frames) = self.frames.get(&key)?;
+        let (_, frames, _) = self.frames.get(&key)?;
         frames.get(self.index(key, t_ms, motion, flashes))
     }
 
@@ -1551,8 +1650,21 @@ impl ForecastLine {
             self.colour,
             ink,
         );
-        self.skies.keep(now_key, sky_of(weather.code));
-        self.skies.keep(day_key, sky_of(weather.today));
+        let sources = self.sources.clone();
+        self.skies.keep(now_key, sky_of(weather.code), || {
+            theme_sky(
+                &sources,
+                &sky_names(sky_of(weather.code), weather.day, now_key.2, now_key.3),
+                side,
+            )
+        });
+        self.skies.keep(day_key, sky_of(weather.today), || {
+            theme_sky(
+                &sources,
+                &sky_names(sky_of(weather.today), true, day_key.2, day_key.3),
+                side,
+            )
+        });
         self.skies.keep_only(&[now_key, day_key]);
         self.now_key = Some(now_key);
         self.day_key = Some(day_key);
@@ -1661,7 +1773,10 @@ impl ForecastLine {
                 self.colour,
                 ink,
             );
-            self.skies.keep(key, sky_of(*code));
+            let sources = &self.sources;
+            self.skies.keep(key, sky_of(*code), || {
+                theme_sky(sources, &sky_names(sky_of(*code), *day, key.2, key.3), size)
+            });
             column.sky = Some(key);
             used.push(key);
         }
@@ -1678,6 +1793,15 @@ impl ForecastLine {
         self.motion = motion;
         self.flashes = flashes;
         self.colour = colour;
+    }
+
+    /// Where a theme's own skies are looked for, the most telling folder
+    /// first; the skies in hand are let go when the folders change.
+    fn sources(&mut self, dirs: &[String]) {
+        if self.sources != dirs {
+            self.sources = dirs.to_vec();
+            self.skies.frames.clear();
+        }
     }
 
     /// What the moving skies on show stand at, into a stamp: each sky's
@@ -2652,6 +2776,9 @@ impl Overlay for Face {
             return false;
         };
         let theme = &tokens.theme;
+        self.clock
+            .forecast
+            .sources(&[tokens.theme_dir.clone(), tokens.look_dir.clone()]);
         let frosted = tokens.frosted;
         let bar = Bar::measured(view.width, view.height, view.scale, theme.measure_bar);
         if alpha > 0 || clock {
@@ -4362,6 +4489,63 @@ mod tests {
     }
 
     #[test]
+    fn a_themes_own_sky_is_found_by_its_name_and_falls_back_along_the_chain() {
+        assert_eq!(
+            sky_names(Sky::Rain, true, false, true),
+            ["rain-heavy", "rain"]
+        );
+        assert_eq!(sky_names(Sky::Rain, false, false, false), ["rain"]);
+        assert_eq!(
+            sky_names(Sky::Clear, true, true, false),
+            ["clear-hot", "clear-day"]
+        );
+        assert_eq!(
+            sky_names(Sky::Clear, false, true, false),
+            ["clear-night"],
+            "a night never falls back to a day"
+        );
+        assert_eq!(
+            sky_names(Sky::Thunder, false, false, false),
+            ["thunder-night", "thunder"]
+        );
+        assert_eq!(
+            sky_names(Sky::Snow, true, false, true),
+            ["snow-heavy", "snow"]
+        );
+        // A theme folder with one sky: found under its plain name from the heavy one's chain.
+        let dir = std::env::temp_dir().join(format!("glass-evo-skies-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("skies")).unwrap();
+        image::RgbaImage::from_fn(6, 3, |_, _| image::Rgba([0, 0, 255, 255]))
+            .save(dir.join("skies/rain.png"))
+            .unwrap();
+        let sources = vec![String::new(), dir.to_string_lossy().into_owned()];
+        let found = theme_sky(&sources, &["rain-heavy", "rain"], 12).expect("the theme's rain");
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            (found[0].0.width, found[0].0.height, found[0].1),
+            (12, 12, 0)
+        );
+        assert!(
+            theme_sky(&sources, &["snow"], 12).is_none(),
+            "a sky the theme does not bring is drawn"
+        );
+        // In the cache: a theme's still sky stands on its one frame; a cycle with delays turns by them.
+        let ink = [242, 242, 245];
+        let mut skies = Skies::default();
+        let key = Skies::key(Sky::Rain, true, 10.0, 65, 12, true, ink);
+        let own = theme_sky(&sources, &sky_names(Sky::Rain, true, false, true), 12);
+        skies.keep(key, Sky::Rain, || own);
+        assert_eq!(skies.frames[&key].1.len(), 1);
+        assert_eq!(skies.index(key, 5000, true, false), 0);
+        assert_eq!(frame_for(0, &[250, 250, 500]), 0);
+        assert_eq!(frame_for(260, &[250, 250, 500]), 1);
+        assert_eq!(frame_for(999, &[250, 250, 500]), 2);
+        assert_eq!(frame_for(1000, &[250, 250, 500]), 0, "and round again");
+        assert_eq!(frame_for(777, &[0]), 0, "one frame stands");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn the_idle_screen_waits_for_the_persist_period_by_the_looks_word() {
         let fonts = Fonts::default();
         let waits: BTreeMap<String, String> =
@@ -4401,7 +4585,7 @@ mod tests {
         let ink = [242, 242, 245];
         let mut line = ForecastLine::default();
         let rain = Skies::key(Sky::Rain, true, 12.0, 61, 32, true, ink);
-        line.skies.keep(rain, Sky::Rain);
+        line.skies.keep(rain, Sky::Rain, || None);
         line.now_key = Some(rain);
         let (frames, ms) = icon::cycle(Sky::Rain, true, false).unwrap();
         let stamp = |line: &ForecastLine, t: u64| {
@@ -4441,7 +4625,7 @@ mod tests {
             "the whole cycle is kept"
         );
         let thunder = Skies::key(Sky::Thunder, true, 12.0, 95, 32, true, ink);
-        line.skies.keep(thunder, Sky::Thunder);
+        line.skies.keep(thunder, Sky::Thunder, || None);
         let lit = (0..30_000u64)
             .step_by(10)
             .find(|t| icon::flash_at(*t))
