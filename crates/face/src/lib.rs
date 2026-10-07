@@ -1098,8 +1098,9 @@ struct ForecastLine {
     /// size and the ink.
     skies_for: Option<(u8, bool, u8, u32, [u8; 3])>,
     /// NOW, MIN and MAX, set letter by letter with room between, for a
-    /// size and an ink.
+    /// size and an ink; and how far up into the numbers' descent they sit.
     captions: Option<(u32, [u8; 3], [Frame; 3])>,
+    caption_up: u32,
     /// The words, the size wanted and the room there was, the fit was made
     /// for, and the size it came to.
     fit_for: Option<((String, String), u32, (u32, u32), u32)>,
@@ -1131,19 +1132,27 @@ struct Column {
 /// whether it is day.
 type Entry = (String, String, u8, bool);
 
-/// The forecast's proportions, each a share of its size, which is the
-/// skies': today's numbers, the captions under them and how far the
-/// captions sit up into the numbers' descent; a span's figures and
-/// labels. Andrew's choices of 2026-10-07, T21 and C4.
-const NUMBER: f32 = 0.6;
-const CAPTION: f32 = 0.225;
-const CAPTION_UP: f32 = 0.075;
+/// The forecast's proportions, Andrew's choices of 2026-10-07 (T21 and C4).
+/// Today's size is its numbers' size, as it always was, so the size's
+/// slider reaches as far as every other piece's: the skies, the captions
+/// under the numbers and how far the captions sit up into the numbers'
+/// descent are shares of that. A span's size is its skies'; its figures
+/// and labels are shares of that.
+const TODAY_SKY: f32 = 80.0 / 48.0;
+const TODAY_CAPTION: f32 = 18.0 / 48.0;
+const TODAY_CAPTION_UP: f32 = 6.0 / 48.0;
 const FIGURE: f32 = 0.54;
 const LABEL: f32 = 0.4;
 
-/// A share of a size, in whole pixels and never under eight.
+/// A share of a size, in whole pixels and never under eight: a size of
+/// type or of a sky.
 fn part(size: u32, share: f32) -> u32 {
-    ((size as f32 * share).round() as u32).max(8)
+    share_of(size, share).max(8)
+}
+
+/// A share of a size, in whole pixels: a distance.
+fn share_of(size: u32, share: f32) -> u32 {
+    (size as f32 * share).round() as u32
 }
 
 /// Whether a clock pattern shows twelve hours: it names the hour of
@@ -1276,9 +1285,9 @@ impl ForecastLine {
 
     /// Today as a line: a sky and the temperature now with NOW under it,
     /// a sky and the day's low and high with MIN and MAX under them. The
-    /// skies are as high as a line of type at the forecast's size, as the
-    /// line was before the captions, so the size reaches as far as it did;
-    /// the numbers are three fifths of the skies, the captions under them.
+    /// numbers are set at the forecast's size, as the line always was, so
+    /// the size reaches as far as it did; the skies and the captions are
+    /// their shares of it.
     fn set_line(
         &mut self,
         fonts: &Fonts,
@@ -1294,20 +1303,17 @@ impl ForecastLine {
             now_words.clone().unwrap_or_default(),
             format!("{lo_words} / {hi_words}"),
         );
-        // The skies' side at a size: a line of type that high.
-        let side_at = |size: u32| -> Option<u32> {
-            Some(ui::line(fonts, TextStyle::Bold, size, ink, "8")?.height)
-        };
-        let stack_of = |side: u32, number: u32| -> Option<u32> {
-            let cap = ui::line(fonts, TextStyle::Bold, part(side, CAPTION), ink, "N")?.height;
-            Some((number + cap).saturating_sub(part(side, CAPTION_UP)))
+        // The numbers and their captions, stacked, at a size.
+        let stack_of = |size: u32, number_h: u32| -> Option<u32> {
+            let cap = ui::line(fonts, TextStyle::Bold, part(size, TODAY_CAPTION), ink, "N")?.height;
+            Some((number_h + cap).saturating_sub(share_of(size, TODAY_CAPTION_UP)))
         };
         let size = match &self.fit_for {
             Some((w, s, m, size)) if (w, *s, *m) == (&words, wanted, most) => *size,
             _ => {
                 // Measured at the size wanted, every digit an 8 as a line is.
-                let side = side_at(wanted)?;
-                let number = part(side, NUMBER);
+                let side = part(wanted, TODAY_SKY);
+                let number = wanted;
                 let lo = ui::line(fonts, TextStyle::Bold, number, ink, &widest(&lo_words))?;
                 let slash = ui::line(fonts, TextStyle::Bold, number, ink, " / ")?;
                 let hi = ui::line(fonts, TextStyle::Bold, number, ink, &widest(&hi_words))?;
@@ -1318,14 +1324,14 @@ impl ForecastLine {
                     None => None,
                 };
                 let day = lo.width + slash.width + hi.width;
-                let room = Self::room(side, now, day, stack_of(side, lo.height)?);
+                let room = Self::room(side, now, day, stack_of(wanted, lo.height)?);
                 let size = fitted_size(wanted, room, most);
                 self.fit_for = Some((words, wanted, most, size));
                 size
             }
         };
-        let side = side_at(size)?;
-        let number = part(side, NUMBER);
+        let side = part(size, TODAY_SKY);
+        let number = size;
         let lo = self.lo.set(fonts, lo_words, number, ink, ANY)?;
         let slash = self.slash.set(fonts, " / ".to_string(), number, ink, ANY)?;
         let hi = self.hi.set(fonts, hi_words, number, ink, ANY)?;
@@ -1334,7 +1340,8 @@ impl ForecastLine {
             None => None,
         };
         self.has_now = now.is_some();
-        let cap = part(side, CAPTION);
+        let cap = part(size, TODAY_CAPTION);
+        self.caption_up = share_of(size, TODAY_CAPTION_UP);
         if self.captions.as_ref().map(|(s, i, _)| (*s, *i)) != Some((cap, ink)) {
             self.captions = Some((
                 cap,
@@ -1352,7 +1359,7 @@ impl ForecastLine {
             self.day_sky = Some(icon::sky(sky_of(weather.today), true, side, ink));
             self.skies_for = Some(skies);
         }
-        let stack = stack_of(side, lo.1)?;
+        let stack = stack_of(size, lo.1)?;
         Some(Self::room(
             side,
             now.map(|n| n.0),
@@ -1458,12 +1465,12 @@ impl ForecastLine {
         let now = self.has_now.then_some(self.now.room.0);
         let day = self.lo.room.0 + self.slash.room.0 + self.hi.room.0;
         let number_h = self.lo.room.1;
-        let stack = (number_h + captions[0].height).saturating_sub(part(side, CAPTION_UP));
+        let stack = (number_h + captions[0].height).saturating_sub(self.caption_up);
         let (total, row_h) = Self::room(side, now, day, stack);
         let mut at = x + (width as i32 - total as i32) / 2;
         let sky_y = y + (row_h as i32 - side as i32) / 2;
         let num_y = y + (row_h as i32 - stack as i32) / 2;
-        let cap_y = num_y + number_h as i32 - part(side, CAPTION_UP) as i32;
+        let cap_y = num_y + number_h as i32 - self.caption_up as i32;
         let alpha = share(opacity, 255);
         let under = |frame: &mut Frame, caption: &Frame, left: i32, over: u32| {
             ui::blit(
@@ -3926,9 +3933,13 @@ mod tests {
             "columns side by side with half a sky between, the rows an eighth apart"
         );
         assert_eq!(
-            part(80, NUMBER),
-            48,
-            "today's numbers at three fifths of the skies"
+            part(48, TODAY_SKY),
+            80,
+            "today's skies from its numbers, as T21"
+        );
+        assert_eq!(
+            (part(48, TODAY_CAPTION), share_of(48, TODAY_CAPTION_UP)),
+            (18, 6)
         );
         assert_eq!(
             (part(80, FIGURE), part(80, LABEL)),

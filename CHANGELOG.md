@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.49] - 2026-10-07
+
+Andrew: "The slider for the forecast is still regressed. Today - as every other slider should permit spill over the screen... REQUIREMENT - restore slider function exactly like it was." Built on Glass 0.8.84.
+
+- **Today's size is its numbers' size again, exactly as before the captions.** 0.1.46 and 0.1.48 hung today's line from its skies; the numbers came out smaller at every size and the slider's top no longer ran the line over the screen. The numbers are set at the forecast's size as in 0.1.45, and T21's proportions hang from them: the skies five thirds of the numbers, the captions three eighths, drawn an eighth up into the numbers' descent.
+
 ## [0.1.48] - 2026-10-07
 
 Andrew: "Forecast 'Today' lost full scale range. All others scale fine." Built on Glass 0.8.84.
