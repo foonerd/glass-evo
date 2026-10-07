@@ -112,12 +112,30 @@ opacity = 0.86
 glass = 0.55
 tint = tint
 
+[weather]
+# Today's forecast, for the place chosen on the Manager's Screen tab: the
+# weather and the temperature now, then the day's weather with its lowest
+# and its highest. It shows only where a place is chosen, on the grid and
+# only: place names its cells as the clock's does (the bottom row unless
+# said; empty hides it), align where it stands inside them, margin as the
+# clock's. Its size, ink, opacity, glass and tint are the date's unless said:
+# ink and tint as the date's, opacity and glass "date" or a number of their own.
+show = on
+place = bottom left-right
+align = centre middle
+margin = 20
+ink = ink
+opacity = date
+glass = date
+tint = tint
+
 [measure]
 # Heights in units of a 720th of the picture's height; the face size
 # (normal, large, car) scales them together.
 bar = 72
 clock = 144
 date = 40
+weather = 40
 
 [idle]
 # When nothing plays: a picture of the user's own behind the clock and the

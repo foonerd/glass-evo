@@ -14,14 +14,16 @@
 //! theme leaves to the artwork are read from the cover, once per track.
 
 use overlay::face::{
-    blur, fit_art, read_art, read_covering, read_to_string, ui, Command, Fonts, Frame, Metadata,
-    PointerKind, TextStyle,
+    blur, fit_art, read_art, read_covering, read_to_string, sky_of, ui, Command, Fonts, Frame,
+    Metadata, PointerKind, TextStyle, Weather,
 };
 use overlay::{Cover, Overlay, View};
 
 /// What a page's module needs of the face's types to load fonts and hand
 /// pictures back: the files a set of fonts comes from, the fonts, a picture.
-pub use overlay::face::{FontFiles, Fonts as FaceFonts, Frame as FaceFrame};
+pub use overlay::face::{
+    FontFiles, Fonts as FaceFonts, Frame as FaceFrame, Weather as FaceWeather,
+};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
@@ -1025,7 +1027,7 @@ impl Line {
     /// set or no face to set it in.
     fn set(
         &mut self,
-        view: &View,
+        fonts: &Fonts,
         text: String,
         wanted: u32,
         ink: [u8; 3],
@@ -1041,11 +1043,11 @@ impl Line {
         if self.fit_for.as_ref().map(|(w, s, m)| (w.as_str(), *s, *m))
             != Some((widest.as_str(), wanted, most))
         {
-            let line = ui::line(view.fonts, TextStyle::Bold, wanted, ink, &widest)?;
+            let line = ui::line(fonts, TextStyle::Bold, wanted, ink, &widest)?;
             self.size = fitted_size(wanted, (line.width, line.height), most);
             self.room = (line.width, line.height);
             if self.size != wanted {
-                let line = ui::line(view.fonts, TextStyle::Bold, self.size, ink, &widest)?;
+                let line = ui::line(fonts, TextStyle::Bold, self.size, ink, &widest)?;
                 self.room = (line.width, line.height);
             }
             self.fit_for = Some((widest, wanted, most));
@@ -1053,7 +1055,7 @@ impl Line {
         if self.set_for.as_ref().map(|(t, s, i)| (t.as_str(), *s, *i))
             != Some((text.as_str(), self.size, ink))
         {
-            self.frame = ui::line(view.fonts, TextStyle::Bold, self.size, ink, &text);
+            self.frame = ui::line(fonts, TextStyle::Bold, self.size, ink, &text);
             self.set_for = Some((text, self.size, ink));
         }
         self.frame.as_ref().map(|_| self.room)
@@ -1073,11 +1075,126 @@ impl Line {
     }
 }
 
-/// The clock and the date of the idle screen.
+/// A temperature as a forecast says it: whole degrees.
+fn degrees(value: f32) -> String {
+    // Minus nought is nought.
+    format!("{}\u{b0}", value.round() as i32)
+}
+
+/// Today's forecast in a line: how it is now where the player was told
+/// (the sky and the temperature), then the day (its sky, its lowest and
+/// its highest). The skies are drawn, the figures set in type; all of it
+/// rastered when what it says, its size or its ink change, not every frame.
+#[derive(Default)]
+struct ForecastLine {
+    now: Line,
+    day: Line,
+    now_sky: Option<Frame>,
+    day_sky: Option<Frame>,
+    /// What the skies were drawn for: the two codes, day or night, the
+    /// size and the ink.
+    skies_for: Option<(u8, bool, u8, u32, [u8; 3])>,
+    /// The words, the size wanted and the room there was, the fit was made
+    /// for, and the size it came to.
+    fit_for: Option<((String, String), u32, (u32, u32), u32)>,
+    has_now: bool,
+}
+
+impl ForecastLine {
+    /// The gaps of a line `side` high: between a sky and its figures, and
+    /// between now and the day.
+    fn gaps(side: u32) -> (u32, u32) {
+        ((side / 4).max(2), (side * 3 / 4).max(4))
+    }
+
+    /// The room the line takes with figures `now` and `day` wide in a line
+    /// `side` high: a sky as wide as the line is high before each.
+    fn room(side: u32, now: Option<u32>, day: u32) -> u32 {
+        let (near, apart) = Self::gaps(side);
+        now.map_or(0, |n| side + near + n + apart) + side + near + day
+    }
+
+    /// Set the forecast at the size wanted, or the largest at which it
+    /// fits in `most`; the room it takes, or nothing with no face to set
+    /// it in.
+    fn set(
+        &mut self,
+        fonts: &Fonts,
+        weather: &Weather,
+        wanted: u32,
+        ink: [u8; 3],
+        most: (u32, u32),
+    ) -> Option<(u32, u32)> {
+        const ANY: (u32, u32) = (u32::MAX, u32::MAX);
+        let day_words = format!("{} / {}", degrees(weather.low), degrees(weather.high));
+        let now_words = weather.now.map(degrees);
+        let words = (now_words.clone().unwrap_or_default(), day_words.clone());
+        let size = match &self.fit_for {
+            Some((w, s, m, size)) if (w, *s, *m) == (&words, wanted, most) => *size,
+            _ => {
+                // Measured at the size wanted, every digit an 8 as a line is.
+                let widest = |text: &str| -> String {
+                    text.chars()
+                        .map(|c| if c.is_ascii_digit() { '8' } else { c })
+                        .collect()
+                };
+                let day = ui::line(fonts, TextStyle::Bold, wanted, ink, &widest(&day_words))?;
+                let now = match &now_words {
+                    Some(text) => {
+                        Some(ui::line(fonts, TextStyle::Bold, wanted, ink, &widest(text))?.width)
+                    }
+                    None => None,
+                };
+                let room = (Self::room(day.height, now, day.width), day.height);
+                let size = fitted_size(wanted, room, most);
+                self.fit_for = Some((words, wanted, most, size));
+                size
+            }
+        };
+        let day = self.day.set(fonts, day_words, size, ink, ANY)?;
+        let now = match now_words {
+            Some(text) => self.now.set(fonts, text, size, ink, ANY),
+            None => None,
+        };
+        self.has_now = now.is_some();
+        let side = day.1;
+        let skies = (weather.code, weather.day, weather.today, side, ink);
+        if self.skies_for != Some(skies) {
+            self.now_sky = Some(icon::sky(sky_of(weather.code), weather.day, side, ink));
+            self.day_sky = Some(icon::sky(sky_of(weather.today), true, side, ink));
+            self.skies_for = Some(skies);
+        }
+        Some((Self::room(side, now.map(|n| n.0), day.0), side))
+    }
+
+    /// The line in the middle of a width, at an opacity.
+    fn place(&self, frame: &mut Frame, x: i32, y: i32, width: u32, opacity: f32) {
+        let Some(day_sky) = self.day_sky.as_ref() else {
+            return;
+        };
+        let side = day_sky.width;
+        let (near, apart) = Self::gaps(side);
+        let now = self.has_now.then_some(self.now.room.0);
+        let mut at = x + (width as i32 - Self::room(side, now, self.day.room.0) as i32) / 2;
+        let alpha = share(opacity, 255);
+        if let (Some(room), Some(sky)) = (now, self.now_sky.as_ref()) {
+            ui::blit(frame, sky, at, y, alpha);
+            at += (side + near) as i32;
+            self.now.place(frame, at, y, room, opacity);
+            at += (room + apart) as i32;
+        }
+        ui::blit(frame, day_sky, at, y, alpha);
+        at += (side + near) as i32;
+        self.day.place(frame, at, y, self.day.room.0, opacity);
+    }
+}
+
+/// The clock and the date of the idle screen, and the forecast with them.
 #[derive(Default)]
 struct ClockFace {
     clock: Line,
     date: Line,
+    forecast: ForecastLine,
     /// The clock where it is drawn and not set in type.
     drawn: clock::Drawn,
 }
@@ -1209,12 +1326,42 @@ fn idle_layout(
     layout
 }
 
+/// Today's forecast set for a page, as the face sets it on the screen: the
+/// look's keys for the size and the ink, the player's reading, `size`
+/// pixels high, at a moment; nothing where the look hides it or the fonts
+/// have no bold face.
+pub fn forecast_preview(
+    fonts: &Fonts,
+    keys: &BTreeMap<String, String>,
+    weather: &Weather,
+    size: u32,
+    _wall: &Wall,
+) -> Option<Frame> {
+    const ANY: (u32, u32) = (u32::MAX, u32::MAX);
+    let theme = Theme::resolve(None, keys);
+    if !theme.weather_show {
+        return None;
+    }
+    let ink = theme.weather_ink.or(theme.date_ink).unwrap_or(theme.ink);
+    let mut line = ForecastLine::default();
+    let (width, height) = line.set(fonts, weather, size, ink, ANY)?;
+    let mut frame = Frame {
+        blend: Default::default(),
+        width,
+        height,
+        rgba: vec![0; (width * height * 4) as usize],
+    };
+    line.place(&mut frame, 0, 0, width, 1.0);
+    Some(frame)
+}
+
 /// One of the idle screen's elements, in the order they stand in when
 /// they share cells.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Piece {
     Clock,
     Date,
+    Forecast,
 }
 
 /// The idle screen's grid: three rows by three columns in equal thirds
@@ -1314,7 +1461,7 @@ impl ClockFace {
         let date = if theme.date_show && theme.date_cells.is_none() {
             let size = px(theme.measure_date).max(13);
             self.date.set(
-                view,
+                view.fonts,
                 format_time(&theme.date_format, wall),
                 size,
                 theme.date_ink.unwrap_or(theme.ink),
@@ -1417,6 +1564,16 @@ impl ClockFace {
         if let (true, Some(on)) = (theme.date_show, theme.date_cells) {
             on_grid(Piece::Date, on, theme.date_align, theme.date_margin);
         }
+        // The forecast: on the grid and only, where the player holds one.
+        let weather = view.input.weather.as_ref();
+        if let (true, Some(on), Some(_)) = (theme.weather_show, theme.weather_cells, weather) {
+            on_grid(
+                Piece::Forecast,
+                on,
+                theme.weather_align,
+                theme.weather_margin,
+            );
+        }
         for (on, align, margin, pieces) in blocks {
             let area = grid.area(on);
             let margin = px(margin);
@@ -1432,8 +1589,23 @@ impl ClockFace {
                     set.push((Piece::Date, sized));
                 }
             }
+            // The forecast after the date, in what it leaves; in the date's
+            // size, ink and opacity unless the look gives it its own.
+            if let (true, Some(weather)) = (pieces.contains(&Piece::Forecast), weather) {
+                let taken = set.iter().map(|(_, sized)| sized.1 + m.gap).sum::<u32>();
+                let most = if own("measure.weather") {
+                    ANY
+                } else {
+                    (room.0, room.1.saturating_sub(taken))
+                };
+                let size = px(theme.measure_weather).max(13);
+                let ink = theme.weather_ink.or(theme.date_ink).unwrap_or(theme.ink);
+                if let Some(sized) = self.forecast.set(view.fonts, weather, size, ink, most) {
+                    set.push((Piece::Forecast, sized));
+                }
+            }
             if pieces.contains(&Piece::Clock) {
-                let taken = set.first().map_or(0, |(_, sized)| sized.1 + m.gap);
+                let taken = set.iter().map(|(_, sized)| sized.1 + m.gap).sum::<u32>();
                 let most = if own("measure.clock") {
                     ANY
                 } else {
@@ -1465,6 +1637,10 @@ impl ClockFace {
             let (strength, tint) = match first {
                 Piece::Clock => (theme.clock_glass, theme.clock_tint),
                 Piece::Date => (theme.date_glass, theme.date_tint),
+                Piece::Forecast => (
+                    theme.weather_glass.unwrap_or(theme.date_glass),
+                    theme.weather_tint.or(theme.date_tint),
+                ),
             };
             glass.behind(frame, (x, y, width, height), about, strength, tint);
             let mut at = y;
@@ -1480,6 +1656,13 @@ impl ClockFace {
                     Piece::Date => self
                         .date
                         .place(frame, across, at, sized.0, theme.date_opacity),
+                    Piece::Forecast => self.forecast.place(
+                        frame,
+                        across,
+                        at,
+                        sized.0,
+                        theme.weather_opacity.unwrap_or(theme.date_opacity),
+                    ),
                 }
                 at += (sized.1 + m.gap) as i32;
             }
@@ -1501,9 +1684,13 @@ impl ClockFace {
     ) -> Option<(u32, u32)> {
         let text = format_time(&theme.clock_format, wall);
         if theme.clock_face == clock::ClockKind::Type {
-            return self
-                .clock
-                .set(view, text, size, theme.clock_ink.unwrap_or(theme.ink), most);
+            return self.clock.set(
+                view.fonts,
+                text,
+                size,
+                theme.clock_ink.unwrap_or(theme.ink),
+                most,
+            );
         }
         // A drawn face: fitted by the room it takes at the size wanted,
         // every digit an 8 so the room stands still.
@@ -1536,7 +1723,7 @@ impl ClockFace {
         most: (u32, u32),
     ) -> Option<(u32, u32)> {
         self.date.set(
-            view,
+            view.fonts,
             format_time(&theme.date_format, wall),
             size,
             theme.date_ink.unwrap_or(theme.ink),
@@ -1593,7 +1780,8 @@ impl Face {
             let theme = &self.tokens(view).theme;
             (
                 theme.clock_show,
-                theme.date_show,
+                // A forecast in hand stands where a date does, with one or alone.
+                theme.date_show || (theme.weather_show && view.input.weather.is_some()),
                 theme.idle_off_min,
                 theme.idle_fade_ms,
                 theme.idle_picture.clone(),
@@ -1716,6 +1904,12 @@ impl Face {
             }
             if theme.date_show {
                 format_time(&theme.date_format, tm).hash(&mut h);
+            }
+            // What the forecast says, as it is drawn: the skies and whole degrees.
+            if let (true, Some(w)) = (theme.weather_show, view.input.weather.as_ref()) {
+                let whole = |t: f32| t.round() as i32;
+                (w.code, w.day, w.today, w.now.map(whole)).hash(&mut h);
+                (whole(w.low), whole(w.high)).hash(&mut h);
             }
         }
         h.finish()
@@ -3246,6 +3440,116 @@ mod tests {
         0xcf, 0xc0, 0x00, 0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xdd, 0x8d, 0xb0, 0x00, 0x00, 0x00,
         0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
     ];
+
+    /// A forecast as the player hands it on: partly cloudy and 13.6 now,
+    /// rain today between 8.9 and 17.2.
+    fn forecast() -> Weather {
+        Weather {
+            place: "Krakow".into(),
+            unit: "C".into(),
+            now: Some(13.6),
+            code: 2,
+            day: true,
+            today: 61,
+            low: 8.9,
+            high: 17.2,
+            rain: Some(64),
+            at: 1_760_000_000,
+        }
+    }
+
+    #[test]
+    fn a_forecast_is_said_in_whole_degrees_with_a_sky_before_each_half() {
+        assert_eq!(degrees(13.6), "14\u{b0}");
+        assert_eq!(degrees(-0.4), "0\u{b0}", "minus nought is nought");
+        assert_eq!(degrees(-3.5), "-4\u{b0}");
+        // A line 40 high: a sky of 40, 10 to its figures, 30 between now and the day.
+        assert_eq!(ForecastLine::gaps(40), (10, 30));
+        assert_eq!(ForecastLine::room(40, None, 120), 40 + 10 + 120);
+        assert_eq!(
+            ForecastLine::room(40, Some(60), 120),
+            (40 + 10 + 60 + 30) + (40 + 10 + 120),
+            "now, then the day"
+        );
+    }
+
+    #[test]
+    fn a_forecast_in_hand_stands_still_with_the_date_or_alone_unless_the_look_hides_it() {
+        let fonts = Fonts::default();
+        let without = input("stop");
+        let mut with = input("stop");
+        with.weather = Some(forecast());
+        let bare = settings(&[("clock.show", "off"), ("date.show", "off")]);
+        let hidden = settings(&[
+            ("clock.show", "off"),
+            ("date.show", "off"),
+            ("weather.show", "off"),
+        ]);
+        let stands = |input: &Input, set: &BTreeMap<String, String>| {
+            let mut v = view(input, &fonts, 0);
+            v.settings = set;
+            Face::new().advance(&v).1
+        };
+        assert!(!stands(&without, &bare), "no clock, no date, no forecast");
+        assert!(
+            stands(&with, &bare),
+            "a forecast alone is something to show"
+        );
+        assert!(!stands(&with, &hidden), "unless the look hides it");
+        // Playing, the idle screen is away with or without one.
+        let mut playing = input("play");
+        playing.weather = Some(forecast());
+        assert!(!stands(&playing, &bare));
+    }
+
+    #[test]
+    fn what_the_forecast_says_is_part_of_what_is_drawn() {
+        let fonts = Fonts::default();
+        let mut with = input("stop");
+        with.weather = Some(forecast());
+        let shown = settings(&[("date.show", "on")]);
+        let hidden = settings(&[("date.show", "on"), ("weather.show", "off")]);
+        let stamp_of = |input: &Input, set: &BTreeMap<String, String>| {
+            let mut v = view(input, &fonts, 0);
+            v.settings = set;
+            let mut face = Face::new();
+            face.advance(&v);
+            face.stamp(&v, 0, Some(&A_THURSDAY))
+        };
+        let first = stamp_of(&with, &shown);
+        let mut warmer = with.clone();
+        warmer.weather.as_mut().unwrap().high = 21.0;
+        assert_ne!(
+            first,
+            stamp_of(&warmer, &shown),
+            "another high is another picture"
+        );
+        let mut night = with.clone();
+        night.weather.as_mut().unwrap().day = false;
+        assert_ne!(
+            first,
+            stamp_of(&night, &shown),
+            "and so is the moon for the sun"
+        );
+        let mut nearly = with.clone();
+        nearly.weather.as_mut().unwrap().high = 17.4;
+        nearly.weather.as_mut().unwrap().at += 1800;
+        assert_eq!(
+            first,
+            stamp_of(&nearly, &shown),
+            "a reading that says the same in whole degrees is drawn alike"
+        );
+        assert_eq!(
+            stamp_of(&with, &hidden),
+            stamp_of(&warmer, &hidden),
+            "hidden, it changes nothing"
+        );
+        assert_ne!(
+            first,
+            stamp_of(&input("stop"), &shown),
+            "none in hand is another picture"
+        );
+    }
 
     #[test]
     fn the_screen_goes_black_after_the_minutes_named_and_a_tap_wakes_it() {

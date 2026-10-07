@@ -189,6 +189,22 @@ pub struct Theme {
     pub clock_card: [u8; 3],
     /// `date.show`: whether the date stands with the clock.
     pub date_show: bool,
+    /// `weather.show`: whether the forecast shows, where the player holds
+    /// one for a place the user chose.
+    pub weather_show: bool,
+    /// `weather.place`: the cells of the grid the forecast occupies; the
+    /// forecast stands on the grid and only, so none hides it.
+    pub weather_cells: Option<Cells>,
+    /// `weather.align`: where the forecast stands inside its cells.
+    pub weather_align: Align,
+    /// `weather.margin`: as `clock.margin`, for the forecast.
+    pub weather_margin: f32,
+    /// `weather.ink`, `weather.opacity`, `weather.glass`, `weather.tint`:
+    /// the forecast's own, each the date's unless said.
+    pub weather_ink: Option<[u8; 3]>,
+    pub weather_opacity: Option<f32>,
+    pub weather_glass: Option<f32>,
+    pub weather_tint: Option<[u8; 3]>,
     /// `date.format`: the date as a pattern, `%A %-d %B` for Thursday 1
     /// October, `%d/%m/%Y` for 01/10/2026.
     pub date_format: String,
@@ -216,6 +232,8 @@ pub struct Theme {
     pub measure_clock: f32,
     /// `measure.date`: the date's height, in the same units.
     pub measure_date: f32,
+    /// `measure.weather`: the forecast's height, in the same units.
+    pub measure_weather: f32,
     /// `idle.picture`: a picture of the user's own shown behind the clock
     /// and the date when nothing plays, in the theme's place, by its file's
     /// name in the folder such pictures are kept in; empty for none.
@@ -261,6 +279,14 @@ impl Default for Theme {
             clock_disc: Disc::Style,
             clock_card: [23, 23, 26],
             date_show: false,
+            weather_show: true,
+            weather_cells: cells("bottom left-right"),
+            weather_align: Align::default(),
+            weather_margin: 20.0,
+            weather_ink: None,
+            weather_opacity: None,
+            weather_glass: None,
+            weather_tint: None,
             date_format: "%A %-d %B".to_string(),
             date_place: DatePlace::Top,
             date_cells: None,
@@ -273,6 +299,7 @@ impl Default for Theme {
             measure_bar: 72.0,
             measure_clock: 144.0,
             measure_date: 40.0,
+            measure_weather: 40.0,
             idle_picture: String::new(),
             idle_dim: 0.25,
             idle_off_min: 0,
@@ -512,6 +539,55 @@ impl Theme {
                     }
                 }
                 "date.show" => self.date_show = switch(v).unwrap_or(self.date_show),
+                "weather.show" => self.weather_show = switch(v).unwrap_or(self.weather_show),
+                // Cells of the grid, or nothing: the forecast has no place off it.
+                "weather.place" => {
+                    self.weather_cells = if v.trim().is_empty() {
+                        None
+                    } else {
+                        cells(v).or(self.weather_cells)
+                    }
+                }
+                "weather.align" => self.weather_align = align(v).unwrap_or(self.weather_align),
+                "weather.margin" => {
+                    self.weather_margin = units(v, 0.0, 200.0).unwrap_or(self.weather_margin)
+                }
+                "weather.ink" => {
+                    self.weather_ink = if v.eq_ignore_ascii_case("ink") {
+                        None
+                    } else {
+                        colour(v).or(self.weather_ink)
+                    }
+                }
+                // The word `date` leaves the opacity and the glass the date's.
+                "weather.opacity" => {
+                    self.weather_opacity = if v.eq_ignore_ascii_case("date") {
+                        None
+                    } else {
+                        share(v).or(self.weather_opacity)
+                    }
+                }
+                "weather.glass" => {
+                    self.weather_glass = if v.eq_ignore_ascii_case("date") {
+                        None
+                    } else {
+                        v.parse::<f32>()
+                            .ok()
+                            .filter(|n| n.is_finite())
+                            .map(|n| n.clamp(0.0, 1.0))
+                            .or(self.weather_glass)
+                    }
+                }
+                "weather.tint" => {
+                    self.weather_tint = if v.eq_ignore_ascii_case("tint") {
+                        None
+                    } else {
+                        colour(v).or(self.weather_tint)
+                    }
+                }
+                "measure.weather" => {
+                    self.measure_weather = units(v, 16.0, 360.0).unwrap_or(self.measure_weather)
+                }
                 "date.format" => {
                     if let Some(format) = pattern(v) {
                         self.date_format = format;
@@ -833,6 +909,7 @@ mod tests {
             "clock.glass",
             "clock.tint",
             "date.show",
+            "weather.show",
             "date.format",
             "date.place",
             "date.align",
@@ -860,7 +937,7 @@ mod tests {
         }
         assert_eq!(
             written.len(),
-            44,
+            53,
             "and nothing but what the face reads and the line for a list"
         );
     }

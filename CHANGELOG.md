@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.44] - 2026-10-07
+
+Andrew, on the accepted clock and date: "Now - weather. Exact same principle - grid, the same way as clock and date." Built on Glass 0.8.79.
+
+- **Today's forecast on the grid.** Where the player holds a reading for a place the user chose (Glass 0.8.79's Forecast section), the face draws it: a sky, the temperature now, then a sky, today's lowest and highest, the skies drawn as shapes by day and by night (sun, moon, cloud, fog, drizzle, rain, snow, thunder). `[weather] show`, `place` (cells of the grid as the clock's; the bottom row across the three columns unless said; empty hides it: the forecast has no place off the grid), `align`, `margin`, and its own `ink`, `opacity`, `glass` and `tint`, each the date's unless said; `[measure] weather` its height, the date's unless said. A size the look comes with is fitted to the cells, a size the user set is kept, and a forecast larger than its cells runs over the side it is aligned to, as the clock does. On the same cells as the clock or the date, aligned the same, it shares their glass, in the order clock, date, forecast.
+- **The module sets the forecast for a page.** `forecast_preview` draws it from the look's keys and the player's reading, in the font the page put at `fonts/bold.ttf` under the module's home, as the face draws it on the screen.
+
 ## [0.1.43] - 2026-10-07
 
 Andrew, on the date on the grid, set in the browser's type in the likeness and in the face's on the glass: "Rejected. I requested date to be wired exactly as the clock is." and, before, "module works better like clock, why date is not a module?" Built on Glass 0.8.78.

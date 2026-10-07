@@ -31,6 +31,8 @@ mod preview {
         static SIZE: RefCell<(u32, u32)> = const { RefCell::new((0, 0)) };
         static LINE: RefCell<Option<Frame>> = const { RefCell::new(None) };
         static LINE_SIZE: RefCell<(u32, u32)> = const { RefCell::new((0, 0)) };
+        static FORECAST: RefCell<Option<Frame>> = const { RefCell::new(None) };
+        static FORECAST_SIZE: RefCell<(u32, u32)> = const { RefCell::new((0, 0)) };
         static FONTS: RefCell<Option<Fonts>> = const { RefCell::new(None) };
     }
 
@@ -128,6 +130,79 @@ mod preview {
     #[no_mangle]
     pub extern "C" fn line_preview_height() -> u32 {
         LINE_SIZE.with(|slot| slot.borrow().1)
+    }
+
+    /// Today's forecast, for a page: `forecast_preview(json, len, reading,
+    /// reading_len, size, epoch_ms, offset_minutes)` sets it as a look's
+    /// keys describe it from the player's reading (the `weather` line's
+    /// JSON), `size` pixels high, in the font the page put at
+    /// `fonts/bold.ttf` under its home, and answers a pointer to its RGBA,
+    /// straight alpha, `forecast_preview_width` by `forecast_preview_height`;
+    /// null where there is no font, no reading, or the look hides it. The
+    /// bytes stand until the next call.
+    ///
+    /// # Safety
+    /// Each pointer names a buffer of the module's `alloc` of the given length.
+    #[no_mangle]
+    pub unsafe extern "C" fn forecast_preview(
+        json: *const u8,
+        len: usize,
+        reading: *const u8,
+        reading_len: usize,
+        size: u32,
+        epoch_ms: u64,
+        offset_minutes: i32,
+    ) -> *const u8 {
+        let keys = keys_of(json, len);
+        let text = if reading_len == 0 {
+            String::new()
+        } else {
+            // SAFETY: the caller names a buffer of the module's `alloc`.
+            String::from_utf8_lossy(unsafe { std::slice::from_raw_parts(reading, reading_len) })
+                .into_owned()
+        };
+        let weather = serde_json::from_str::<face::FaceWeather>(&text).ok();
+        let wall = face::Wall::at(epoch_ms as i64, offset_minutes, "");
+        FONTS.with(|fonts| {
+            let mut fonts = fonts.borrow_mut();
+            let fonts = fonts.get_or_insert_with(|| {
+                Fonts::load(&FontFiles {
+                    light: bold_font(),
+                    regular: bold_font(),
+                    bold: bold_font(),
+                    italic: bold_font(),
+                    digi: bold_font(),
+                    fallback: String::new(),
+                })
+            });
+            FORECAST.with(|line| {
+                let mut line = line.borrow_mut();
+                *line = weather.as_ref().and_then(|weather| {
+                    face::forecast_preview(fonts, &keys, weather, size.clamp(8, 2000), &wall)
+                });
+                match line.as_ref() {
+                    Some(picture) => {
+                        FORECAST_SIZE
+                            .with(|slot| *slot.borrow_mut() = (picture.width, picture.height));
+                        picture.rgba.as_ptr()
+                    }
+                    None => {
+                        FORECAST_SIZE.with(|slot| *slot.borrow_mut() = (0, 0));
+                        std::ptr::null()
+                    }
+                }
+            })
+        })
+    }
+
+    #[no_mangle]
+    pub extern "C" fn forecast_preview_width() -> u32 {
+        FORECAST_SIZE.with(|slot| slot.borrow().0)
+    }
+
+    #[no_mangle]
+    pub extern "C" fn forecast_preview_height() -> u32 {
+        FORECAST_SIZE.with(|slot| slot.borrow().1)
     }
 
     /// # Safety

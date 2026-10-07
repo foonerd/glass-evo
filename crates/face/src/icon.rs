@@ -5,7 +5,7 @@
 //! picture to blit. No fonts and no files: any theme's fonts do, and a
 //! face size is one more raster.
 
-use overlay::face::Frame;
+use overlay::face::{Frame, Sky};
 
 /// What the face can show on a button or a tile.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -162,16 +162,123 @@ fn distance(icon: Icon, p: Point) -> f32 {
     }
 }
 
-/// One icon rastered at a size in an ink: the ink everywhere, the shape in
+/// A cloud, flat underneath: three bumps on a base, its lowest edge at
+/// `floor` on the grid.
+fn cloud(p: Point, floor: f32) -> f32 {
+    disc(p, (8.0, floor - 3.5), 3.5)
+        .min(disc(p, (12.5, floor - 6.5), 4.5))
+        .min(disc(p, (17.0, floor - 4.0), 4.0))
+        .min(polygon(
+            p,
+            &[
+                (8.0, floor - 4.0),
+                (17.0, floor - 4.0),
+                (17.0, floor),
+                (8.0, floor),
+            ],
+        ))
+}
+
+/// A sun: a disc with eight rays about it.
+fn sun(p: Point, c: Point, radius: f32) -> f32 {
+    let mut nearest = disc(p, c, radius);
+    for ray in 0..8 {
+        let (sin, cos) = (ray as f32 * std::f32::consts::FRAC_PI_4).sin_cos();
+        let (from, to) = (radius * 1.5, radius * 2.05);
+        nearest = nearest.min(segment(
+            p,
+            (c.0 + cos * from, c.1 + sin * from),
+            (c.0 + cos * to, c.1 + sin * to),
+            STROKE * 0.85,
+        ));
+    }
+    nearest
+}
+
+/// A waxing moon: a disc with a bite out of its upper right.
+fn moon(p: Point, c: Point, radius: f32) -> f32 {
+    disc(p, c, radius).max(-disc(
+        p,
+        (c.0 + radius * 0.5, c.1 - radius * 0.36),
+        radius * 0.86,
+    ))
+}
+
+/// Three marks under a cloud, each drawn by `mark` about its own point.
+fn falling(p: Point, mark: impl Fn(Point, Point) -> f32) -> f32 {
+    [(8.5, 18.0), (12.5, 18.0), (16.5, 18.0)]
+        .into_iter()
+        .map(|at| mark(p, at))
+        .fold(f32::MAX, f32::min)
+}
+
+/// The sky's distance from a point on the grid, negative inside: the sun
+/// by day and the moon by night where the sky is clear or partly so, and
+/// the same cloud for the rest, with what falls from it under it.
+fn sky_distance(sky: Sky, day: bool, p: Point) -> f32 {
+    // The cloud that something falls from stands higher than one alone.
+    let high = cloud(p, 14.0);
+    match sky {
+        Sky::Clear if day => sun(p, (12.0, 12.0), 4.2),
+        Sky::Clear => moon(p, (11.0, 12.0), 7.5),
+        Sky::Partly => {
+            let low = cloud((p.0 - 1.5, p.1), 19.0);
+            let light = if day {
+                sun(p, (8.0, 8.0), 2.9)
+            } else {
+                moon(p, (8.0, 8.5), 4.6)
+            };
+            // The light stops short of the cloud, so the two read apart.
+            low.min(light.max(1.3 - low))
+        }
+        Sky::Cloudy => cloud(p, 17.5),
+        Sky::Fog => segment(p, (5.5, 8.0), (18.5, 8.0), STROKE)
+            .min(segment(p, (3.5, 12.0), (20.5, 12.0), STROKE))
+            .min(segment(p, (5.5, 16.0), (18.5, 16.0), STROKE)),
+        Sky::Drizzle => high.min(falling(p, |p, at| {
+            segment(
+                p,
+                (at.0 + 0.4, at.1 - 1.0),
+                (at.0 - 0.4, at.1 + 1.0),
+                STROKE * 0.8,
+            )
+        })),
+        Sky::Rain => high.min(falling(p, |p, at| {
+            segment(
+                p,
+                (at.0 + 0.8, at.1 - 1.4),
+                (at.0 - 0.8, at.1 + 3.0),
+                STROKE * 0.85,
+            )
+        })),
+        Sky::Snow => high.min(falling(p, |p, at| {
+            disc(p, (at.0, at.1 + if at.0 == 12.5 { 2.2 } else { 0.4 }), 1.35)
+        })),
+        Sky::Thunder => high.min(polygon(
+            p,
+            &[
+                (13.6, 15.0),
+                (10.0, 19.4),
+                (12.3, 19.4),
+                (11.0, 22.4),
+                (15.6, 17.6),
+                (13.2, 17.6),
+                (14.8, 15.0),
+            ],
+        )),
+    }
+}
+
+/// A shape rastered at a size in an ink: the ink everywhere, the shape in
 /// the alpha.
-fn raster(icon: Icon, size: u32, ink: [u8; 3]) -> Frame {
+fn raster_by(size: u32, ink: [u8; 3], distance: impl Fn(Point) -> f32) -> Frame {
     let mut rgba = Vec::with_capacity((size * size * 4) as usize);
     let step = SPAN / size as f32;
     for y in 0..size {
         for x in 0..size {
             let p = (2.0 + (x as f32 + 0.5) * step, 2.0 + (y as f32 + 0.5) * step);
             // Half a pixel either side of the edge is the edge.
-            let cover = (0.5 - distance(icon, p) / step).clamp(0.0, 1.0);
+            let cover = (0.5 - distance(p) / step).clamp(0.0, 1.0);
             rgba.extend_from_slice(&[ink[0], ink[1], ink[2], (cover * 255.0).round() as u8]);
         }
     }
@@ -181,6 +288,17 @@ fn raster(icon: Icon, size: u32, ink: [u8; 3]) -> Frame {
         height: size,
         rgba,
     }
+}
+
+/// One icon rastered at a size in an ink.
+fn raster(icon: Icon, size: u32, ink: [u8; 3]) -> Frame {
+    raster_by(size, ink, |p| distance(icon, p))
+}
+
+/// The sky as a picture `size` pixels square in an ink: what a forecast's
+/// weather looks like, by day or by night.
+pub fn sky(sky: Sky, day: bool, size: u32, ink: [u8; 3]) -> Frame {
+    raster_by(size.max(1), ink, |p| sky_distance(sky, day, p))
 }
 
 /// The icons rastered at one size.
@@ -246,6 +364,65 @@ mod tests {
             }
             assert_eq!(&frame.rgba[..3], &[235, 235, 240], "the ink is the set's");
         }
+    }
+
+    #[test]
+    fn every_sky_is_a_shape_of_its_own_by_day_and_by_night() {
+        const SKIES: [Sky; 8] = [
+            Sky::Clear,
+            Sky::Partly,
+            Sky::Cloudy,
+            Sky::Fog,
+            Sky::Drizzle,
+            Sky::Rain,
+            Sky::Snow,
+            Sky::Thunder,
+        ];
+        let mut seen: Vec<Vec<u8>> = Vec::new();
+        for kind in SKIES {
+            for day in [true, false] {
+                let frame = sky(kind, day, 48, [235, 235, 240]);
+                assert_eq!((frame.width, frame.height), (48, 48));
+                let inked = (0..48 * 48)
+                    .filter(|i| frame.rgba[i * 4 + 3] == 255)
+                    .count();
+                assert!(inked > 60, "{kind:?} has a body: {inked} full pixels");
+                assert!(inked < 48 * 48 * 6 / 10, "{kind:?} is a shape, not a block");
+                for (x, y) in [(0, 0), (47, 0), (0, 47), (47, 47)] {
+                    assert_eq!(alpha(&frame, x, y), 0, "{kind:?} leaves its corners clear");
+                }
+                let alphas: Vec<u8> = frame
+                    .rgba
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|px| px[3])
+                    .collect();
+                // Night differs from day only where a sun would stand.
+                let lit = matches!(kind, Sky::Clear | Sky::Partly);
+                if day || lit {
+                    assert!(
+                        !seen.contains(&alphas),
+                        "{kind:?} (day {day}) is its own shape"
+                    );
+                    seen.push(alphas);
+                } else {
+                    assert!(seen.contains(&alphas), "{kind:?} is the same by night");
+                }
+            }
+        }
+        // The light of a partly clouded sky stops short of its cloud.
+        let partly = |p| sky_distance(Sky::Partly, true, p);
+        assert!(partly((8.0, 8.0)) < 0.0, "the sun's middle");
+        assert!(partly((14.0, 15.5)) < 0.0, "the cloud's middle");
+        assert!(
+            sky_distance(Sky::Rain, true, (12.5, 19.0)) < 0.0,
+            "a drop under the cloud"
+        );
+        assert!(
+            sky_distance(Sky::Cloudy, true, (12.5, 19.0)) > 0.0,
+            "none under a cloud alone"
+        );
     }
 
     #[test]
