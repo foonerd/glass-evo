@@ -222,11 +222,13 @@ pub struct Theme {
     pub weather_align: Align,
     /// `weather.margin`: as `clock.margin`, for the forecast.
     pub weather_margin: f32,
-    /// `weather.ink`, `weather.opacity`, `weather.glass`, `weather.tint`:
-    /// the forecast's own, each the date's unless said.
+    /// `weather.ink`, `weather.opacity`: the forecast's own, as the date's
+    /// are the date's; the ink the theme's unless said.
     pub weather_ink: Option<[u8; 3]>,
-    pub weather_opacity: Option<f32>,
-    pub weather_glass: Option<f32>,
+    pub weather_opacity: f32,
+    /// `weather.glass`, `weather.tint`: the glass behind the forecast and
+    /// its colour, the theme's tint unless said.
+    pub weather_glass: f32,
     pub weather_tint: Option<[u8; 3]>,
     /// `weather.span`: what the forecast shows, today unless said.
     pub weather_span: Span,
@@ -309,8 +311,8 @@ impl Default for Theme {
             weather_align: Align::default(),
             weather_margin: 20.0,
             weather_ink: None,
-            weather_opacity: None,
-            weather_glass: None,
+            weather_opacity: 0.86,
+            weather_glass: 0.55,
             weather_tint: None,
             weather_span: Span::Today,
             date_format: "%A %-d %B".to_string(),
@@ -586,24 +588,16 @@ impl Theme {
                         colour(v).or(self.weather_ink)
                     }
                 }
-                // The word `date` leaves the opacity and the glass the date's.
                 "weather.opacity" => {
-                    self.weather_opacity = if v.eq_ignore_ascii_case("date") {
-                        None
-                    } else {
-                        share(v).or(self.weather_opacity)
-                    }
+                    self.weather_opacity = share(v).unwrap_or(self.weather_opacity)
                 }
                 "weather.glass" => {
-                    self.weather_glass = if v.eq_ignore_ascii_case("date") {
-                        None
-                    } else {
-                        v.parse::<f32>()
-                            .ok()
-                            .filter(|n| n.is_finite())
-                            .map(|n| n.clamp(0.0, 1.0))
-                            .or(self.weather_glass)
-                    }
+                    self.weather_glass = v
+                        .parse::<f32>()
+                        .ok()
+                        .filter(|n| n.is_finite())
+                        .map(|n| n.clamp(0.0, 1.0))
+                        .unwrap_or(self.weather_glass)
                 }
                 "weather.tint" => {
                     self.weather_tint = if v.eq_ignore_ascii_case("tint") {

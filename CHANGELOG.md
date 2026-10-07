@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.47] - 2026-10-07
+
+Andrew: "Global is background, not date - should not be linked at all." Built on Glass 0.8.84.
+
+- **The forecast's colour, opacity, glass and tint are its own.** 0.1.44 made them the date's unless the look said otherwise; nothing links one piece to another now. `weather.ink` and `weather.tint` are the theme's ink and tint unless said, as the clock's and the date's are; `weather.opacity` is 0.86 and `weather.glass` 0.55 unless said, as the date's.
+
 ## [0.1.46] - 2026-10-07
 
 Andrew, on the span's columns and today's line, with mockups drawn by the face itself: "C4 - certainly." and "T21 is a sweetspot." Built on Glass 0.8.82.

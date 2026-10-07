@@ -118,8 +118,8 @@ tint = tint
 # and its highest. It shows only where a place is chosen, on the grid and
 # only: place names its cells as the clock's does (the bottom row unless
 # said; empty hides it), align where it stands inside them, margin as the
-# clock's. Its size, ink, opacity, glass and tint are the date's unless said:
-# ink and tint as the date's, opacity and glass "date" or a number of their own.
+# clock's. Its size, ink, opacity, glass and tint are its own, as the
+# date's are the date's: ink and tint the theme's unless said.
 show = on
 # What it shows: today as a line; the next 24 hours every 2, 3, 4 or 6 hours
 # (hours2, hours3, hours4, hours6) as columns; or the week as seven columns.
@@ -128,8 +128,8 @@ place = bottom left-right
 align = centre middle
 margin = 20
 ink = ink
-opacity = date
-glass = date
+opacity = 0.86
+glass = 0.55
 tint = tint
 
 [measure]

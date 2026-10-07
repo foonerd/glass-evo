@@ -1685,7 +1685,7 @@ pub fn forecast_preview(
     if !theme.weather_show {
         return None;
     }
-    let ink = theme.weather_ink.or(theme.date_ink).unwrap_or(theme.ink);
+    let ink = theme.weather_ink.unwrap_or(theme.ink);
     let mut line = ForecastLine::default();
     let twelve = twelve_hour(&theme.clock_format);
     let (width, height) = line.set(fonts, weather, theme.weather_span, twelve, size, ink, ANY)?;
@@ -1933,8 +1933,8 @@ impl ClockFace {
                     set.push((Piece::Date, sized));
                 }
             }
-            // The forecast after the date, in what it leaves; in the date's
-            // size, ink and opacity unless the look gives it its own.
+            // The forecast after the date, in what it leaves, in its own
+            // size, ink and opacity.
             if let (true, Some(weather)) = (pieces.contains(&Piece::Forecast), weather) {
                 let taken = set.iter().map(|(_, sized)| sized.1 + m.gap).sum::<u32>();
                 let most = if own("measure.weather") {
@@ -1943,7 +1943,7 @@ impl ClockFace {
                     (room.0, room.1.saturating_sub(taken))
                 };
                 let size = px(theme.measure_weather).max(13);
-                let ink = theme.weather_ink.or(theme.date_ink).unwrap_or(theme.ink);
+                let ink = theme.weather_ink.unwrap_or(theme.ink);
                 let twelve = twelve_hour(&theme.clock_format);
                 if let Some(sized) = self.forecast.set(
                     view.fonts,
@@ -1990,10 +1990,7 @@ impl ClockFace {
             let (strength, tint) = match first {
                 Piece::Clock => (theme.clock_glass, theme.clock_tint),
                 Piece::Date => (theme.date_glass, theme.date_tint),
-                Piece::Forecast => (
-                    theme.weather_glass.unwrap_or(theme.date_glass),
-                    theme.weather_tint.or(theme.date_tint),
-                ),
+                Piece::Forecast => (theme.weather_glass, theme.weather_tint),
             };
             glass.behind(frame, (x, y, width, height), about, strength, tint);
             let mut at = y;
@@ -2009,13 +2006,10 @@ impl ClockFace {
                     Piece::Date => self
                         .date
                         .place(frame, across, at, sized.0, theme.date_opacity),
-                    Piece::Forecast => self.forecast.place(
-                        frame,
-                        across,
-                        at,
-                        sized.0,
-                        theme.weather_opacity.unwrap_or(theme.date_opacity),
-                    ),
+                    Piece::Forecast => {
+                        self.forecast
+                            .place(frame, across, at, sized.0, theme.weather_opacity)
+                    }
                 }
                 at += (sized.1 + m.gap) as i32;
             }
