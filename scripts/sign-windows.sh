@@ -43,7 +43,8 @@ for file in "$EXE" "dist/windows/$TOP/remote/windows/install.ps1" "dist/windows/
     --keystore "${TRUSTED_SIGNING_ENDPOINT#https://}" \
     --storepass "$token" \
     --alias "$TRUSTED_SIGNING_ACCOUNT/$TRUSTED_SIGNING_PROFILE" \
-    --tsaurl http://timestamp.acs.microsoft.com --tsmode RFC3161 \
+    --tsaurl http://timestamp.acs.microsoft.com,http://timestamp.digicert.com --tsmode RFC3161 \
+    --tsretries 5 --tsretrywait 15 \
     --name "Glass Remote" --url https://github.com/foonerd/glass-evo \
     "$file"
 done
@@ -57,5 +58,5 @@ echo "$report" | grep -E "Subject:|verification" | sed 's/^/sign-windows:   /'
 echo "$report" | grep -q "Microsoft ID Verified Code Signing PCA" \
   || { echo "sign-windows: glass-evo.exe carries no signature under Microsoft's public code signing CA" >&2; exit 1; }
 echo "$report" | grep -q "Timestamping CA" \
-  || { echo "sign-windows: glass-evo.exe carries no timestamp" >&2; exit 1; }
+  || { echo "sign-windows: glass-evo.exe carries no timestamp" >&2; echo "$report" | sed 's/^/sign-windows:   /' >&2; exit 1; }
 echo "sign-windows: signed and timestamped"
