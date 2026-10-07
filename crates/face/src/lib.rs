@@ -1196,15 +1196,20 @@ fn aligned(
 ) -> (i32, i32) {
     let (x, y, w, h) = (area.0, area.1, area.2 as i32, area.3 as i32);
     let (sw, sh, kx, ky) = (size.0 as i32, size.1 as i32, keep.0 as i32, keep.1 as i32);
+    // Words that fit stand `keep` from the side they are aligned to. Words
+    // larger than the area would then hang off the far side, and "top"
+    // would move them down: so they stand `keep` from the far side instead
+    // and run over the side they are aligned to, "top" always up and
+    // "left" always left.
     let across = match align.across {
-        Across::Left => x + kx,
+        Across::Left => (x + kx).min(x + w - kx - sw),
         Across::Centre => x + (w - sw) / 2,
-        Across::Right => x + w - kx - sw,
+        Across::Right => (x + w - kx - sw).max(x + kx),
     };
     let down = match align.down {
-        Down::Top => y + ky,
+        Down::Top => (y + ky).min(y + h - ky - sh),
         Down::Middle => y + (h - sh) / 2,
-        Down::Bottom => y + h - ky - sh,
+        Down::Bottom => (y + h - ky - sh).max(y + ky),
     };
     (across, down)
 }
@@ -2844,10 +2849,30 @@ mod tests {
         assert_eq!(at("left"), (420, 300));
         assert_eq!(at("bottom"), (600, 390));
         // Larger than its cells and in the middle: over the edges by as
-        // much on either side.
+        // much on either side; aligned to a side, past that side, so that
+        // "left" moves it left and "top" up.
         assert_eq!(
             aligned(area, (800, 100), Align::default(), (20, 10)),
             (300, 300)
+        );
+        let big = |text: &str| aligned(area, (800, 400), theme::align(text).unwrap(), (20, 10));
+        assert_eq!(
+            big("left top"),
+            (180, 90),
+            "its right edge and its foot the margin from the cells'"
+        );
+        assert_eq!(
+            big("right bottom"),
+            (420, 210),
+            "its left edge and its top the margin from the cells'"
+        );
+        assert!(
+            big("left").0 < at("").0 && big("right").0 > at("").0,
+            "left of the middle, right of it"
+        );
+        assert!(
+            big("top").1 < at("").1 && big("bottom").1 > at("").1,
+            "above the middle, below it"
         );
     }
 

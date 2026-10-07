@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.41] - 2026-10-07
+
+Andrew, aligning a clock larger than its row: "Up is down, down is up." Built on Glass 0.8.75.
+
+- **A clock larger than its cells runs over on the side it is aligned to.** Before, its edge on the side named stood its margin from the cells' edge and the excess hung off the far side, so "top" moved a large clock down and "left" moved it right. Now the far edge stands the margin from the cells' far side and the excess runs over the side named: "top" always moves it up and "left" always left. A clock that fits its cells stands as before, and one in the middle runs over equally on both sides, as before.
+
 ## [0.1.40] - 2026-10-07
 
 Andrew, placing the clock in a corner of the grid and finding it twenty units short: "Perhaps a margin should be introduced?" and "meant user controlled margins!"
