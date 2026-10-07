@@ -2,6 +2,14 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.46] - 2026-10-07
+
+Andrew, on the span's columns and today's line, with mockups drawn by the face itself: "C4 - certainly." and "T21 is a sweetspot." Built on Glass 0.8.82.
+
+- **Today's line as T21.** The skies at the forecast's size, the numbers at three fifths of it, and NOW, MIN and MAX set letter-spaced under their numbers, drawn a little up into the numbers' descent; the skies centred on number and caption together.
+- **The columns as C4.** The skies at the forecast's size, the figures at a little over a half of it, the hour or weekday labels at two fifths; half a sky between columns, an eighth of a sky between the rows.
+- The forecast's size now names the skies' height in every span; a size the look comes with is fitted to the cells, a size the user set is kept, as before.
+
 ## [0.1.45] - 2026-10-07
 
 Andrew's step 2 of the weather, from his question of 2026-10-06: "What if user wants a day (24h) forecast, or day every 2 or 4 forecast? Or week forecast?" Built on Glass 0.8.81.

@@ -1087,25 +1087,32 @@ fn degrees(value: f32) -> String {
 /// rastered when what it says, its size or its ink change, not every frame.
 #[derive(Default)]
 struct ForecastLine {
+    /// Today's figures: the temperature now, the low, the slash, the high.
     now: Line,
-    day: Line,
+    lo: Line,
+    slash: Line,
+    hi: Line,
     now_sky: Option<Frame>,
     day_sky: Option<Frame>,
     /// What the skies were drawn for: the two codes, day or night, the
     /// size and the ink.
     skies_for: Option<(u8, bool, u8, u32, [u8; 3])>,
+    /// NOW, MIN and MAX, set letter by letter with room between, for a
+    /// size and an ink.
+    captions: Option<(u32, [u8; 3], [Frame; 3])>,
     /// The words, the size wanted and the room there was, the fit was made
     /// for, and the size it came to.
     fit_for: Option<((String, String), u32, (u32, u32), u32)>,
     has_now: bool,
     /// A span's columns, each a label over a sky over a figure; what they
     /// were fitted for (the span, their words, the size wanted, the room)
-    /// and the size they came to; and their shape: the height of a line
-    /// and the width of a column.
+    /// and the size they came to; and their shape: the width of a column
+    /// and the heights of the label and the figure rows.
     columns: Vec<Column>,
     columns_for: Option<(Span, Vec<Entry>, u32, (u32, u32), u32)>,
     column_width: u32,
-    line_height: u32,
+    label_height: u32,
+    figure_height: u32,
     /// Whether columns stand, or the line.
     spanned: bool,
 }
@@ -1124,6 +1131,21 @@ struct Column {
 /// whether it is day.
 type Entry = (String, String, u8, bool);
 
+/// The forecast's proportions, each a share of its size, which is the
+/// skies': today's numbers, the captions under them and how far the
+/// captions sit up into the numbers' descent; a span's figures and
+/// labels. Andrew's choices of 2026-10-07, T21 and C4.
+const NUMBER: f32 = 0.6;
+const CAPTION: f32 = 0.225;
+const CAPTION_UP: f32 = 0.075;
+const FIGURE: f32 = 0.54;
+const LABEL: f32 = 0.4;
+
+/// A share of a size, in whole pixels and never under eight.
+fn part(size: u32, share: f32) -> u32 {
+    ((size as f32 * share).round() as u32).max(8)
+}
+
 /// Whether a clock pattern shows twelve hours: it names the hour of
 /// twelve or the half of the day.
 fn twelve_hour(pattern: &str) -> bool {
@@ -1134,28 +1156,59 @@ fn twelve_hour(pattern: &str) -> bool {
     ["%I", "%l", "%p", "%P"].iter().any(|c| plain.contains(c))
 }
 
+/// Words set letter by letter with a third of the size between, as a
+/// caption is; nothing with no face to set them in.
+fn caption(fonts: &Fonts, size: u32, ink: [u8; 3], words: &str) -> Option<Frame> {
+    let letters = words
+        .chars()
+        .map(|c| ui::line(fonts, TextStyle::Bold, size, ink, &c.to_string()))
+        .collect::<Option<Vec<Frame>>>()?;
+    let track = (size / 3).max(3);
+    let width = letters.iter().map(|l| l.width).sum::<u32>()
+        + track * letters.len().saturating_sub(1) as u32;
+    let height = letters.iter().map(|l| l.height).max()?;
+    let mut frame = Frame {
+        blend: Default::default(),
+        width: width.max(1),
+        height,
+        rgba: vec![0; (width.max(1) * height * 4) as usize],
+    };
+    let mut x = 0;
+    for letter in &letters {
+        ui::blit(&mut frame, letter, x, 0, 255);
+        x += (letter.width + track) as i32;
+    }
+    Some(frame)
+}
+
 impl ForecastLine {
-    /// The gaps of a line `side` high: between a sky and its figures, and
-    /// between now and the day.
+    /// The gaps of a line whose skies are `side` high: between a sky and
+    /// its figures, and between now and the day.
     fn gaps(side: u32) -> (u32, u32) {
         ((side / 4).max(2), (side * 3 / 4).max(4))
     }
 
-    /// The room the line takes with figures `now` and `day` wide in a line
-    /// `side` high: a sky as wide as the line is high before each.
-    fn room(side: u32, now: Option<u32>, day: u32) -> u32 {
+    /// The room today's line takes with skies `side` high, the figure now
+    /// `now` wide (or none), the day's figures `day` wide together, and
+    /// the numbers and captions `stack` high.
+    fn room(side: u32, now: Option<u32>, day: u32, stack: u32) -> (u32, u32) {
         let (near, apart) = Self::gaps(side);
-        now.map_or(0, |n| side + near + n + apart) + side + near + day
+        (
+            now.map_or(0, |n| side + near + n + apart) + side + near + day,
+            side.max(stack),
+        )
     }
 
-    /// The room `count` columns take, each `width` wide with lines `line`
-    /// high: a gap of half a line between columns, a label, a sky as high
-    /// as a line, a figure, a quarter of a line between each.
-    fn columns_room(count: u32, line: u32, width: u32) -> (u32, u32) {
-        let gap = (line / 2).max(2);
+    /// The room `count` columns take, each `width` wide, with skies
+    /// `side` high and the label and figure rows `label` and `figure`
+    /// high: a gap of half a sky between columns, an eighth of a sky
+    /// between the rows.
+    fn columns_room(count: u32, side: u32, label: u32, figure: u32, width: u32) -> (u32, u32) {
+        let gap = (side / 2).max(2);
+        let between = (side / 8).max(2);
         (
             count * width + count.saturating_sub(1) * gap,
-            3 * line + 2 * (line / 4),
+            label + between + side + between + figure,
         )
     }
 
@@ -1199,9 +1252,10 @@ impl ForecastLine {
         }
     }
 
-    /// Set the forecast at the size wanted, or the largest at which it
-    /// fits in `most`: today's line, or a span's columns; the room it
-    /// takes, or nothing with no face to set it in or nothing to say.
+    /// Set the forecast at the size wanted (the skies' height), or the
+    /// largest at which it fits in `most`: today's line, or a span's
+    /// columns; the room it takes, or nothing with no face to set it in
+    /// or nothing to say.
     fn set(
         &mut self,
         fonts: &Fonts,
@@ -1220,8 +1274,9 @@ impl ForecastLine {
         }
     }
 
-    /// Today as a line: a sky and the temperature now, a sky and the day's
-    /// low and high.
+    /// Today as a line: a sky and the temperature now with NOW under it,
+    /// a sky and the day's low and high with MIN and MAX under them; the
+    /// numbers at three fifths of the skies, the captions under them.
     fn set_line(
         &mut self,
         fonts: &Fonts,
@@ -1231,44 +1286,76 @@ impl ForecastLine {
         most: (u32, u32),
     ) -> Option<(u32, u32)> {
         const ANY: (u32, u32) = (u32::MAX, u32::MAX);
-        let day_words = format!("{} / {}", degrees(weather.low), degrees(weather.high));
+        let (lo_words, hi_words) = (degrees(weather.low), degrees(weather.high));
         let now_words = weather.now.map(degrees);
-        let words = (now_words.clone().unwrap_or_default(), day_words.clone());
+        let words = (
+            now_words.clone().unwrap_or_default(),
+            format!("{lo_words} / {hi_words}"),
+        );
+        let stack_of = |side: u32, number: u32| -> Option<u32> {
+            let cap = ui::line(fonts, TextStyle::Bold, part(side, CAPTION), ink, "N")?.height;
+            Some((number + cap).saturating_sub(part(side, CAPTION_UP)))
+        };
         let size = match &self.fit_for {
             Some((w, s, m, size)) if (w, *s, *m) == (&words, wanted, most) => *size,
             _ => {
                 // Measured at the size wanted, every digit an 8 as a line is.
-                let day = ui::line(fonts, TextStyle::Bold, wanted, ink, &widest(&day_words))?;
+                let number = part(wanted, NUMBER);
+                let lo = ui::line(fonts, TextStyle::Bold, number, ink, &widest(&lo_words))?;
+                let slash = ui::line(fonts, TextStyle::Bold, number, ink, " / ")?;
+                let hi = ui::line(fonts, TextStyle::Bold, number, ink, &widest(&hi_words))?;
                 let now = match &now_words {
                     Some(text) => {
-                        Some(ui::line(fonts, TextStyle::Bold, wanted, ink, &widest(text))?.width)
+                        Some(ui::line(fonts, TextStyle::Bold, number, ink, &widest(text))?.width)
                     }
                     None => None,
                 };
-                let room = (Self::room(day.height, now, day.width), day.height);
+                let day = lo.width + slash.width + hi.width;
+                let room = Self::room(wanted, now, day, stack_of(wanted, lo.height)?);
                 let size = fitted_size(wanted, room, most);
                 self.fit_for = Some((words, wanted, most, size));
                 size
             }
         };
-        let day = self.day.set(fonts, day_words, size, ink, ANY)?;
+        let number = part(size, NUMBER);
+        let lo = self.lo.set(fonts, lo_words, number, ink, ANY)?;
+        let slash = self.slash.set(fonts, " / ".to_string(), number, ink, ANY)?;
+        let hi = self.hi.set(fonts, hi_words, number, ink, ANY)?;
         let now = match now_words {
-            Some(text) => self.now.set(fonts, text, size, ink, ANY),
+            Some(text) => self.now.set(fonts, text, number, ink, ANY),
             None => None,
         };
         self.has_now = now.is_some();
-        let side = day.1;
-        let skies = (weather.code, weather.day, weather.today, side, ink);
+        let cap = part(size, CAPTION);
+        if self.captions.as_ref().map(|(s, i, _)| (*s, *i)) != Some((cap, ink)) {
+            self.captions = Some((
+                cap,
+                ink,
+                [
+                    caption(fonts, cap, ink, "NOW")?,
+                    caption(fonts, cap, ink, "MIN")?,
+                    caption(fonts, cap, ink, "MAX")?,
+                ],
+            ));
+        }
+        let skies = (weather.code, weather.day, weather.today, size, ink);
         if self.skies_for != Some(skies) {
-            self.now_sky = Some(icon::sky(sky_of(weather.code), weather.day, side, ink));
-            self.day_sky = Some(icon::sky(sky_of(weather.today), true, side, ink));
+            self.now_sky = Some(icon::sky(sky_of(weather.code), weather.day, size, ink));
+            self.day_sky = Some(icon::sky(sky_of(weather.today), true, size, ink));
             self.skies_for = Some(skies);
         }
-        Some((Self::room(side, now.map(|n| n.0), day.0), side))
+        let stack = stack_of(size, lo.1)?;
+        Some(Self::room(
+            size,
+            now.map(|n| n.0),
+            lo.0 + slash.0 + hi.0,
+            stack,
+        ))
     }
 
     /// A span as columns, as wide as the widest of them, at the size
-    /// wanted or the largest at which they all fit in `most`.
+    /// wanted or the largest at which they all fit in `most`: the skies
+    /// at the size, the figures and the labels their shares of it.
     fn set_columns(
         &mut self,
         fonts: &Fonts,
@@ -1290,38 +1377,57 @@ impl ForecastLine {
             _ => {
                 // Measured at the size wanted, every digit an 8, the widest
                 // label or figure making every column's width.
-                let (mut width, mut line) = (0, 0);
+                let (mut width, mut label_h, mut figure_h) = (0, 0, 0);
                 for (label, figure, _, _) in &entries {
-                    let l = ui::line(fonts, TextStyle::Bold, wanted, ink, &widest(label))?;
-                    let f = ui::line(fonts, TextStyle::Bold, wanted, ink, &widest(figure))?;
+                    let l = ui::line(
+                        fonts,
+                        TextStyle::Bold,
+                        part(wanted, LABEL),
+                        ink,
+                        &widest(label),
+                    )?;
+                    let f = ui::line(
+                        fonts,
+                        TextStyle::Bold,
+                        part(wanted, FIGURE),
+                        ink,
+                        &widest(figure),
+                    )?;
                     width = width.max(l.width).max(f.width);
-                    line = line.max(l.height).max(f.height);
+                    label_h = label_h.max(l.height);
+                    figure_h = figure_h.max(f.height);
                 }
-                let room = Self::columns_room(count, line, width.max(line));
+                let room = Self::columns_room(count, wanted, label_h, figure_h, width.max(wanted));
                 let size = fitted_size(wanted, room, most);
                 self.columns_for = Some((span, entries.clone(), wanted, most, size));
                 size
             }
         };
         self.columns.resize_with(entries.len(), Column::default);
-        let (mut width, mut line) = (0, 0);
+        let (mut width, mut label_h, mut figure_h) = (0, 0, 0);
         for (column, (label, figure, _, _)) in self.columns.iter_mut().zip(&entries) {
-            let l = column.label.set(fonts, label.clone(), size, ink, ANY)?;
-            let f = column.figure.set(fonts, figure.clone(), size, ink, ANY)?;
+            let l = column
+                .label
+                .set(fonts, label.clone(), part(size, LABEL), ink, ANY)?;
+            let f = column
+                .figure
+                .set(fonts, figure.clone(), part(size, FIGURE), ink, ANY)?;
             width = width.max(l.0).max(f.0);
-            line = line.max(l.1).max(f.1);
+            label_h = label_h.max(l.1);
+            figure_h = figure_h.max(f.1);
         }
-        let width = width.max(line);
+        let width = width.max(size);
         for (column, (_, _, code, day)) in self.columns.iter_mut().zip(&entries) {
-            let key = (*code, *day, line, ink);
+            let key = (*code, *day, size, ink);
             if column.sky_for != Some(key) {
-                column.sky = Some(icon::sky(sky_of(*code), *day, line, ink));
+                column.sky = Some(icon::sky(sky_of(*code), *day, size, ink));
                 column.sky_for = Some(key);
             }
         }
         self.column_width = width;
-        self.line_height = line;
-        Some(Self::columns_room(count, line, width))
+        self.label_height = label_h;
+        self.figure_height = figure_h;
+        Some(Self::columns_room(count, size, label_h, figure_h, width))
     }
 
     /// The forecast in the middle of a width, at an opacity.
@@ -1334,34 +1440,66 @@ impl ForecastLine {
     }
 
     fn place_line(&self, frame: &mut Frame, x: i32, y: i32, width: u32, opacity: f32) {
-        let Some(day_sky) = self.day_sky.as_ref() else {
+        let (Some(day_sky), Some((_, _, captions))) =
+            (self.day_sky.as_ref(), self.captions.as_ref())
+        else {
             return;
         };
         let side = day_sky.width;
         let (near, apart) = Self::gaps(side);
         let now = self.has_now.then_some(self.now.room.0);
-        let mut at = x + (width as i32 - Self::room(side, now, self.day.room.0) as i32) / 2;
+        let day = self.lo.room.0 + self.slash.room.0 + self.hi.room.0;
+        let number_h = self.lo.room.1;
+        let stack = (number_h + captions[0].height).saturating_sub(part(side, CAPTION_UP));
+        let (total, row_h) = Self::room(side, now, day, stack);
+        let mut at = x + (width as i32 - total as i32) / 2;
+        let sky_y = y + (row_h as i32 - side as i32) / 2;
+        let num_y = y + (row_h as i32 - stack as i32) / 2;
+        let cap_y = num_y + number_h as i32 - part(side, CAPTION_UP) as i32;
         let alpha = share(opacity, 255);
+        let under = |frame: &mut Frame, caption: &Frame, left: i32, over: u32| {
+            ui::blit(
+                frame,
+                caption,
+                left + (over as i32 - caption.width as i32) / 2,
+                cap_y,
+                alpha,
+            );
+        };
         if let (Some(room), Some(sky)) = (now, self.now_sky.as_ref()) {
-            ui::blit(frame, sky, at, y, alpha);
+            ui::blit(frame, sky, at, sky_y, alpha);
             at += (side + near) as i32;
-            self.now.place(frame, at, y, room, opacity);
+            self.now.place(frame, at, num_y, room, opacity);
+            under(frame, &captions[0], at, room);
             at += (room + apart) as i32;
         }
-        ui::blit(frame, day_sky, at, y, alpha);
+        ui::blit(frame, day_sky, at, sky_y, alpha);
         at += (side + near) as i32;
-        self.day.place(frame, at, y, self.day.room.0, opacity);
+        self.lo.place(frame, at, num_y, self.lo.room.0, opacity);
+        under(frame, &captions[1], at, self.lo.room.0);
+        at += self.lo.room.0 as i32;
+        self.slash
+            .place(frame, at, num_y, self.slash.room.0, opacity);
+        at += self.slash.room.0 as i32;
+        self.hi.place(frame, at, num_y, self.hi.room.0, opacity);
+        under(frame, &captions[2], at, self.hi.room.0);
     }
 
     fn place_columns(&self, frame: &mut Frame, x: i32, y: i32, width: u32, opacity: f32) {
         let count = self.columns.len() as u32;
-        if count == 0 {
+        let Some(side) = self
+            .columns
+            .first()
+            .and_then(|c| c.sky.as_ref())
+            .map(|s| s.width)
+        else {
             return;
-        }
-        let (line, column_width) = (self.line_height, self.column_width);
-        let gap = (line / 2).max(2);
-        let between = line / 4;
-        let total = Self::columns_room(count, line, column_width).0;
+        };
+        let (label_h, figure_h, column_width) =
+            (self.label_height, self.figure_height, self.column_width);
+        let gap = (side / 2).max(2);
+        let between = (side / 8).max(2);
+        let total = Self::columns_room(count, side, label_h, figure_h, column_width).0;
         let mut at = x + (width as i32 - total as i32) / 2;
         let alpha = share(opacity, 255);
         for column in &self.columns {
@@ -1371,14 +1509,14 @@ impl ForecastLine {
                     frame,
                     sky,
                     at + (column_width as i32 - sky.width as i32) / 2,
-                    y + (line + between) as i32,
+                    y + (label_h + between) as i32,
                     alpha,
                 );
             }
             column.figure.place(
                 frame,
                 at,
-                y + (2 * line + 2 * between) as i32,
+                y + (label_h + between + side + between) as i32,
                 column_width,
                 opacity,
             );
@@ -3688,12 +3826,14 @@ mod tests {
         assert_eq!(degrees(13.6), "14\u{b0}");
         assert_eq!(degrees(-0.4), "0\u{b0}", "minus nought is nought");
         assert_eq!(degrees(-3.5), "-4\u{b0}");
-        // A line 40 high: a sky of 40, 10 to its figures, 30 between now and the day.
+        // Skies 40 high: 10 to their figures, 30 between now and the day;
+        // the line as high as the skies, or as the numbers with their
+        // captions where those stand taller.
         assert_eq!(ForecastLine::gaps(40), (10, 30));
-        assert_eq!(ForecastLine::room(40, None, 120), 40 + 10 + 120);
+        assert_eq!(ForecastLine::room(40, None, 120, 36), (40 + 10 + 120, 40));
         assert_eq!(
-            ForecastLine::room(40, Some(60), 120),
-            (40 + 10 + 60 + 30) + (40 + 10 + 120),
+            ForecastLine::room(40, Some(60), 120, 44),
+            ((40 + 10 + 60 + 30) + (40 + 10 + 120), 44),
             "now, then the day"
         );
     }
@@ -3778,7 +3918,21 @@ mod tests {
         empty.hours.clear();
         assert!(ForecastLine::entries(&empty, Span::Hours(2), false).is_empty());
         // The room: columns side by side with half a line between, three rows high.
-        assert_eq!(ForecastLine::columns_room(4, 20, 50), (4 * 50 + 3 * 10, 70));
+        assert_eq!(
+            ForecastLine::columns_room(4, 40, 16, 22, 50),
+            (4 * 50 + 3 * 20, 16 + 5 + 40 + 5 + 22),
+            "columns side by side with half a sky between, the rows an eighth apart"
+        );
+        assert_eq!(
+            part(80, NUMBER),
+            48,
+            "today's numbers at three fifths of the skies"
+        );
+        assert_eq!(
+            (part(80, FIGURE), part(80, LABEL)),
+            (43, 32),
+            "a span's figures and labels"
+        );
     }
 
     #[test]
