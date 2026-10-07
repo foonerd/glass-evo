@@ -2,6 +2,14 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.42] - 2026-10-07
+
+Andrew, on the accepted clock: "Now - wire date exactly the same way in grid. We are moving the face to grid and only." Built on Glass 0.8.75.
+
+- **The date on the grid.** `[date] place` takes cells of the grid beside its three words (`top`, `above`, `below`), as the clock's place names them; `[date] align` is where it stands inside them and `[date] margin` its room from the sides it is aligned to, 20 unless said. A size that came with the look is fitted to the cells; a size the user set is kept; a date larger than its cells runs over the side it is aligned to, as the clock does.
+- **Together on the grid.** A clock and a date on the same cells with the same alignment stand one under the other on one glass, the clock first; the date is set first and the clock takes what it leaves of the cells' height, as before the grid.
+- **Nothing else moves.** A date with one of its three words stands as before; a clock with no place stands in the middle of what a date off the grid leaves, and a date on the grid leaves it the whole.
+
 ## [0.1.41] - 2026-10-07
 
 Andrew, aligning a clock larger than its row: "Up is down, down is up." Built on Glass 0.8.75.

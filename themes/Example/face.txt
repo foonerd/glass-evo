@@ -95,9 +95,14 @@ card = #17171a
 
 [date]
 # The date when nothing plays: on or off. Its place: "top" of the screen,
-# on a glass of its own, or "above" or "below" the clock, on the clock's.
+# on a glass of its own, or "above" or "below" the clock, on the clock's;
+# or cells of the grid, as the clock's place names them ("top right"), with
+# align for where it stands inside them and margin as the clock's. A date on
+# the same cells as the clock, aligned the same, stands under it on its glass.
 show = off
 place = top
+align = centre middle
+margin = 20
 # The date as a pattern: %A %-d %B is Thursday 1 October, %a %-d %b %Y is
 # Thu 1 Oct 2026, %d/%m/%Y is 01/10/2026, %Y-%m-%d is 2026-10-01.
 format = %A %-d %B

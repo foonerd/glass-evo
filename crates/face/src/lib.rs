@@ -1153,6 +1153,14 @@ fn idle_layout(
     layout
 }
 
+/// One of the idle screen's elements, in the order they stand in when
+/// they share cells.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Piece {
+    Clock,
+    Date,
+}
+
 /// The idle screen's grid: three rows by three columns in equal thirds
 /// over the picture above the bar. The lines between the cells and the
 /// edges, in pixels.
@@ -1247,7 +1255,7 @@ impl ClockFace {
         const ANY: (u32, u32) = (u32::MAX, u32::MAX);
         let own = |key: &str| view.settings.contains_key(key);
         let widest = view.width.saturating_sub(2 * (m.margin + pad.0));
-        let date = if theme.date_show {
+        let date = if theme.date_show && theme.date_cells.is_none() {
             let size = px(theme.measure_date).max(13);
             self.date.set(
                 view,
@@ -1330,44 +1338,96 @@ impl ClockFace {
             }
         }
         let mut drawn = clock.is_some() || date.is_some();
-        // The clock on the grid: in the cells it occupies, where it is
-        // aligned inside them. A size that came with the look is fitted to
-        // the cells less a margin and the least a glass keeps; a size the
+        // On the grid: the clock and the date in the cells each occupies,
+        // where each is aligned inside them; the two on the same cells with
+        // the same alignment stand one under the other on one glass, the
+        // clock first. A size that came with the look is fitted to the
+        // cells less the margin and the least a glass keeps; a size the
         // user set is the user's, and runs over the cells and the screen's
-        // edges where it is larger, as it does off the grid.
+        // edges where it is larger, as it does off the grid. The date is
+        // set first, the clock in what it leaves of the cells' height.
+        let grid = Grid::new((view.width, view.height), below);
+        let mut blocks: Vec<(Cells, Align, f32, Vec<Piece>)> = Vec::new();
+        let mut on_grid = |piece: Piece, on: Cells, align: Align, margin: f32| match blocks
+            .iter_mut()
+            .find(|b| b.0 == on && b.1 == align)
+        {
+            Some(block) => block.3.push(piece),
+            None => blocks.push((on, align, margin, vec![piece])),
+        };
         if let (true, Some(on)) = (theme.clock_show, theme.clock_cells) {
-            let area = Grid::new((view.width, view.height), below).area(on);
-            let margin = px(theme.clock_margin);
-            let most = if own("measure.clock") {
-                ANY
-            } else {
-                (
-                    area.2.saturating_sub(2 * (margin + least.0)),
-                    area.3.saturating_sub(2 * (margin + least.1)),
-                )
-            };
-            let size = px(theme.measure_clock).max(24);
-            if let Some((w, h)) = self.set_clock(view, theme, glass.look.accent, wall, size, most) {
-                let about = (
-                    pad_about(area.2.saturating_sub(2 * margin), w, pad.0, least.0),
-                    pad_about(area.3.saturating_sub(2 * margin), h, pad.1, least.1),
-                );
-                let (x, y) = aligned(
-                    area,
-                    (w, h),
-                    theme.clock_align,
-                    (margin + about.0, margin + about.1),
-                );
-                glass.behind(
-                    frame,
-                    (x, y, w, h),
-                    about,
-                    theme.clock_glass,
-                    theme.clock_tint,
-                );
-                self.put_clock(frame, x, y, w, theme);
-                drawn = true;
+            on_grid(Piece::Clock, on, theme.clock_align, theme.clock_margin);
+        }
+        if let (true, Some(on)) = (theme.date_show, theme.date_cells) {
+            on_grid(Piece::Date, on, theme.date_align, theme.date_margin);
+        }
+        for (on, align, margin, pieces) in blocks {
+            let area = grid.area(on);
+            let margin = px(margin);
+            let room = (
+                area.2.saturating_sub(2 * (margin + least.0)),
+                area.3.saturating_sub(2 * (margin + least.1)),
+            );
+            let mut set: Vec<(Piece, (u32, u32))> = Vec::new();
+            if pieces.contains(&Piece::Date) {
+                let most = if own("measure.date") { ANY } else { room };
+                let size = px(theme.measure_date).max(13);
+                if let Some(sized) = self.set_date(view, theme, wall, size, most) {
+                    set.push((Piece::Date, sized));
+                }
             }
+            if pieces.contains(&Piece::Clock) {
+                let taken = set.first().map_or(0, |(_, sized)| sized.1 + m.gap);
+                let most = if own("measure.clock") {
+                    ANY
+                } else {
+                    (room.0, room.1.saturating_sub(taken))
+                };
+                let size = px(theme.measure_clock).max(24);
+                if let Some(sized) =
+                    self.set_clock(view, theme, glass.look.accent, wall, size, most)
+                {
+                    set.insert(0, (Piece::Clock, sized));
+                }
+            }
+            let Some(first) = set.first().map(|(piece, _)| *piece) else {
+                continue;
+            };
+            let width = set.iter().map(|(_, sized)| sized.0).max().unwrap_or(0);
+            let height =
+                set.iter().map(|(_, sized)| sized.1).sum::<u32>() + m.gap * (set.len() as u32 - 1);
+            let about = (
+                pad_about(area.2.saturating_sub(2 * margin), width, pad.0, least.0),
+                pad_about(area.3.saturating_sub(2 * margin), height, pad.1, least.1),
+            );
+            let (x, y) = aligned(
+                area,
+                (width, height),
+                align,
+                (margin + about.0, margin + about.1),
+            );
+            let (strength, tint) = match first {
+                Piece::Clock => (theme.clock_glass, theme.clock_tint),
+                Piece::Date => (theme.date_glass, theme.date_tint),
+            };
+            glass.behind(frame, (x, y, width, height), about, strength, tint);
+            let mut at = y;
+            for (piece, sized) in &set {
+                // Each to the side the block is aligned to.
+                let across = match align.across {
+                    Across::Left => x,
+                    Across::Centre => x + (width as i32 - sized.0 as i32) / 2,
+                    Across::Right => x + width as i32 - sized.0 as i32,
+                };
+                match piece {
+                    Piece::Clock => self.put_clock(frame, across, at, sized.0, theme),
+                    Piece::Date => self
+                        .date
+                        .place(frame, across, at, sized.0, theme.date_opacity),
+                }
+                at += (sized.1 + m.gap) as i32;
+            }
+            drawn = true;
         }
         drawn
     }
@@ -1407,6 +1467,24 @@ impl ClockFace {
                 now_ms: view.now_ms,
             },
             size,
+        )
+    }
+
+    /// Set the date at a size, or the largest that fits `most`; the room it takes.
+    fn set_date(
+        &mut self,
+        view: &View,
+        theme: &Theme,
+        wall: &Wall,
+        size: u32,
+        most: (u32, u32),
+    ) -> Option<(u32, u32)> {
+        self.date.set(
+            view,
+            format_time(&theme.date_format, wall),
+            size,
+            theme.date_ink.unwrap_or(theme.ink),
+            most,
         )
     }
 
@@ -2874,6 +2952,64 @@ mod tests {
         assert!(
             big("top").1 < big("").1 && big("bottom").1 > big("").1,
             "above the middle, below it"
+        );
+    }
+
+    #[test]
+    fn a_date_on_the_grid_leaves_the_clock_the_middle_and_shares_a_glass_with_it() {
+        let fonts = Fonts::default();
+        let stopped = input("stop");
+        let ink = |frame: &Frame, (x, y, w, h): (i32, i32, u32, u32)| {
+            let mut inked = 0;
+            for row in y.max(0) as u32..(y.max(0) as u32 + h).min(frame.height) {
+                for column in x.max(0) as u32..(x.max(0) as u32 + w).min(frame.width) {
+                    if frame.rgba[((row * frame.width + column) * 4 + 3) as usize] > 0 {
+                        inked += 1;
+                    }
+                }
+            }
+            inked
+        };
+        let drawn = |pairs: &[(&str, &str)]| {
+            let set = settings(pairs);
+            let mut v = view(&stopped, &fonts, 0);
+            v.settings = &set;
+            let mut frame = blank();
+            Face::new().draw(&mut frame, &v);
+            frame
+        };
+        let dial = [
+            ("clock.face", "dial"),
+            ("glass.frost", "off"),
+            ("date.show", "on"),
+        ];
+        // With no font to set the date in, the clock stands as a clock
+        // alone does; a date on the grid leaves it there too.
+        let alone = drawn(&[dial[0], dial[1]]);
+        let on_grid = drawn(&[dial[0], dial[1], dial[2], ("date.place", "top right")]);
+        let upper = (427, 0, 426, 200);
+        assert_eq!(
+            ink(&on_grid, upper),
+            ink(&alone, upper),
+            "on the grid the date leaves the clock where a clock alone stands"
+        );
+        // With no font the date sets no type; the clock on the same cells
+        // still stands in them, and nothing is drawn where neither is.
+        let shared = drawn(&[
+            dial[0],
+            dial[1],
+            dial[2],
+            ("clock.place", "bottom left"),
+            ("date.place", "bottom left"),
+        ]);
+        assert!(
+            ink(&shared, (0, 432, 427, 216)) > 2000,
+            "the clock in the shared cell"
+        );
+        assert_eq!(
+            ink(&shared, (427, 0, 853, 432)),
+            0,
+            "and nothing elsewhere above the bar"
         );
     }
 

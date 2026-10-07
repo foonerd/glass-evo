@@ -194,6 +194,14 @@ pub struct Theme {
     pub date_format: String,
     /// `date.place`: `top` of the screen, or `above` or `below` the clock.
     pub date_place: DatePlace,
+    /// `date.place` as cells of the grid: where the date occupies cells
+    /// instead of standing by its three words. None is the arrangement
+    /// before the grid.
+    pub date_cells: Option<Cells>,
+    /// `date.align`: where the date stands inside the cells it occupies.
+    pub date_align: Align,
+    /// `date.margin`: as `clock.margin`, for the date.
+    pub date_margin: f32,
     /// `date.ink`, `date.opacity`: the date's own.
     pub date_ink: Option<[u8; 3]>,
     pub date_opacity: f32,
@@ -255,6 +263,9 @@ impl Default for Theme {
             date_show: false,
             date_format: "%A %-d %B".to_string(),
             date_place: DatePlace::Top,
+            date_cells: None,
+            date_align: Align::default(),
+            date_margin: 20.0,
             date_ink: None,
             date_opacity: 0.86,
             date_glass: 0.55,
@@ -506,13 +517,20 @@ impl Theme {
                         self.date_format = format;
                     }
                 }
-                "date.place" => {
-                    self.date_place = match v.to_ascii_lowercase().as_str() {
-                        "top" => DatePlace::Top,
-                        "above" => DatePlace::Above,
-                        "below" => DatePlace::Below,
-                        _ => self.date_place,
+                // One of the three words from before the grid, or cells of the grid.
+                "date.place" => match v.to_ascii_lowercase().as_str() {
+                    "top" => (self.date_place, self.date_cells) = (DatePlace::Top, None),
+                    "above" => (self.date_place, self.date_cells) = (DatePlace::Above, None),
+                    "below" => (self.date_place, self.date_cells) = (DatePlace::Below, None),
+                    _ => {
+                        if let Some(on) = cells(v) {
+                            self.date_cells = Some(on);
+                        }
                     }
+                },
+                "date.align" => self.date_align = align(v).unwrap_or(self.date_align),
+                "date.margin" => {
+                    self.date_margin = units(v, 0.0, 200.0).unwrap_or(self.date_margin)
                 }
                 "date.glass" => {
                     self.date_glass = v
@@ -664,6 +682,26 @@ mod tests {
                 down: Down::Bottom
             }
         );
+        // The date: its three old words take it off the grid, cells put it on.
+        theme.apply(&settings(&[
+            ("date.place", "top right"),
+            ("date.align", "right top"),
+            ("date.margin", "0"),
+        ]));
+        assert_eq!(theme.date_cells, cells("top right"));
+        assert_eq!(
+            theme.date_align,
+            Align {
+                across: Across::Right,
+                down: Down::Top
+            }
+        );
+        assert_eq!(theme.date_margin, 0.0);
+        theme.apply(&settings(&[("date.place", "below")]));
+        assert_eq!(
+            (theme.date_place, theme.date_cells),
+            (DatePlace::Below, None)
+        );
         theme.apply(&settings(&[("clock.place", ""), ("clock.margin", "0")]));
         assert_eq!(theme.clock_margin, 0.0, "no margin: the corner");
         theme.apply(&settings(&[("clock.margin", "wide")]));
@@ -797,6 +835,8 @@ mod tests {
             "date.show",
             "date.format",
             "date.place",
+            "date.align",
+            "date.margin",
             "clock.place",
             "clock.align",
             "clock.margin",
@@ -820,7 +860,7 @@ mod tests {
         }
         assert_eq!(
             written.len(),
-            42,
+            44,
             "and nothing but what the face reads and the line for a list"
         );
     }
