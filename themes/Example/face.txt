@@ -134,6 +134,17 @@ cold = #3b8bff
 warm = #ff4b2b
 heat.days = off
 heat.date = off
+# The skies move: each its own small motion at its own pace (rain and snow
+# fall, the sun's rays turn, clouds sway, a star winks beside the moon,
+# heat haze shimmers), the same frame on every screen. Off, every sky
+# stands still and the screen refreshes as it does without a forecast.
+# thunder is the flashes, the one motion that can startle: off unless said.
+motion = on
+thunder = off
+# The skies in colour: a yellow sun (red when scorching), a dark storm with
+# a yellow bolt, blues for drizzle and rain, white snow, greys for cloud and
+# fog, murkier for heavy weather. Off, every sky is in the forecast's ink.
+colour = on
 place = bottom left-right
 align = centre middle
 margin = 20

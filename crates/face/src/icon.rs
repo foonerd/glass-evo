@@ -181,9 +181,14 @@ fn cloud(p: Point, floor: f32) -> f32 {
 
 /// A sun: a disc with eight rays about it.
 fn sun(p: Point, c: Point, radius: f32) -> f32 {
+    sun_turned(p, c, radius, 0.0)
+}
+
+/// A sun with its rays turned by an angle.
+fn sun_turned(p: Point, c: Point, radius: f32, angle: f32) -> f32 {
     let mut nearest = disc(p, c, radius);
     for ray in 0..8 {
-        let (sin, cos) = (ray as f32 * std::f32::consts::FRAC_PI_4).sin_cos();
+        let (sin, cos) = (ray as f32 * std::f32::consts::FRAC_PI_4 + angle).sin_cos();
         let (from, to) = (radius * 1.5, radius * 2.05);
         nearest = nearest.min(segment(
             p,
@@ -299,6 +304,376 @@ fn raster(icon: Icon, size: u32, ink: [u8; 3]) -> Frame {
 /// weather looks like, by day or by night.
 pub fn sky(sky: Sky, day: bool, size: u32, ink: [u8; 3]) -> Frame {
     raster_by(size.max(1), ink, |p| sky_distance(sky, day, p))
+}
+
+/// How a sky moves (from 0.1.51): the frames of its cycle and how long
+/// each stands in milliseconds, or none for thunder, which flashes
+/// instead. One motion per sky, slow enough to read as weather: the sun's
+/// rays turn once a minute, a star beside the moon winks, clouds and fog
+/// sway, drizzle, rain and snow fall, heat haze shimmers.
+pub fn cycle(sky: Sky, day: bool, hot: bool) -> Option<(u32, u32)> {
+    match sky {
+        Sky::Clear if day && hot => Some((6, 333)),
+        Sky::Clear if day => Some((15, 500)),
+        Sky::Clear => Some((10, 500)),
+        Sky::Partly | Sky::Cloudy | Sky::Fog => Some((8, 1000)),
+        Sky::Drizzle => Some((8, 250)),
+        Sky::Rain => Some((8, 125)),
+        Sky::Snow => Some((12, 167)),
+        Sky::Thunder => None,
+    }
+}
+
+/// The frame of a sky's cycle a moment (milliseconds) falls on; 0 for a
+/// sky that stands still.
+pub fn frame_at(sky: Sky, day: bool, hot: bool, t_ms: u64) -> u32 {
+    cycle(sky, day, hot).map_or(0, |(frames, ms)| {
+        ((t_ms / ms as u64) % frames as u64) as u32
+    })
+}
+
+/// Whether thunder flashes at a moment: for a tenth of a second, every
+/// eight to twenty seconds, the same on every screen since the moment
+/// alone decides it.
+pub fn flash_at(t_ms: u64) -> bool {
+    const CYCLE: u64 = 14_000;
+    let k = t_ms / CYCLE;
+    let jitter = (k.wrapping_mul(2_654_435_761) >> 7) % 6_001;
+    let at = t_ms % CYCLE;
+    at >= jitter && at < jitter + 100
+}
+
+/// What a part of a sky is painted with.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Paint {
+    Sun,
+    HotSun,
+    Haze,
+    Moon,
+    Star,
+    Cloud,
+    Murk,
+    Storm,
+    StormLit,
+    Fog,
+    Drizzle,
+    Rain,
+    Snow,
+    Bolt,
+    BoltLit,
+}
+
+/// The colours the skies are painted with: the drama's, or the ink alone
+/// for a theme that keeps its skies in one colour. Each a colour and an
+/// alpha, so the storm's cloud can stand a little dark in the ink too.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Palette {
+    ink: [u8; 3],
+    colour: bool,
+}
+
+impl Palette {
+    /// The skies in colour.
+    pub fn colour(ink: [u8; 3]) -> Self {
+        Self { ink, colour: true }
+    }
+
+    /// The skies in the ink alone.
+    pub fn ink(ink: [u8; 3]) -> Self {
+        Self { ink, colour: false }
+    }
+
+    /// Whether the skies are in colour.
+    pub fn is_colour(&self) -> bool {
+        self.colour
+    }
+
+    /// A paint's colour and alpha.
+    fn of(&self, paint: Paint) -> ([u8; 3], u8) {
+        if !self.colour {
+            return match paint {
+                Paint::Storm => (self.ink, 196),
+                _ => (self.ink, 255),
+            };
+        }
+        match paint {
+            Paint::Sun => ([255, 211, 77], 255),
+            Paint::HotSun => ([255, 106, 43], 255),
+            Paint::Haze => ([255, 160, 80], 230),
+            Paint::Moon => ([232, 232, 240], 255),
+            Paint::Star => ([255, 255, 255], 255),
+            Paint::Cloud => ([216, 219, 227], 255),
+            Paint::Murk => ([122, 128, 144], 255),
+            Paint::Storm => ([96, 101, 118], 255),
+            Paint::StormLit => ([201, 204, 214], 255),
+            Paint::Fog => ([184, 188, 198], 255),
+            Paint::Drizzle => ([143, 197, 255], 255),
+            Paint::Rain => ([90, 169, 255], 255),
+            Paint::Snow => ([255, 255, 255], 255),
+            Paint::Bolt => ([255, 211, 77], 255),
+            Paint::BoltLit => ([255, 243, 176], 255),
+        }
+    }
+}
+
+/// Whether a WMO code is heavy weather: heavy rain or snow, violent
+/// showers; such a sky is murkier and more falls from it.
+pub fn heavy(code: u8) -> bool {
+    matches!(code, 65 | 67 | 75 | 82 | 86)
+}
+
+type Part<'a> = (Paint, Box<dyn Fn(Point) -> f32 + 'a>);
+
+/// The parts of a sky at a point of its cycle, `t` from 0 to 1, each with
+/// its paint, in the order they are laid down.
+fn parts(sky: Sky, day: bool, hot: bool, heavy: bool, t: f32, flash: bool) -> Vec<Part<'static>> {
+    use std::f32::consts::TAU;
+    let sway = (TAU * t).sin() * 0.8;
+    // A mark falling under the cloud: along `travel` units and round again,
+    // each mark a part of the way ahead of the last; heavy weather adds a fourth.
+    let fall =
+        move |k: usize, travel: f32| (t * travel + k as f32 * travel / 3.0) % travel - travel / 2.0;
+    let marks: &'static [Point] = if heavy {
+        &[(7.0, 18.0), (10.5, 18.0), (14.5, 18.0), (18.0, 18.0)]
+    } else {
+        &[(8.5, 18.0), (12.5, 18.0), (16.5, 18.0)]
+    };
+    let falling = move |mark: Box<dyn Fn(usize, Point) -> f32>| -> Box<dyn Fn(Point) -> f32> {
+        Box::new(move |_p| {
+            marks
+                .iter()
+                .enumerate()
+                .map(|(k, at)| mark(k, *at))
+                .fold(f32::MAX, f32::min)
+        })
+    };
+    let high: Box<dyn Fn(Point) -> f32> = Box::new(|p| cloud(p, 14.0));
+    match sky {
+        Sky::Clear if day && hot => vec![
+            (
+                Paint::HotSun,
+                Box::new(move |p| sun_turned(p, (12.0, 9.0), 3.4, TAU * t / 8.0)),
+            ),
+            (
+                Paint::Haze,
+                Box::new(move |p| {
+                    let mut nearest = f32::MAX;
+                    for (k, y) in [(0usize, 18.4), (1, 21.2)] {
+                        let mut x = 6.0;
+                        let mut last = (x, y + 0.6 * (TAU * t + k as f32 * 1.8).sin());
+                        while x < 18.0 {
+                            x += 2.0;
+                            let next = (
+                                x,
+                                y + 0.6 * (TAU * (x - 6.0) / 8.0 + TAU * t + k as f32 * 1.8).sin(),
+                            );
+                            nearest = nearest.min(segment(p, last, next, STROKE * 0.7));
+                            last = next;
+                        }
+                    }
+                    nearest
+                }),
+            ),
+        ],
+        Sky::Clear if day => vec![(
+            Paint::Sun,
+            Box::new(move |p| sun_turned(p, (12.0, 12.0), 4.2, TAU * t / 8.0)),
+        )],
+        Sky::Clear => {
+            let mut v: Vec<Part> = vec![(Paint::Moon, Box::new(|p| moon(p, (11.0, 12.0), 7.5)))];
+            if t >= 0.01 {
+                // A small star beside it, which winks out on the cycle's first frame.
+                v.push((
+                    Paint::Star,
+                    Box::new(|p| {
+                        segment(p, (17.2, 6.0), (20.8, 6.0), 0.55).min(segment(
+                            p,
+                            (19.0, 4.2),
+                            (19.0, 7.8),
+                            0.55,
+                        ))
+                    }),
+                ));
+            }
+            v
+        }
+        Sky::Partly => {
+            let low = move |p: Point| cloud((p.0 - 1.5 - sway, p.1), 19.0);
+            vec![
+                (Paint::Cloud, Box::new(low)),
+                (
+                    if day { Paint::Sun } else { Paint::Moon },
+                    // The light stops short of the cloud, so the two read apart.
+                    Box::new(move |p| {
+                        let light = if day {
+                            sun(p, (8.0, 8.0), 2.9)
+                        } else {
+                            moon(p, (8.0, 8.5), 4.6)
+                        };
+                        light.max(1.3 - low(p))
+                    }),
+                ),
+            ]
+        }
+        Sky::Cloudy => vec![(
+            Paint::Cloud,
+            Box::new(move |p| cloud((p.0 - sway, p.1), 17.5)),
+        )],
+        Sky::Fog => vec![(
+            Paint::Fog,
+            Box::new(move |p| {
+                let drift = |k: f32| (TAU * t + k * 2.1).sin() * 0.9;
+                segment(p, (5.5 + drift(0.0), 8.0), (18.5 + drift(0.0), 8.0), STROKE)
+                    .min(segment(
+                        p,
+                        (3.5 + drift(1.0), 12.0),
+                        (20.5 + drift(1.0), 12.0),
+                        STROKE,
+                    ))
+                    .min(segment(
+                        p,
+                        (5.5 + drift(2.0), 16.0),
+                        (18.5 + drift(2.0), 16.0),
+                        STROKE,
+                    ))
+            }),
+        )],
+        Sky::Drizzle => vec![
+            (if heavy { Paint::Murk } else { Paint::Cloud }, high),
+            (
+                Paint::Drizzle,
+                Box::new(move |p| {
+                    marks
+                        .iter()
+                        .enumerate()
+                        .map(|(k, at)| {
+                            let y = at.1 + fall(k, 4.0);
+                            segment(
+                                p,
+                                (at.0 + 0.4, y - 1.0),
+                                (at.0 - 0.4, y + 1.0),
+                                STROKE * 0.8,
+                            )
+                        })
+                        .fold(f32::MAX, f32::min)
+                }),
+            ),
+        ],
+        Sky::Rain => vec![
+            (if heavy { Paint::Murk } else { Paint::Cloud }, high),
+            (
+                Paint::Rain,
+                Box::new(move |p| {
+                    marks
+                        .iter()
+                        .enumerate()
+                        .map(|(k, at)| {
+                            let y = at.1 + fall(k, 4.5);
+                            segment(
+                                p,
+                                (at.0 + 0.8, y - 1.4),
+                                (at.0 - 0.8, y + 3.0),
+                                STROKE * 0.85,
+                            )
+                        })
+                        .fold(f32::MAX, f32::min)
+                }),
+            ),
+        ],
+        Sky::Snow => vec![
+            (if heavy { Paint::Murk } else { Paint::Cloud }, high),
+            (
+                Paint::Snow,
+                Box::new(move |p| {
+                    marks
+                        .iter()
+                        .enumerate()
+                        .map(|(k, at)| {
+                            let x = at.0 + (TAU * 2.0 * t + k as f32 * 2.0).sin() * 0.6;
+                            let y = at.1 + 1.0 + fall(k, 4.0);
+                            disc(p, (x, y), 1.35)
+                        })
+                        .fold(f32::MAX, f32::min)
+                }),
+            ),
+        ],
+        Sky::Thunder => {
+            let _ = falling;
+            vec![
+                (if flash { Paint::StormLit } else { Paint::Storm }, high),
+                (
+                    if flash { Paint::BoltLit } else { Paint::Bolt },
+                    Box::new(move |p| {
+                        polygon(
+                            p,
+                            &[
+                                (13.6, 15.0),
+                                (10.0, 19.4),
+                                (12.3, 19.4),
+                                (11.0, 22.4),
+                                (15.6, 17.6),
+                                (13.2, 17.6),
+                                (14.8, 15.0),
+                            ],
+                        ) - if flash { 0.5 } else { 0.0 }
+                    }),
+                ),
+            ]
+        }
+    }
+}
+
+/// Parts laid down in order, each in its paint, at a size: a part's cover
+/// over what lies under it.
+fn raster_parts(size: u32, palette: &Palette, parts: &[Part]) -> Frame {
+    let size = size.max(1);
+    let step = SPAN / size as f32;
+    let mut rgba = vec![0u8; (size * size * 4) as usize];
+    for (paint, distance) in parts {
+        let (colour, alpha) = palette.of(*paint);
+        for y in 0..size {
+            for x in 0..size {
+                let p = (2.0 + (x as f32 + 0.5) * step, 2.0 + (y as f32 + 0.5) * step);
+                let cover = (0.5 - distance(p) / step).clamp(0.0, 1.0) * alpha as f32 / 255.0;
+                if cover <= 0.0 {
+                    continue;
+                }
+                let i = ((y * size + x) * 4) as usize;
+                let under = rgba[i + 3] as f32 / 255.0;
+                let out = cover + under * (1.0 - cover);
+                for c in 0..3 {
+                    let mixed = (colour[c] as f32 * cover
+                        + rgba[i + c] as f32 * under * (1.0 - cover))
+                        / out.max(1e-6);
+                    rgba[i + c] = mixed.round().clamp(0.0, 255.0) as u8;
+                }
+                rgba[i + 3] = (out * 255.0).round() as u8;
+            }
+        }
+    }
+    Frame {
+        blend: Default::default(),
+        width: size,
+        height: size,
+        rgba,
+    }
+}
+
+/// A sky's picture at a frame of its cycle (and, for thunder, flashing or
+/// not), `size` pixels square, in the palette's paints: the drama's
+/// colours, or the ink alone.
+pub fn sky_frame(
+    sky: Sky,
+    day: bool,
+    hot: bool,
+    heavy: bool,
+    size: u32,
+    palette: &Palette,
+    frame: u32,
+    flash: bool,
+) -> Frame {
+    let t = cycle(sky, day, hot).map_or(0.0, |(frames, _)| frame as f32 / frames as f32);
+    raster_parts(size, palette, &parts(sky, day, hot, heavy, t, flash))
 }
 
 /// The icons rastered at one size.
@@ -422,6 +797,186 @@ mod tests {
         assert!(
             sky_distance(Sky::Cloudy, true, (12.5, 19.0)) > 0.0,
             "none under a cloud alone"
+        );
+    }
+
+    #[test]
+    fn a_sky_moves_through_its_cycle_and_thunder_flashes_now_and_then() {
+        assert_eq!(cycle(Sky::Rain, true, false), Some((8, 125)));
+        assert_eq!(
+            cycle(Sky::Thunder, true, false),
+            None,
+            "thunder flashes instead"
+        );
+        assert_eq!(frame_at(Sky::Rain, true, false, 0), 0);
+        assert_eq!(frame_at(Sky::Rain, true, false, 125 * 3), 3);
+        assert_eq!(
+            frame_at(Sky::Rain, true, false, 125 * 8),
+            0,
+            "and round again"
+        );
+        assert_eq!(frame_at(Sky::Thunder, true, false, 99_999), 0);
+        let ink = [235, 235, 240];
+        let alphas = |f: &Frame| {
+            f.rgba
+                .iter()
+                .skip(3)
+                .step_by(4)
+                .copied()
+                .collect::<Vec<u8>>()
+        };
+        for (sky, day, hot) in [
+            (Sky::Clear, true, false),
+            (Sky::Clear, true, true),
+            (Sky::Clear, false, false),
+            (Sky::Partly, true, false),
+            (Sky::Cloudy, true, false),
+            (Sky::Fog, true, false),
+            (Sky::Drizzle, true, false),
+            (Sky::Rain, true, false),
+            (Sky::Snow, true, false),
+        ] {
+            let frames = cycle(sky, day, hot).unwrap().0;
+            let first = sky_frame(sky, day, hot, false, 48, &Palette::ink(ink), 0, false);
+            let later = sky_frame(
+                sky,
+                day,
+                hot,
+                false,
+                48,
+                &Palette::ink(ink),
+                frames / 4,
+                false,
+            );
+            assert_ne!(
+                alphas(&first),
+                alphas(&later),
+                "{sky:?} (day {day}, hot {hot}) moves"
+            );
+            assert_eq!((first.width, first.height), (48, 48));
+            for (x, y) in [(0, 0), (47, 0), (0, 47), (47, 47)] {
+                assert_eq!(
+                    alpha(&later, x, y),
+                    0,
+                    "{sky:?} keeps its corners clear as it moves"
+                );
+            }
+        }
+        let still = sky_frame(
+            Sky::Rain,
+            true,
+            false,
+            false,
+            48,
+            &Palette::ink(ink),
+            0,
+            false,
+        );
+        let plain = sky(Sky::Rain, true, 48, ink);
+        assert!(
+            alphas(&still)
+                .iter()
+                .zip(alphas(&plain).iter())
+                .filter(|(a, b)| a != b)
+                .count()
+                < 48 * 48 / 10,
+            "a cycle's first frame is near the still sky"
+        );
+        let dark = sky_frame(
+            Sky::Thunder,
+            true,
+            false,
+            false,
+            48,
+            &Palette::ink(ink),
+            0,
+            false,
+        );
+        let lit = sky_frame(
+            Sky::Thunder,
+            true,
+            false,
+            false,
+            48,
+            &Palette::ink(ink),
+            0,
+            true,
+        );
+        let light = |f: &Frame| alphas(f).iter().map(|a| *a as u32).sum::<u32>();
+        assert!(light(&lit) > light(&dark), "a flash lights the sky");
+        // Flashes: a tenth of a second, eight to twenty seconds apart, over an hour.
+        let mut flashes = Vec::new();
+        let mut t = 0;
+        while t < 3_600_000 {
+            if flash_at(t) && !flash_at(t.saturating_sub(10)) {
+                flashes.push(t);
+            }
+            t += 10;
+        }
+        assert!(
+            flashes.len() > 150 && flashes.len() < 460,
+            "{} flashes in an hour",
+            flashes.len()
+        );
+        for pair in flashes.windows(2) {
+            let gap = pair[1] - pair[0];
+            assert!((8_000..=20_000).contains(&gap), "a gap of {gap} ms");
+        }
+        // The drama's colours: a yellow sun, a dark storm with a yellow bolt; the ink alone otherwise.
+        let sunny = sky_frame(
+            Sky::Clear,
+            true,
+            false,
+            false,
+            48,
+            &Palette::colour(ink),
+            0,
+            false,
+        );
+        let mid = ((24 * 48 + 24) * 4) as usize;
+        assert_eq!(
+            &sunny.rgba[mid..mid + 3],
+            &[255, 211, 77],
+            "the sun yellow at its middle"
+        );
+        let plain = sky_frame(
+            Sky::Clear,
+            true,
+            false,
+            false,
+            48,
+            &Palette::ink(ink),
+            0,
+            false,
+        );
+        assert_eq!(&plain.rgba[mid..mid + 3], &ink, "the ink alone when said");
+        assert!(
+            heavy(65) && heavy(82) && !heavy(61),
+            "heavy rain and violent showers are heavy"
+        );
+        let heavy_rain = sky_frame(
+            Sky::Rain,
+            true,
+            false,
+            true,
+            48,
+            &Palette::ink(ink),
+            0,
+            false,
+        );
+        let rain = sky_frame(
+            Sky::Rain,
+            true,
+            false,
+            false,
+            48,
+            &Palette::ink(ink),
+            0,
+            false,
+        );
+        assert!(
+            light(&heavy_rain) > light(&rain),
+            "more falls from a heavy sky"
         );
     }
 

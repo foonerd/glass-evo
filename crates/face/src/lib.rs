@@ -15,7 +15,7 @@
 
 use overlay::face::{
     blur, fit_art, read_art, read_covering, read_to_string, sky_of, ui, Command, Fonts, Frame,
-    Metadata, PointerKind, TextStyle, Weather,
+    Metadata, PointerKind, Sky, TextStyle, Weather,
 };
 use overlay::{Cover, Overlay, View};
 
@@ -25,7 +25,7 @@ pub use overlay::face::{
     FontFiles, Fonts as FaceFonts, Frame as FaceFrame, Weather as FaceWeather,
 };
 use std::collections::hash_map::DefaultHasher;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
@@ -1093,11 +1093,15 @@ struct ForecastLine {
     lo: Line,
     slash: Line,
     hi: Line,
-    now_sky: Option<Frame>,
-    day_sky: Option<Frame>,
-    /// What the skies were drawn for: the two codes, day or night, the
-    /// size and the ink.
-    skies_for: Option<(u8, bool, u8, u32, [u8; 3])>,
+    /// The skies' cycles, and which sky stands for now and for the day.
+    skies: Skies,
+    now_key: Option<SkyKey>,
+    day_key: Option<SkyKey>,
+    /// Whether the skies move, whether thunder flashes, whether they are
+    /// in colour.
+    motion: bool,
+    flashes: bool,
+    colour: bool,
     /// NOW, MIN and MAX, set letter by letter with room between, for a
     /// size and an ink; and how far up into the numbers' descent they sit.
     captions: Option<(u32, [u8; 3], [Frame; 3])>,
@@ -1128,8 +1132,104 @@ struct Column {
     /// slash and the high for a day, so each temperature can take its own
     /// colour.
     parts: Vec<Line>,
-    sky: Option<Frame>,
-    sky_for: Option<(u8, bool, u32, [u8; 3])>,
+    sky: Option<SkyKey>,
+}
+
+/// A sky as the cache knows it: its kind (as a number, the kind having no
+/// hash of its own), day or night, hot or not, heavy or not, its side, in
+/// colour or not, and its ink.
+type SkyKey = (u8, bool, bool, bool, u32, bool, [u8; 3]);
+
+/// The skies' frames: each cycle rastered once per key and kept while the
+/// sky is on show; thunder's two frames, dark and lit.
+#[derive(Default)]
+struct Skies {
+    frames: HashMap<SkyKey, (Sky, Vec<Frame>)>,
+}
+
+impl Skies {
+    /// The key of a sky at a temperature (hot from 30 °C) and a code
+    /// (heavy by it), a side, in colour or not, in an ink.
+    fn key(
+        sky: Sky,
+        day: bool,
+        celsius: f32,
+        code: u8,
+        side: u32,
+        colour: bool,
+        ink: [u8; 3],
+    ) -> SkyKey {
+        (
+            sky as u8,
+            day,
+            celsius >= 30.0,
+            icon::heavy(code),
+            side.max(1),
+            colour,
+            ink,
+        )
+    }
+
+    /// Have the cycle for a key rastered.
+    fn keep(&mut self, key: SkyKey, sky: Sky) {
+        self.frames.entry(key).or_insert_with(|| {
+            let (_, day, hot, heavy, side, colour, ink) = key;
+            let palette = if colour {
+                icon::Palette::colour(ink)
+            } else {
+                icon::Palette::ink(ink)
+            };
+            let frames = if sky == Sky::Thunder {
+                vec![
+                    icon::sky_frame(sky, day, hot, heavy, side, &palette, 0, false),
+                    icon::sky_frame(sky, day, hot, heavy, side, &palette, 0, true),
+                ]
+            } else {
+                let count = icon::cycle(sky, day, hot).map_or(1, |(frames, _)| frames);
+                (0..count)
+                    .map(|frame| {
+                        icon::sky_frame(sky, day, hot, heavy, side, &palette, frame, false)
+                    })
+                    .collect()
+            };
+            (sky, frames)
+        });
+    }
+
+    /// Which frame of a key stands at a moment: 0 while the skies do not
+    /// move, thunder's lit frame in a flash, else the cycle's.
+    fn index(&self, key: SkyKey, t_ms: u64, motion: bool, flashes: bool) -> usize {
+        let Some((sky, frames)) = self.frames.get(&key) else {
+            return 0;
+        };
+        if !motion {
+            0
+        } else if *sky == Sky::Thunder {
+            usize::from(flashes && icon::flash_at(t_ms))
+        } else {
+            (icon::frame_at(*sky, key.1, key.2, t_ms) as usize).min(frames.len().saturating_sub(1))
+        }
+    }
+
+    /// The frame of a key at a moment.
+    fn at(&self, key: SkyKey, t_ms: u64, motion: bool, flashes: bool) -> Option<&Frame> {
+        let (_, frames) = self.frames.get(&key)?;
+        frames.get(self.index(key, t_ms, motion, flashes))
+    }
+
+    /// Let go of every cycle but those in use.
+    fn keep_only(&mut self, used: &[SkyKey]) {
+        self.frames.retain(|key, _| used.contains(key));
+    }
+}
+
+/// A temperature in Celsius, from the reading's unit.
+fn celsius(temp: f32, unit: &str) -> f32 {
+    if unit.eq_ignore_ascii_case("F") {
+        (temp - 32.0) * 5.0 / 9.0
+    } else {
+        temp
+    }
 }
 
 /// What a column says: its label, its figure in parts (each its words and
@@ -1432,12 +1532,30 @@ impl ForecastLine {
                 ],
             ));
         }
-        let skies = (weather.code, weather.day, weather.today, side, ink);
-        if self.skies_for != Some(skies) {
-            self.now_sky = Some(icon::sky(sky_of(weather.code), weather.day, side, ink));
-            self.day_sky = Some(icon::sky(sky_of(weather.today), true, side, ink));
-            self.skies_for = Some(skies);
-        }
+        // The skies for now and for the day, hot and heavy by their own reading.
+        let now_key = Skies::key(
+            sky_of(weather.code),
+            weather.day,
+            celsius(weather.now.unwrap_or(weather.high), &weather.unit),
+            weather.code,
+            side,
+            self.colour,
+            ink,
+        );
+        let day_key = Skies::key(
+            sky_of(weather.today),
+            true,
+            celsius(weather.high, &weather.unit),
+            weather.today,
+            side,
+            self.colour,
+            ink,
+        );
+        self.skies.keep(now_key, sky_of(weather.code));
+        self.skies.keep(day_key, sky_of(weather.today));
+        self.skies.keep_only(&[now_key, day_key]);
+        self.now_key = Some(now_key);
+        self.day_key = Some(day_key);
         let stack = stack_of(size, lo.1)?;
         Some(Self::room(
             side,
@@ -1529,31 +1647,77 @@ impl ForecastLine {
             figure_h = figure_h.max(fh);
         }
         let width = width.max(size);
-        for (column, (_, _, code, day)) in self.columns.iter_mut().zip(&entries) {
-            let key = (*code, *day, size, ink);
-            if column.sky_for != Some(key) {
-                column.sky = Some(icon::sky(sky_of(*code), *day, size, ink));
-                column.sky_for = Some(key);
-            }
+        // Each column's sky, hot by its own temperature (an hour's, a day's
+        // high) and heavy by its code.
+        let mut used = Vec::with_capacity(entries.len());
+        for (column, (_, parts, code, day)) in self.columns.iter_mut().zip(&entries) {
+            let temp = parts.iter().filter_map(|p| p.1).fold(f32::MIN, f32::max);
+            let key = Skies::key(
+                sky_of(*code),
+                *day,
+                celsius(temp, &weather.unit),
+                *code,
+                size,
+                self.colour,
+                ink,
+            );
+            self.skies.keep(key, sky_of(*code));
+            column.sky = Some(key);
+            used.push(key);
         }
+        self.skies.keep_only(&used);
         self.column_width = width;
         self.label_height = label_h;
         self.figure_height = figure_h;
         Some(Self::columns_room(count, size, label_h, figure_h, width))
     }
 
-    /// The forecast in the middle of a width, at an opacity.
-    fn place(&self, frame: &mut Frame, x: i32, y: i32, width: u32, opacity: f32) {
-        if self.spanned {
-            self.place_columns(frame, x, y, width, opacity);
+    /// How the skies are drawn from here on: moving or still, thunder
+    /// flashing or not, in colour or in the ink.
+    fn drama(&mut self, motion: bool, flashes: bool, colour: bool) {
+        self.motion = motion;
+        self.flashes = flashes;
+        self.colour = colour;
+    }
+
+    /// What the moving skies on show stand at, into a stamp: each sky's
+    /// frame at the moment, so a display redraws when a frame changes and
+    /// not before; nothing while the skies stand still.
+    fn stamp(&self, t_ms: u64, h: &mut impl Hasher) {
+        if !self.motion {
+            return;
+        }
+        let keys = if self.spanned {
+            self.columns
+                .iter()
+                .filter_map(|c| c.sky)
+                .collect::<Vec<_>>()
         } else {
-            self.place_line(frame, x, y, width, opacity);
+            [self.now_key, self.day_key].into_iter().flatten().collect()
+        };
+        for key in keys {
+            self.skies.index(key, t_ms, true, self.flashes).hash(h);
         }
     }
 
-    fn place_line(&self, frame: &mut Frame, x: i32, y: i32, width: u32, opacity: f32) {
+    /// The sky a key stands at, at a moment.
+    fn sky_at(&self, key: Option<SkyKey>, t_ms: u64) -> Option<&Frame> {
+        key.and_then(|k| self.skies.at(k, t_ms, self.motion, self.flashes))
+    }
+
+    /// The forecast in the middle of a width, at an opacity, its skies at
+    /// the frame a moment falls on.
+    fn place(&self, frame: &mut Frame, x: i32, y: i32, width: u32, opacity: f32, t_ms: u64) {
+        if self.spanned {
+            self.place_columns(frame, x, y, width, opacity, t_ms);
+        } else {
+            self.place_line(frame, x, y, width, opacity, t_ms);
+        }
+    }
+
+    fn place_line(&self, frame: &mut Frame, x: i32, y: i32, width: u32, opacity: f32, t_ms: u64) {
         let (Some(day_sky), Some((_, _, captions))) =
-            (self.day_sky.as_ref(), self.captions.as_ref())
+            (self.sky_at(self.day_key, t_ms), self.captions.as_ref())
         else {
             return;
         };
@@ -1578,7 +1742,7 @@ impl ForecastLine {
                 alpha,
             );
         };
-        if let (Some(room), Some(sky)) = (now, self.now_sky.as_ref()) {
+        if let (Some(room), Some(sky)) = (now, self.sky_at(self.now_key, t_ms)) {
             ui::blit(frame, sky, at, sky_y, alpha);
             at += (side + near) as i32;
             self.now.place(frame, at, num_y, room, opacity);
@@ -1597,12 +1761,20 @@ impl ForecastLine {
         under(frame, &captions[2], at, self.hi.room.0);
     }
 
-    fn place_columns(&self, frame: &mut Frame, x: i32, y: i32, width: u32, opacity: f32) {
+    fn place_columns(
+        &self,
+        frame: &mut Frame,
+        x: i32,
+        y: i32,
+        width: u32,
+        opacity: f32,
+        t_ms: u64,
+    ) {
         let count = self.columns.len() as u32;
         let Some(side) = self
             .columns
             .first()
-            .and_then(|c| c.sky.as_ref())
+            .and_then(|c| self.sky_at(c.sky, t_ms))
             .map(|s| s.width)
         else {
             return;
@@ -1616,7 +1788,7 @@ impl ForecastLine {
         let alpha = share(opacity, 255);
         for column in &self.columns {
             column.label.place(frame, at, y, column_width, opacity);
-            if let Some(sky) = column.sky.as_ref() {
+            if let Some(sky) = self.sky_at(column.sky, t_ms) {
                 ui::blit(
                     frame,
                     sky,
@@ -1792,6 +1964,7 @@ pub fn forecast_preview(
     weather: &Weather,
     size: u32,
     _wall: &Wall,
+    t_ms: u64,
 ) -> Option<Frame> {
     const ANY: (u32, u32) = (u32::MAX, u32::MAX);
     let theme = Theme::resolve(None, keys);
@@ -1800,6 +1973,11 @@ pub fn forecast_preview(
     }
     let ink = theme.weather_ink.unwrap_or(theme.ink);
     let mut line = ForecastLine::default();
+    line.drama(
+        theme.weather_motion,
+        theme.weather_thunder,
+        theme.weather_colour,
+    );
     let twelve = twelve_hour(&theme.clock_format);
     let heat = Heat::from(&theme, weather);
     let (width, height) = line.set(
@@ -1818,7 +1996,7 @@ pub fn forecast_preview(
         height,
         rgba: vec![0; (width * height * 4) as usize],
     };
-    line.place(&mut frame, 0, 0, width, 1.0);
+    line.place(&mut frame, 0, 0, width, 1.0, t_ms);
     Some(frame)
 }
 
@@ -2069,6 +2247,11 @@ impl ClockFace {
                 let ink = theme.weather_ink.unwrap_or(theme.ink);
                 let twelve = twelve_hour(&theme.clock_format);
                 let heat = Heat::from(theme, weather);
+                self.forecast.drama(
+                    theme.weather_motion,
+                    theme.weather_thunder,
+                    theme.weather_colour,
+                );
                 if let Some(sized) = self.forecast.set(
                     view.fonts,
                     weather,
@@ -2131,10 +2314,14 @@ impl ClockFace {
                     Piece::Date => self
                         .date
                         .place(frame, across, at, sized.0, theme.date_opacity),
-                    Piece::Forecast => {
-                        self.forecast
-                            .place(frame, across, at, sized.0, theme.weather_opacity)
-                    }
+                    Piece::Forecast => self.forecast.place(
+                        frame,
+                        across,
+                        at,
+                        sized.0,
+                        theme.weather_opacity,
+                        view.now_ms,
+                    ),
                 }
                 at += (sized.1 + m.gap) as i32;
             }
@@ -2390,6 +2577,9 @@ impl Face {
                 for day in &w.days {
                     (day.weekday, day.code, whole(day.low), whole(day.high)).hash(&mut h);
                 }
+                // The moving skies' frames at this moment; nothing while they
+                // stand still.
+                self.clock.forecast.stamp(view.now_ms, &mut h);
             }
         }
         h.finish()
@@ -4109,6 +4299,83 @@ mod tests {
         theme.weather_ink = Some(ink);
         let heat = Heat::from(&theme, &weather).unwrap();
         assert_eq!(heat.of(53.6), ink, "53.6 °F is 12 °C: the forecast's ink");
+    }
+
+    #[test]
+    fn the_skies_move_only_with_the_switch_and_the_stamp_follows_their_frames() {
+        let ink = [242, 242, 245];
+        let mut line = ForecastLine::default();
+        let rain = Skies::key(Sky::Rain, true, 12.0, 61, 32, true, ink);
+        line.skies.keep(rain, Sky::Rain);
+        line.now_key = Some(rain);
+        let (frames, ms) = icon::cycle(Sky::Rain, true, false).unwrap();
+        let stamp = |line: &ForecastLine, t: u64| {
+            let mut h = DefaultHasher::new();
+            line.stamp(t, &mut h);
+            h.finish()
+        };
+        line.drama(false, false, true);
+        assert_eq!(
+            stamp(&line, 0),
+            stamp(&line, u64::from(ms)),
+            "still skies stamp nothing of the moment"
+        );
+        assert_eq!(
+            line.skies.index(rain, u64::from(ms) * 5, false, false),
+            0,
+            "and stand on their first frame"
+        );
+        line.drama(true, false, true);
+        assert_ne!(
+            stamp(&line, 0),
+            stamp(&line, u64::from(ms)),
+            "moving skies stamp their frame"
+        );
+        assert_eq!(
+            stamp(&line, 0),
+            stamp(&line, u64::from(ms * frames)),
+            "and the same frame again a cycle on"
+        );
+        assert_eq!(
+            line.skies.index(rain, u64::from(ms) * 5, true, false),
+            5 % frames as usize
+        );
+        assert_eq!(
+            line.skies.frames[&rain].1.len(),
+            frames as usize,
+            "the whole cycle is kept"
+        );
+        let thunder = Skies::key(Sky::Thunder, true, 12.0, 95, 32, true, ink);
+        line.skies.keep(thunder, Sky::Thunder);
+        let lit = (0..30_000u64)
+            .step_by(10)
+            .find(|t| icon::flash_at(*t))
+            .unwrap();
+        assert_eq!(
+            line.skies.index(thunder, lit, true, false),
+            0,
+            "no flashes unless said"
+        );
+        assert_eq!(
+            line.skies.index(thunder, lit, true, true),
+            1,
+            "lit in a flash"
+        );
+        assert!(
+            Skies::key(Sky::Clear, true, 30.0, 0, 32, true, ink).2,
+            "hot at 30 °C and above"
+        );
+        assert!(!Skies::key(Sky::Clear, true, 29.0, 0, 32, true, ink).2);
+        assert!(
+            Skies::key(Sky::Rain, true, 10.0, 65, 32, true, ink).3,
+            "heavy rain is heavy"
+        );
+        assert_eq!(celsius(86.0, "F"), 30.0);
+        line.skies.keep_only(&[thunder]);
+        assert!(
+            !line.skies.frames.contains_key(&rain),
+            "a sky off show is let go"
+        );
     }
 
     #[test]

@@ -2,6 +2,15 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.51] - 2026-10-08
+
+Andrew's step 4 of the weather: "Now - Dramatise icons. Snow, thunderstorm, rain, drizzle, heat, etc. I am sure we can add some light frame animations here." and "If Dramatise is off - should not affect current refresh rate." Built on Glass 0.8.86.
+
+- **The skies move.** Each sky keeps its shape and gains one small motion at its own pace: rain and drizzle fall, snow drifts with a sway, the sun's rays turn once a minute, a star winks beside the moon, clouds and fog sway, heat haze shimmers under the sun from 30 °C, and thunder's cloud darkens with the bolt under it. A moving sky is a cycle of frames rastered once per size and ink; the wall clock picks the frame, so every screen and the likeness show the same frame at the same moment, and the face asks the display to redraw only when a frame changes, at the sky's own pace. `[weather] motion`, on unless said; off, every sky stands still and nothing about the refresh changes.
+- **The skies in colour**, `[weather] colour`, on unless said: a yellow sun and a red one when scorching, a pale moon with a white star, clouds and fog in greys, drizzle and rain in blues, snow white, the storm's cloud dark with a yellow bolt, and heavy weather (heavy rain or snow, violent showers, by the reading's code) murkier with more falling from it. Off, every sky is in the forecast's ink as before.
+- **Thunder's flashes**, `[weather] thunder`, off unless said: the bolt and the cloud light up for a tenth of a second every eight to twenty seconds, the same on every screen.
+- **For a page** `forecast_preview` draws the frame of its moment, so the likeness moves with the screen.
+
 ## [0.1.50] - 2026-10-07
 
 Andrew's step 3 of the weather: "Forecast - add Heatmap toggle/slider - perhaps color picker for start and end? with some logical defaults? This is for numbers only. Also, second toggle - apply to days, still forecast. Apply to date - override date with heatmap - first override exception." Built on Glass 0.8.85.

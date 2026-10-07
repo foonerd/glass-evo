@@ -199,7 +199,14 @@ mod preview {
             FORECAST.with(|line| {
                 let mut line = line.borrow_mut();
                 *line = weather.as_ref().and_then(|weather| {
-                    face::forecast_preview(fonts, &keys, weather, size.clamp(8, 2000), &wall)
+                    face::forecast_preview(
+                        fonts,
+                        &keys,
+                        weather,
+                        size.clamp(8, 2000),
+                        &wall,
+                        epoch_ms,
+                    )
                 });
                 match line.as_ref() {
                     Some(picture) => {

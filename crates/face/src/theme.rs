@@ -243,6 +243,16 @@ pub struct Theme {
     pub weather_warm: [u8; 3],
     pub weather_heat_days: bool,
     pub weather_heat_date: bool,
+    /// `weather.motion`: the skies move, each its own small motion at its
+    /// own pace; on unless said. Off, every sky stands still and nothing
+    /// about the screen's refresh changes. `weather.thunder`: thunder's
+    /// flashes, the one motion that can startle; off unless said.
+    pub weather_motion: bool,
+    pub weather_thunder: bool,
+    /// `weather.colour`: the skies in colour, a yellow sun, a dark storm
+    /// with a yellow bolt, blues for rain, greys for cloud and fog; on
+    /// unless said. Off, every sky is in the forecast's ink.
+    pub weather_colour: bool,
     /// `date.format`: the date as a pattern, `%A %-d %B` for Thursday 1
     /// October, `%d/%m/%Y` for 01/10/2026.
     pub date_format: String,
@@ -331,6 +341,9 @@ impl Default for Theme {
             weather_warm: [255, 75, 43],
             weather_heat_days: false,
             weather_heat_date: false,
+            weather_motion: true,
+            weather_thunder: false,
+            weather_colour: true,
             date_format: "%A %-d %B".to_string(),
             date_place: DatePlace::Top,
             date_cells: None,
@@ -593,6 +606,13 @@ impl Theme {
                 }
                 "weather.heat.date" => {
                     self.weather_heat_date = switch(v).unwrap_or(self.weather_heat_date)
+                }
+                "weather.motion" => self.weather_motion = switch(v).unwrap_or(self.weather_motion),
+                "weather.thunder" => {
+                    self.weather_thunder = switch(v).unwrap_or(self.weather_thunder)
+                }
+                "weather.colour" | "weather.color" => {
+                    self.weather_colour = switch(v).unwrap_or(self.weather_colour)
                 }
                 // Cells of the grid, or nothing: the forecast has no place off it.
                 "weather.place" => {
@@ -962,6 +982,9 @@ mod tests {
             "weather.warm",
             "weather.heat.days",
             "weather.heat.date",
+            "weather.motion",
+            "weather.thunder",
+            "weather.colour",
             "date.format",
             "date.place",
             "date.align",
@@ -989,7 +1012,7 @@ mod tests {
         }
         assert_eq!(
             written.len(),
-            59,
+            62,
             "and nothing but what the face reads and the line for a list"
         );
     }
