@@ -15,7 +15,7 @@ codegen-units = 1
 panic = "abort"
 
 [workspace.package]
-version = "0.1.47"
+version = "0.1.48"
 edition = "2021"
 license = "MIT"
 publish = false

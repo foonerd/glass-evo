@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.48] - 2026-10-07
+
+Andrew: "Forecast 'Today' lost full scale range. All others scale fine." Built on Glass 0.8.84.
+
+- **Today's line reaches as far as it did.** 0.1.46 made today's skies as high as the forecast's size itself, where the line before it was as high as a line of type at that size, about a seventh more; with the numbers at three fifths of the skies, today came out smaller than before at every size. The skies are a line of type high again, the numbers and the captions their shares of that, so the size runs over the same range it did.
+
 ## [0.1.47] - 2026-10-07
 
 Andrew: "Global is background, not date - should not be linked at all." Built on Glass 0.8.84.

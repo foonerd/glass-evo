@@ -1275,8 +1275,10 @@ impl ForecastLine {
     }
 
     /// Today as a line: a sky and the temperature now with NOW under it,
-    /// a sky and the day's low and high with MIN and MAX under them; the
-    /// numbers at three fifths of the skies, the captions under them.
+    /// a sky and the day's low and high with MIN and MAX under them. The
+    /// skies are as high as a line of type at the forecast's size, as the
+    /// line was before the captions, so the size reaches as far as it did;
+    /// the numbers are three fifths of the skies, the captions under them.
     fn set_line(
         &mut self,
         fonts: &Fonts,
@@ -1292,6 +1294,10 @@ impl ForecastLine {
             now_words.clone().unwrap_or_default(),
             format!("{lo_words} / {hi_words}"),
         );
+        // The skies' side at a size: a line of type that high.
+        let side_at = |size: u32| -> Option<u32> {
+            Some(ui::line(fonts, TextStyle::Bold, size, ink, "8")?.height)
+        };
         let stack_of = |side: u32, number: u32| -> Option<u32> {
             let cap = ui::line(fonts, TextStyle::Bold, part(side, CAPTION), ink, "N")?.height;
             Some((number + cap).saturating_sub(part(side, CAPTION_UP)))
@@ -1300,7 +1306,8 @@ impl ForecastLine {
             Some((w, s, m, size)) if (w, *s, *m) == (&words, wanted, most) => *size,
             _ => {
                 // Measured at the size wanted, every digit an 8 as a line is.
-                let number = part(wanted, NUMBER);
+                let side = side_at(wanted)?;
+                let number = part(side, NUMBER);
                 let lo = ui::line(fonts, TextStyle::Bold, number, ink, &widest(&lo_words))?;
                 let slash = ui::line(fonts, TextStyle::Bold, number, ink, " / ")?;
                 let hi = ui::line(fonts, TextStyle::Bold, number, ink, &widest(&hi_words))?;
@@ -1311,13 +1318,14 @@ impl ForecastLine {
                     None => None,
                 };
                 let day = lo.width + slash.width + hi.width;
-                let room = Self::room(wanted, now, day, stack_of(wanted, lo.height)?);
+                let room = Self::room(side, now, day, stack_of(side, lo.height)?);
                 let size = fitted_size(wanted, room, most);
                 self.fit_for = Some((words, wanted, most, size));
                 size
             }
         };
-        let number = part(size, NUMBER);
+        let side = side_at(size)?;
+        let number = part(side, NUMBER);
         let lo = self.lo.set(fonts, lo_words, number, ink, ANY)?;
         let slash = self.slash.set(fonts, " / ".to_string(), number, ink, ANY)?;
         let hi = self.hi.set(fonts, hi_words, number, ink, ANY)?;
@@ -1326,7 +1334,7 @@ impl ForecastLine {
             None => None,
         };
         self.has_now = now.is_some();
-        let cap = part(size, CAPTION);
+        let cap = part(side, CAPTION);
         if self.captions.as_ref().map(|(s, i, _)| (*s, *i)) != Some((cap, ink)) {
             self.captions = Some((
                 cap,
@@ -1338,15 +1346,15 @@ impl ForecastLine {
                 ],
             ));
         }
-        let skies = (weather.code, weather.day, weather.today, size, ink);
+        let skies = (weather.code, weather.day, weather.today, side, ink);
         if self.skies_for != Some(skies) {
-            self.now_sky = Some(icon::sky(sky_of(weather.code), weather.day, size, ink));
-            self.day_sky = Some(icon::sky(sky_of(weather.today), true, size, ink));
+            self.now_sky = Some(icon::sky(sky_of(weather.code), weather.day, side, ink));
+            self.day_sky = Some(icon::sky(sky_of(weather.today), true, side, ink));
             self.skies_for = Some(skies);
         }
-        let stack = stack_of(size, lo.1)?;
+        let stack = stack_of(side, lo.1)?;
         Some(Self::room(
-            size,
+            side,
             now.map(|n| n.0),
             lo.0 + slash.0 + hi.0,
             stack,
