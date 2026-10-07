@@ -2,6 +2,12 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.4] - 2026-10-07
+
+Built on Glass 0.9.3, for the look panel's likeness with Glass 0.9.4.
+
+- **The likeness finds a look's skies by the look's name alone.** `forecast_preview` looked for the look's folder by its `face.txt`, which a page puts only for the saved look; it takes the folder by the look's name under the first of the faces folders now, so a look chosen on its card draws its own skies from the files the page put.
+
 ## [0.2.3] - 2026-10-07
 
 Built on Glass 0.9.3: a face theme's own skies reach the browser views, the remote displays and the look panel's likeness.

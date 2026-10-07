@@ -211,7 +211,7 @@ dependencies = [
 
 [[package]]
 name = "face"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "image",
  "libc",
@@ -314,7 +314,7 @@ dependencies = [
 
 [[package]]
 name = "glass-evo"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "face",
  "glass",
@@ -322,7 +322,7 @@ dependencies = [
 
 [[package]]
 name = "glass-evo-android"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "face",
  "glass",
@@ -330,7 +330,7 @@ dependencies = [
 
 [[package]]
 name = "glass-evo-face"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "face",
  "page",

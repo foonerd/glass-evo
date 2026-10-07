@@ -2099,12 +2099,20 @@ pub fn forecast_preview(
     }
     let ink = theme.weather_ink.unwrap_or(theme.ink);
     let mut line = ForecastLine::default();
-    // The look's own skies, where the page keeps the look under the faces
-    // folder it names; the built-in look has none.
+    // The look's own skies, where the page keeps the look under the first
+    // of the faces folders it names: the folder by the look's name, whether
+    // or not its face.txt is in, since a page may put the skies alone. The
+    // built-in look has none.
     let look_dir = keys
         .get("theme")
-        .and_then(|name| theme_folder(faces, name))
-        .map(|dir| dir.to_string_lossy().into_owned())
+        .map(|name| name.trim())
+        .filter(|name| !name.is_empty() && !name.starts_with('.') && !name.contains(['/', '\\']))
+        .and_then(|name| {
+            faces
+                .split(':')
+                .find(|folder| !folder.is_empty())
+                .map(|folder| Path::new(folder).join(name).to_string_lossy().into_owned())
+        })
         .unwrap_or_default();
     line.sources(&[String::new(), look_dir]);
     line.drama(
