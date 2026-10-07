@@ -36,7 +36,7 @@ pub mod theme;
 pub mod when;
 use icon::Icon;
 use look::Look;
-use theme::{Across, Align, Cells, DatePlace, Down, Theme};
+use theme::{Across, Align, Cells, DatePlace, Down, Span, Theme};
 
 pub use overlay::Wall;
 
@@ -1098,6 +1098,40 @@ struct ForecastLine {
     /// for, and the size it came to.
     fit_for: Option<((String, String), u32, (u32, u32), u32)>,
     has_now: bool,
+    /// A span's columns, each a label over a sky over a figure; what they
+    /// were fitted for (the span, their words, the size wanted, the room)
+    /// and the size they came to; and their shape: the height of a line
+    /// and the width of a column.
+    columns: Vec<Column>,
+    columns_for: Option<(Span, Vec<Entry>, u32, (u32, u32), u32)>,
+    column_width: u32,
+    line_height: u32,
+    /// Whether columns stand, or the line.
+    spanned: bool,
+}
+
+/// One column of a span: its label (the hour, or the weekday), its sky,
+/// and its figure (the temperature, or the low and the high).
+#[derive(Default)]
+struct Column {
+    label: Line,
+    figure: Line,
+    sky: Option<Frame>,
+    sky_for: Option<(u8, bool, u32, [u8; 3])>,
+}
+
+/// What a column says: its label, its figure, the weather's code and
+/// whether it is day.
+type Entry = (String, String, u8, bool);
+
+/// Whether a clock pattern shows twelve hours: it names the hour of
+/// twelve or the half of the day.
+fn twelve_hour(pattern: &str) -> bool {
+    let plain = pattern
+        .replace("%-", "%")
+        .replace("%_", "%")
+        .replace("%0", "%");
+    ["%I", "%l", "%p", "%P"].iter().any(|c| plain.contains(c))
 }
 
 impl ForecastLine {
@@ -1114,10 +1148,81 @@ impl ForecastLine {
         now.map_or(0, |n| side + near + n + apart) + side + near + day
     }
 
+    /// The room `count` columns take, each `width` wide with lines `line`
+    /// high: a gap of half a line between columns, a label, a sky as high
+    /// as a line, a figure, a quarter of a line between each.
+    fn columns_room(count: u32, line: u32, width: u32) -> (u32, u32) {
+        let gap = (line / 2).max(2);
+        (
+            count * width + count.saturating_sub(1) * gap,
+            3 * line + 2 * (line / 4),
+        )
+    }
+
+    /// What a span's columns say, from the reading: the next hours every
+    /// `step` of them, or the week's days.
+    fn entries(weather: &Weather, span: Span, twelve: bool) -> Vec<Entry> {
+        match span {
+            Span::Today => Vec::new(),
+            Span::Hours(step) => weather
+                .hours
+                .iter()
+                .step_by(step.max(1) as usize)
+                .take(24 / step.max(1) as usize)
+                .map(|h| {
+                    let label = if twelve {
+                        let hour = h.hour % 12;
+                        format!(
+                            "{}{}",
+                            if hour == 0 { 12 } else { hour },
+                            if h.hour < 12 { "am" } else { "pm" }
+                        )
+                    } else {
+                        format!("{:02}", h.hour)
+                    };
+                    (label, degrees(h.temp), h.code, h.day)
+                })
+                .collect(),
+            Span::Week => weather
+                .days
+                .iter()
+                .take(7)
+                .map(|d| {
+                    (
+                        when::day_name(d.weekday, true).to_string(),
+                        format!("{} / {}", degrees(d.low), degrees(d.high)),
+                        d.code,
+                        true,
+                    )
+                })
+                .collect(),
+        }
+    }
+
     /// Set the forecast at the size wanted, or the largest at which it
-    /// fits in `most`; the room it takes, or nothing with no face to set
-    /// it in.
+    /// fits in `most`: today's line, or a span's columns; the room it
+    /// takes, or nothing with no face to set it in or nothing to say.
     fn set(
+        &mut self,
+        fonts: &Fonts,
+        weather: &Weather,
+        span: Span,
+        twelve: bool,
+        wanted: u32,
+        ink: [u8; 3],
+        most: (u32, u32),
+    ) -> Option<(u32, u32)> {
+        self.spanned = span != Span::Today;
+        if self.spanned {
+            self.set_columns(fonts, weather, span, twelve, wanted, ink, most)
+        } else {
+            self.set_line(fonts, weather, wanted, ink, most)
+        }
+    }
+
+    /// Today as a line: a sky and the temperature now, a sky and the day's
+    /// low and high.
+    fn set_line(
         &mut self,
         fonts: &Fonts,
         weather: &Weather,
@@ -1133,11 +1238,6 @@ impl ForecastLine {
             Some((w, s, m, size)) if (w, *s, *m) == (&words, wanted, most) => *size,
             _ => {
                 // Measured at the size wanted, every digit an 8 as a line is.
-                let widest = |text: &str| -> String {
-                    text.chars()
-                        .map(|c| if c.is_ascii_digit() { '8' } else { c })
-                        .collect()
-                };
                 let day = ui::line(fonts, TextStyle::Bold, wanted, ink, &widest(&day_words))?;
                 let now = match &now_words {
                     Some(text) => {
@@ -1167,8 +1267,73 @@ impl ForecastLine {
         Some((Self::room(side, now.map(|n| n.0), day.0), side))
     }
 
-    /// The line in the middle of a width, at an opacity.
+    /// A span as columns, as wide as the widest of them, at the size
+    /// wanted or the largest at which they all fit in `most`.
+    fn set_columns(
+        &mut self,
+        fonts: &Fonts,
+        weather: &Weather,
+        span: Span,
+        twelve: bool,
+        wanted: u32,
+        ink: [u8; 3],
+        most: (u32, u32),
+    ) -> Option<(u32, u32)> {
+        const ANY: (u32, u32) = (u32::MAX, u32::MAX);
+        let entries = Self::entries(weather, span, twelve);
+        if entries.is_empty() {
+            return None;
+        }
+        let count = entries.len() as u32;
+        let size = match &self.columns_for {
+            Some((s, e, w, m, size)) if (*s, e, *w, *m) == (span, &entries, wanted, most) => *size,
+            _ => {
+                // Measured at the size wanted, every digit an 8, the widest
+                // label or figure making every column's width.
+                let (mut width, mut line) = (0, 0);
+                for (label, figure, _, _) in &entries {
+                    let l = ui::line(fonts, TextStyle::Bold, wanted, ink, &widest(label))?;
+                    let f = ui::line(fonts, TextStyle::Bold, wanted, ink, &widest(figure))?;
+                    width = width.max(l.width).max(f.width);
+                    line = line.max(l.height).max(f.height);
+                }
+                let room = Self::columns_room(count, line, width.max(line));
+                let size = fitted_size(wanted, room, most);
+                self.columns_for = Some((span, entries.clone(), wanted, most, size));
+                size
+            }
+        };
+        self.columns.resize_with(entries.len(), Column::default);
+        let (mut width, mut line) = (0, 0);
+        for (column, (label, figure, _, _)) in self.columns.iter_mut().zip(&entries) {
+            let l = column.label.set(fonts, label.clone(), size, ink, ANY)?;
+            let f = column.figure.set(fonts, figure.clone(), size, ink, ANY)?;
+            width = width.max(l.0).max(f.0);
+            line = line.max(l.1).max(f.1);
+        }
+        let width = width.max(line);
+        for (column, (_, _, code, day)) in self.columns.iter_mut().zip(&entries) {
+            let key = (*code, *day, line, ink);
+            if column.sky_for != Some(key) {
+                column.sky = Some(icon::sky(sky_of(*code), *day, line, ink));
+                column.sky_for = Some(key);
+            }
+        }
+        self.column_width = width;
+        self.line_height = line;
+        Some(Self::columns_room(count, line, width))
+    }
+
+    /// The forecast in the middle of a width, at an opacity.
     fn place(&self, frame: &mut Frame, x: i32, y: i32, width: u32, opacity: f32) {
+        if self.spanned {
+            self.place_columns(frame, x, y, width, opacity);
+        } else {
+            self.place_line(frame, x, y, width, opacity);
+        }
+    }
+
+    fn place_line(&self, frame: &mut Frame, x: i32, y: i32, width: u32, opacity: f32) {
         let Some(day_sky) = self.day_sky.as_ref() else {
             return;
         };
@@ -1187,6 +1352,46 @@ impl ForecastLine {
         at += (side + near) as i32;
         self.day.place(frame, at, y, self.day.room.0, opacity);
     }
+
+    fn place_columns(&self, frame: &mut Frame, x: i32, y: i32, width: u32, opacity: f32) {
+        let count = self.columns.len() as u32;
+        if count == 0 {
+            return;
+        }
+        let (line, column_width) = (self.line_height, self.column_width);
+        let gap = (line / 2).max(2);
+        let between = line / 4;
+        let total = Self::columns_room(count, line, column_width).0;
+        let mut at = x + (width as i32 - total as i32) / 2;
+        let alpha = share(opacity, 255);
+        for column in &self.columns {
+            column.label.place(frame, at, y, column_width, opacity);
+            if let Some(sky) = column.sky.as_ref() {
+                ui::blit(
+                    frame,
+                    sky,
+                    at + (column_width as i32 - sky.width as i32) / 2,
+                    y + (line + between) as i32,
+                    alpha,
+                );
+            }
+            column.figure.place(
+                frame,
+                at,
+                y + (2 * line + 2 * between) as i32,
+                column_width,
+                opacity,
+            );
+            at += (column_width + gap) as i32;
+        }
+    }
+}
+
+/// A text with every digit an 8, the widest shape words of its kind take.
+fn widest(text: &str) -> String {
+    text.chars()
+        .map(|c| if c.is_ascii_digit() { '8' } else { c })
+        .collect()
 }
 
 /// The clock and the date of the idle screen, and the forecast with them.
@@ -1344,7 +1549,8 @@ pub fn forecast_preview(
     }
     let ink = theme.weather_ink.or(theme.date_ink).unwrap_or(theme.ink);
     let mut line = ForecastLine::default();
-    let (width, height) = line.set(fonts, weather, size, ink, ANY)?;
+    let twelve = twelve_hour(&theme.clock_format);
+    let (width, height) = line.set(fonts, weather, theme.weather_span, twelve, size, ink, ANY)?;
     let mut frame = Frame {
         blend: Default::default(),
         width,
@@ -1600,7 +1806,16 @@ impl ClockFace {
                 };
                 let size = px(theme.measure_weather).max(13);
                 let ink = theme.weather_ink.or(theme.date_ink).unwrap_or(theme.ink);
-                if let Some(sized) = self.forecast.set(view.fonts, weather, size, ink, most) {
+                let twelve = twelve_hour(&theme.clock_format);
+                if let Some(sized) = self.forecast.set(
+                    view.fonts,
+                    weather,
+                    theme.weather_span,
+                    twelve,
+                    size,
+                    ink,
+                    most,
+                ) {
                     set.push((Piece::Forecast, sized));
                 }
             }
@@ -1905,11 +2120,19 @@ impl Face {
             if theme.date_show {
                 format_time(&theme.date_format, tm).hash(&mut h);
             }
-            // What the forecast says, as it is drawn: the skies and whole degrees.
+            // What the forecast says, as it is drawn: the span, the skies and
+            // whole degrees, of today, of the hours and of the days.
             if let (true, Some(w)) = (theme.weather_show, view.input.weather.as_ref()) {
                 let whole = |t: f32| t.round() as i32;
+                theme.weather_span.hash(&mut h);
                 (w.code, w.day, w.today, w.now.map(whole)).hash(&mut h);
                 (whole(w.low), whole(w.high)).hash(&mut h);
+                for hour in &w.hours {
+                    (hour.hour, hour.code, hour.day, whole(hour.temp)).hash(&mut h);
+                }
+                for day in &w.days {
+                    (day.weekday, day.code, whole(day.low), whole(day.high)).hash(&mut h);
+                }
             }
         }
         h.finish()
@@ -3445,6 +3668,8 @@ mod tests {
     /// rain today between 8.9 and 17.2.
     fn forecast() -> Weather {
         Weather {
+            hours: Vec::new(),
+            days: Vec::new(),
             place: "Krakow".into(),
             unit: "C".into(),
             now: Some(13.6),
@@ -3500,6 +3725,60 @@ mod tests {
         let mut playing = input("play");
         playing.weather = Some(forecast());
         assert!(!stands(&playing, &bare));
+    }
+
+    #[test]
+    fn a_span_is_so_many_columns_each_its_hour_or_weekday() {
+        let mut weather = forecast();
+        weather.hours = (0..24)
+            .map(|i| overlay::face::Hour {
+                hour: (15 + i) % 24,
+                temp: 10.0 + i as f32,
+                code: 61,
+                day: (6..=19).contains(&((15 + i) % 24)),
+            })
+            .collect();
+        weather.days = (0..7)
+            .map(|i| overlay::face::Day {
+                weekday: (3 + i) % 7,
+                code: 3,
+                low: 8.0,
+                high: 15.0,
+            })
+            .collect();
+        let labels = |span: Span, twelve: bool| -> Vec<String> {
+            ForecastLine::entries(&weather, span, twelve)
+                .into_iter()
+                .map(|e| e.0)
+                .collect()
+        };
+        assert_eq!(
+            labels(Span::Today, false),
+            Vec::<String>::new(),
+            "today is the line"
+        );
+        assert_eq!(labels(Span::Hours(2), false).len(), 12);
+        assert_eq!(labels(Span::Hours(3), false).len(), 8);
+        assert_eq!(labels(Span::Hours(4), false).len(), 6);
+        assert_eq!(labels(Span::Hours(6), false), ["15", "21", "03", "09"]);
+        assert_eq!(labels(Span::Hours(6), true), ["3pm", "9pm", "3am", "9am"]);
+        assert_eq!(
+            labels(Span::Week, false),
+            ["Wed", "Thu", "Fri", "Sat", "Sun", "Mon", "Tue"]
+        );
+        let figures: Vec<String> = ForecastLine::entries(&weather, Span::Week, false)
+            .into_iter()
+            .map(|e| e.1)
+            .collect();
+        assert_eq!(figures[0], "8° / 15°");
+        assert!(twelve_hour("%-I:%M %p") && twelve_hour("%l:%M"));
+        assert!(!twelve_hour("%H:%M:%S"));
+        // With nothing to say the columns are nothing, as a line with no face.
+        let mut empty = forecast();
+        empty.hours.clear();
+        assert!(ForecastLine::entries(&empty, Span::Hours(2), false).is_empty());
+        // The room: columns side by side with half a line between, three rows high.
+        assert_eq!(ForecastLine::columns_room(4, 20, 50), (4 * 50 + 3 * 10, 70));
     }
 
     #[test]

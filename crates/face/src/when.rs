@@ -22,6 +22,16 @@ const DAYS: [&str; 7] = [
     "Friday",
     "Saturday",
 ];
+/// A weekday's name, 0 Sunday to 6 Saturday, whole or its first three letters.
+pub fn day_name(weekday: u8, short: bool) -> &'static str {
+    let name = DAYS[(weekday as usize) % 7];
+    if short {
+        &name[..3]
+    } else {
+        name
+    }
+}
+
 const MONTHS: [&str; 12] = [
     "January",
     "February",

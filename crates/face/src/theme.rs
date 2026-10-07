@@ -60,6 +60,29 @@ pub enum Down {
     Bottom,
 }
 
+/// What the forecast shows: today as a line, the next 24 hours every so
+/// many as columns, or the week as seven columns.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub enum Span {
+    #[default]
+    Today,
+    Hours(u8),
+    Week,
+}
+
+/// A span from its word: `today`, `hours2`, `hours3`, `hours4`, `hours6`, `week`.
+pub fn span(text: &str) -> Option<Span> {
+    match text.trim().to_ascii_lowercase().as_str() {
+        "today" => Some(Span::Today),
+        "hours2" => Some(Span::Hours(2)),
+        "hours3" => Some(Span::Hours(3)),
+        "hours4" => Some(Span::Hours(4)),
+        "hours6" => Some(Span::Hours(6)),
+        "week" => Some(Span::Week),
+        _ => None,
+    }
+}
+
 /// Where an element stands inside the cells it occupies: in their middle
 /// unless said.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -205,6 +228,8 @@ pub struct Theme {
     pub weather_opacity: Option<f32>,
     pub weather_glass: Option<f32>,
     pub weather_tint: Option<[u8; 3]>,
+    /// `weather.span`: what the forecast shows, today unless said.
+    pub weather_span: Span,
     /// `date.format`: the date as a pattern, `%A %-d %B` for Thursday 1
     /// October, `%d/%m/%Y` for 01/10/2026.
     pub date_format: String,
@@ -287,6 +312,7 @@ impl Default for Theme {
             weather_opacity: None,
             weather_glass: None,
             weather_tint: None,
+            weather_span: Span::Today,
             date_format: "%A %-d %B".to_string(),
             date_place: DatePlace::Top,
             date_cells: None,
@@ -540,6 +566,7 @@ impl Theme {
                 }
                 "date.show" => self.date_show = switch(v).unwrap_or(self.date_show),
                 "weather.show" => self.weather_show = switch(v).unwrap_or(self.weather_show),
+                "weather.span" => self.weather_span = span(v).unwrap_or(self.weather_span),
                 // Cells of the grid, or nothing: the forecast has no place off it.
                 "weather.place" => {
                     self.weather_cells = if v.trim().is_empty() {
@@ -910,6 +937,7 @@ mod tests {
             "clock.tint",
             "date.show",
             "weather.show",
+            "weather.span",
             "date.format",
             "date.place",
             "date.align",
@@ -937,7 +965,7 @@ mod tests {
         }
         assert_eq!(
             written.len(),
-            53,
+            54,
             "and nothing but what the face reads and the line for a list"
         );
     }

@@ -121,6 +121,9 @@ tint = tint
 # clock's. Its size, ink, opacity, glass and tint are the date's unless said:
 # ink and tint as the date's, opacity and glass "date" or a number of their own.
 show = on
+# What it shows: today as a line; the next 24 hours every 2, 3, 4 or 6 hours
+# (hours2, hours3, hours4, hours6) as columns; or the week as seven columns.
+span = today
 place = bottom left-right
 align = centre middle
 margin = 20

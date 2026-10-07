@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.1.45] - 2026-10-07
+
+Andrew's step 2 of the weather, from his question of 2026-10-06: "What if user wants a day (24h) forecast, or day every 2 or 4 forecast? Or week forecast?" Built on Glass 0.8.81.
+
+- **The forecast's span.** `[weather] span`: `today`, a line as before; `hours2`, `hours3`, `hours4` or `hours6`, the next 24 hours every so many as columns, each its hour (in the clock's twelve or twenty-four), its sky by day or by night and its temperature; `week`, seven columns, each its weekday, its sky and its low and high. The columns share the forecast's cells at the forecast's size: a size the look comes with is fitted to the cells, a size the user set is kept. The hours and the days come with the player's reading from Glass 0.8.81.
+- **The module sets the span for a page** as it sets the line, through `forecast_preview`.
+
 ## [0.1.44] - 2026-10-07
 
 Andrew, on the accepted clock and date: "Now - weather. Exact same principle - grid, the same way as clock and date." Built on Glass 0.8.79.
