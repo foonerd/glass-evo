@@ -2,25 +2,40 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
-## [0.1.54] - 2026-10-08
+## [0.2.0] - 2026-10-07
+
+glass-evo 0.2.0 gathers the 0.1 series since the first pair users got, 0.1.10 with Glass 0.8.0 on 1 October 2026, into one release with Glass 0.9.0. Every change below has its own entry under its number.
+
+- **The face costs nothing where nothing changes**, and a change of track is not the player standing still (0.1.11, 0.1.21); a two-sided look keeps its two sides through silence and a mono recording (0.1.12, 0.1.16).
+- **The clock in five faces**, type, seven and sixteen segments, a flip clock, a dial with hands in four styles, each with its colours, drawn as shapes (0.1.15); a size the user sets drawn as set, over the edges (0.1.13).
+- **The idle screen on a grid.** The clock, the date and the forecast each on nine cells above the bar, aligned inside them with a margin of the user's own, a piece larger than its cells running over on the side it is aligned to, pieces on the same cells sharing one glass (0.1.39 to 0.1.44).
+- **The weather.** Today's forecast, the weather now and the day's low and high with their captions; the span, the next hours or the week as columns; the heatmap, numbers only, the week's days and the date by their switches; the skies in colour, moving at their own pace, thunder flashing by its switch, heavy weather murkier (0.1.44 to 0.1.51).
+- **A picture of your own when nothing plays**, in the theme's place, darkened as you say, on the player's screen and, from 0.1.52, on the browser views and the remote displays; the screen off after minutes with nothing playing, over a fade (0.1.32, 0.1.35 to 0.1.36, 0.1.52).
+- **When the player stops**, the idle screen at once or after the plugin's persist period, `[idle] wait` (0.1.53).
+- **Every piece's own colour, strength, background and background colour**, the buttons' included, each from the look's Colours and Backgrounds and from no other piece (0.1.47, 0.1.54); a meter theme's own `face.txt` laid over the chosen look (0.1.26).
+- **The face for a browser.** The module Glass's Manager serves to its Face tab and Anymote, drawing the face over the theme and setting the look panel's likeness, the clock in its faces, the date and a clock in type in the look's own font, the forecast at its moment (0.1.14, 0.1.15, 0.1.43 to 0.1.45, 0.1.51).
+- **The face on remote displays**, the bundles for Linux, Windows and Android beside the component, bringing themselves up to date (0.1.18 to 0.1.20, 0.1.30 to 0.1.31).
+- **With the themes.** Text fields with a font of their own, the radio icons by signal and mono, the volume number's words, a cue track's type, rotation quality pacing the turning, a Lyrion server's covers, the caches bounded, the screen taken on a DSI panel at every boot, no black frame at a countdown's end (0.1.22 to 0.1.25, 0.1.27 to 0.1.29, 0.1.33 to 0.1.34, 0.1.37 to 0.1.38).
+
+## [0.1.54] - 2026-10-07
 
 Andrew: "FIX - never reported: Screen -> Buttons - does not have custom background override like all other element have." Built on Glass 0.8.90.
 
 - **The buttons' own background.** `[buttons] glass`: how solid the bar's glass is, 0 to 1, or `bar` (unless said) for the look's `[glass] bar`; `[buttons] tint`: the bar's and the More sheet's colour, or `tint` (unless said) for the look's. As the clock, the date and the forecast have theirs. A look that says neither draws as before.
 
-## [0.1.53] - 2026-10-08
+## [0.1.53] - 2026-10-07
 
 Andrew: "I selected to wait 15 second - NO LONGER RESPECTED! THIS SHOULD BE A SWITCH IN SCREEN - IMMEDIATE - RESPECT TIMEOUT". The face had decided idle by its own rule since 0.1.11 and never read the plugin's persist period. Built on Glass 0.8.88.
 
 - **The idle screen can wait for the persist period.** `[idle] wait = persist`: while the plugin keeps the display after a pause or a stop ("Keep Display Active After Pause/Stop" on its settings page, a mode named and seconds left), the player does not count as standing still: the theme stays, with its countdown where that setting says so, and the clock, the date, the forecast and the picture come when the period ends. `none`, unless said, is the idle screen at once, as before. The five-second grace for a stop between two tracks is unchanged.
 
-## [0.1.52] - 2026-10-08
+## [0.1.52] - 2026-10-07
 
 Andrew: "REMOTE AND FACE AND ANYMOTE - ALL LOST CUSTOM BACKGROUND", on the picture when nothing plays, which 0.1.32 drew on the player's own screen alone ("Not yet on remote displays and in the browser views"). Built on Glass 0.8.87.
 
 - **The picture when nothing plays, on the browser views and the remote displays.** The face asks the host for the picture the look names before it looks in the folder its launcher names: in the Face tab and on Anymote the page brings it (`overlay::face::host_picture`, wanted from the Manager as the album art is), on a remote display the sync brings it beside the faces and names the folder. The theme shows until the picture is in, as on the player; the stamp carries its arrival, so the screen redraws the moment it is.
 
-## [0.1.51] - 2026-10-08
+## [0.1.51] - 2026-10-07
 
 Andrew's step 4 of the weather: "Now - Dramatise icons. Snow, thunderstorm, rain, drizzle, heat, etc. I am sure we can add some light frame animations here." and "If Dramatise is off - should not affect current refresh rate." Built on Glass 0.8.86.
 

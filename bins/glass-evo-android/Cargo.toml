@@ -13,7 +13,7 @@ path = "src/lib.rs"
 
 [dependencies]
 face = { path = "../../crates/face" }
-glass = { git = "https://github.com/foonerd/glass", tag = "v0.8.87" }
+glass = { git = "https://github.com/foonerd/glass", tag = "v0.9.0" }
 
 [lints]
 workspace = true
