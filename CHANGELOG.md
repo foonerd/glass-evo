@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.15] - 2026-10-08
+
+- Built on Glass 0.9.15, the public release of what the pre-releases brought: the public release of glass-evo 0.2.5 to 0.2.8, with nothing new beyond the version. From here a public release of glass-evo carries the same last number as the Glass it is built on.
+
 ## [0.2.8] - 2026-10-08
 
 - Built on Glass 0.9.14. The bundle remote's Assets rows carry stickers, green brought, orange failed, red missing, grey optional and elsewhere, the missing first; a file the display does without, a field's own font or a knob's picture, is optional rather than missing; the theme row's own sticker is red with a file missing, orange with one failed, green with the theme whole. The Connection panel's frames row no longer says "receivedd".
