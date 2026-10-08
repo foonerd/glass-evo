@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.6] - 2026-10-08
+
+Built on Glass 0.9.10: the bundle remote says what is blocked, with no ambiguity.
+
+- **The bundle's page has the Connection panel.** Each path to the player tried from the remote's side, the frames path judged from both ends by a probe the player sends on request, the frames heard on one fixed port (5585 unless the configuration says another) and the firewall rules for this remote printed in the terms a firewall takes; the same panel as the standalone remote's, from Glass 0.9.10.
+- The face itself is unchanged; the Rust crates pin Glass v0.9.10.
+
 ## [0.2.5] - 2026-10-08
 
 Built on Glass 0.9.9: the bundle remote takes test releases too.
