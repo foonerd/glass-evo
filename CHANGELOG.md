@@ -17,7 +17,7 @@ Built on Glass 0.9.3: a face theme's own skies reach the browser views, the remo
 
 ## [0.2.2] - 2026-10-07
 
-Gelo5 on the forum: "where are the weather icons located?" Just a Nerd: "lets take on weather icons first". Built on Glass 0.9.2.
+Asked for on the forum: a theme's own weather icons. Built on Glass 0.9.2.
 
 - **A theme's own skies.** A `skies` folder beside a `face.txt`, the meter theme's on show first and then the chosen look's, holds one picture per sky, PNG, animated GIF, WebP or JPEG, square, fitted to the sky's side: `clear-day`, `clear-hot`, `clear-night`, `partly-day`, `partly-night`, `cloudy`, `fog`, `drizzle`, `rain`, `rain-heavy`, `snow`, `snow-heavy`, `thunder`, `thunder-night`. A missing name falls back along a short chain (hot, heavy and a night's thunder to the plain name; a night sky never to a day's) and then to the drawn sky, so a theme may replace one or all. An animated GIF keeps its motion by its own delays while the skies move, the frame picked by the wall clock as the drawn skies' is; `Skies move` off shows its first frame. The colour and heat switches leave a theme's pictures as they are. A meter theme's skies travel with the theme to the Face tab, Anymote and the remotes; a face theme's skies reach those, and the look panel's likeness, in the next step.
 
@@ -42,25 +42,25 @@ glass-evo 0.2.0 gathers the 0.1 series since the first pair users got, 0.1.10 wi
 
 ## [0.1.54] - 2026-10-07
 
-Just a Nerd: "FIX - never reported: Screen -> Buttons - does not have custom background override like all other element have." Built on Glass 0.8.90.
+The Buttons section had no background of its own where every other piece has one. Built on Glass 0.8.90.
 
 - **The buttons' own background.** `[buttons] glass`: how solid the bar's glass is, 0 to 1, or `bar` (unless said) for the look's `[glass] bar`; `[buttons] tint`: the bar's and the More sheet's colour, or `tint` (unless said) for the look's. As the clock, the date and the forecast have theirs. A look that says neither draws as before.
 
 ## [0.1.53] - 2026-10-07
 
-Just a Nerd: "I selected to wait 15 second - NO LONGER RESPECTED! THIS SHOULD BE A SWITCH IN SCREEN - IMMEDIATE - RESPECT TIMEOUT". The face had decided idle by its own rule since 0.1.11 and never read the plugin's persist period. Built on Glass 0.8.88.
+The idle screen came at once on a pause or a stop, whatever the plugin's persist period said: the face had decided idle by its own rule since 0.1.11 and never read the period. Built on Glass 0.8.88.
 
 - **The idle screen can wait for the persist period.** `[idle] wait = persist`: while the plugin keeps the display after a pause or a stop ("Keep Display Active After Pause/Stop" on its settings page, a mode named and seconds left), the player does not count as standing still: the theme stays, with its countdown where that setting says so, and the clock, the date, the forecast and the picture come when the period ends. `none`, unless said, is the idle screen at once, as before. The five-second grace for a stop between two tracks is unchanged.
 
 ## [0.1.52] - 2026-10-07
 
-Just a Nerd: "REMOTE AND FACE AND ANYMOTE - ALL LOST CUSTOM BACKGROUND", on the picture when nothing plays, which 0.1.32 drew on the player's own screen alone ("Not yet on remote displays and in the browser views"). Built on Glass 0.8.87.
+The picture when nothing plays had been drawn by 0.1.32 on the player's own screen alone ("Not yet on remote displays and in the browser views"). Built on Glass 0.8.87.
 
 - **The picture when nothing plays, on the browser views and the remote displays.** The face asks the host for the picture the look names before it looks in the folder its launcher names: in the Face tab and on Anymote the page brings it (`overlay::face::host_picture`, wanted from the Manager as the album art is), on a remote display the sync brings it beside the faces and names the folder. The theme shows until the picture is in, as on the player; the stamp carries its arrival, so the screen redraws the moment it is.
 
 ## [0.1.51] - 2026-10-07
 
-Just a Nerd's step 4 of the weather: "Now - Dramatise icons. Snow, thunderstorm, rain, drizzle, heat, etc. I am sure we can add some light frame animations here." and "If Dramatise is off - should not affect current refresh rate." Built on Glass 0.8.86.
+Step 4 of the weather: the skies move, and with the switch off nothing about the refresh changes. Built on Glass 0.8.86.
 
 - **The skies move.** Each sky keeps its shape and gains one small motion at its own pace: rain and drizzle fall, snow drifts with a sway, the sun's rays turn once a minute, a star winks beside the moon, clouds and fog sway, heat haze shimmers under the sun from 30 °C, and thunder's cloud darkens with the bolt under it. A moving sky is a cycle of frames rastered once per size and ink; the wall clock picks the frame, so every screen and the likeness show the same frame at the same moment, and the face asks the display to redraw only when a frame changes, at the sky's own pace. `[weather] motion`, on unless said; off, every sky stands still and nothing about the refresh changes.
 - **The skies in colour**, `[weather] colour`, on unless said: a yellow sun and a red one when scorching, a pale moon with a white star, clouds and fog in greys, drizzle and rain in blues, snow white, the storm's cloud dark with a yellow bolt, and heavy weather (heavy rain or snow, violent showers, by the reading's code) murkier with more falling from it. Off, every sky is in the forecast's ink as before.
@@ -69,32 +69,32 @@ Just a Nerd's step 4 of the weather: "Now - Dramatise icons. Snow, thunderstorm,
 
 ## [0.1.50] - 2026-10-07
 
-Just a Nerd's step 3 of the weather: "Forecast - add Heatmap toggle/slider - perhaps color picker for start and end? with some logical defaults? This is for numbers only. Also, second toggle - apply to days, still forecast. Apply to date - override date with heatmap - first override exception." Built on Glass 0.8.85.
+Step 3 of the weather: a heatmap for the temperatures, numbers only, with switches for the week's days and the date. Built on Glass 0.8.85.
 
 - **The heatmap.** `[weather] heat` sets every temperature the forecast shows in the colour of its degree, numbers only: from `cold` at -10 °C, through the forecast's own ink at 12, to `warm` at 30, straight between and held beyond, Celsius inside and a Fahrenheit reading converted. `heat.days` colours the week's lows and highs too, each its own. `heat.date` sets the date in the colour of the temperature now, with the date's own ink in the middle of the scale: the one link between pieces, by the user's switch, and only while the player holds a reading. Every switch is off unless said; `cold` is `#3b8bff` and `warm` `#ff4b2b` unless said.
 - **For a page** `line_preview` takes the player's reading beside the keys, so the likeness colours the date as the screen does.
 
 ## [0.1.49] - 2026-10-07
 
-Just a Nerd: "The slider for the forecast is still regressed. Today - as every other slider should permit spill over the screen... REQUIREMENT - restore slider function exactly like it was." Built on Glass 0.8.84.
+The forecast's size slider was still regressed: today's line no longer ran over the screen at the slider's top, as every piece's does. Built on Glass 0.8.84.
 
 - **Today's size is its numbers' size again, exactly as before the captions.** 0.1.46 and 0.1.48 hung today's line from its skies; the numbers came out smaller at every size and the slider's top no longer ran the line over the screen. The numbers are set at the forecast's size as in 0.1.45, and T21's proportions hang from them: the skies five thirds of the numbers, the captions three eighths, drawn an eighth up into the numbers' descent.
 
 ## [0.1.48] - 2026-10-07
 
-Just a Nerd: "Forecast 'Today' lost full scale range. All others scale fine." Built on Glass 0.8.84.
+Today's forecast lost the full range of its size; the other spans scaled. Built on Glass 0.8.84.
 
 - **Today's line reaches as far as it did.** 0.1.46 made today's skies as high as the forecast's size itself, where the line before it was as high as a line of type at that size, about a seventh more; with the numbers at three fifths of the skies, today came out smaller than before at every size. The skies are a line of type high again, the numbers and the captions their shares of that, so the size runs over the same range it did.
 
 ## [0.1.47] - 2026-10-07
 
-Just a Nerd: "Global is background, not date - should not be linked at all." Built on Glass 0.8.84.
+The forecast's own colour and background were linked to the date's; a piece's own settings modify the look's, never another piece's. Built on Glass 0.8.84.
 
 - **The forecast's colour, opacity, glass and tint are its own.** 0.1.44 made them the date's unless the look said otherwise; nothing links one piece to another now. `weather.ink` and `weather.tint` are the theme's ink and tint unless said, as the clock's and the date's are; `weather.opacity` is 0.86 and `weather.glass` 0.55 unless said, as the date's.
 
 ## [0.1.46] - 2026-10-07
 
-Just a Nerd, on the span's columns and today's line, with mockups drawn by the face itself: "C4 - certainly." and "T21 is a sweetspot." Built on Glass 0.8.82.
+The span's columns and today's line, chosen from mockups drawn by the face itself (C4 and T21). Built on Glass 0.8.82.
 
 - **Today's line as T21.** The skies at the forecast's size, the numbers at three fifths of it, and NOW, MIN and MAX set letter-spaced under their numbers, drawn a little up into the numbers' descent; the skies centred on number and caption together.
 - **The columns as C4.** The skies at the forecast's size, the figures at a little over a half of it, the hour or weekday labels at two fifths; half a sky between columns, an eighth of a sky between the rows.
@@ -102,27 +102,27 @@ Just a Nerd, on the span's columns and today's line, with mockups drawn by the f
 
 ## [0.1.45] - 2026-10-07
 
-Just a Nerd's step 2 of the weather, from his question of 2026-10-06: "What if user wants a day (24h) forecast, or day every 2 or 4 forecast? Or week forecast?" Built on Glass 0.8.81.
+Step 2 of the weather: the next day every few hours, or the week. Built on Glass 0.8.81.
 
 - **The forecast's span.** `[weather] span`: `today`, a line as before; `hours2`, `hours3`, `hours4` or `hours6`, the next 24 hours every so many as columns, each its hour (in the clock's twelve or twenty-four), its sky by day or by night and its temperature; `week`, seven columns, each its weekday, its sky and its low and high. The columns share the forecast's cells at the forecast's size: a size the look comes with is fitted to the cells, a size the user set is kept. The hours and the days come with the player's reading from Glass 0.8.81.
 - **The module sets the span for a page** as it sets the line, through `forecast_preview`.
 
 ## [0.1.44] - 2026-10-07
 
-Just a Nerd, on the accepted clock and date: "Now - weather. Exact same principle - grid, the same way as clock and date." Built on Glass 0.8.79.
+The weather on the grid, as the accepted clock and date. Built on Glass 0.8.79.
 
 - **Today's forecast on the grid.** Where the player holds a reading for a place the user chose (Glass 0.8.79's Forecast section), the face draws it: a sky, the temperature now, then a sky, today's lowest and highest, the skies drawn as shapes by day and by night (sun, moon, cloud, fog, drizzle, rain, snow, thunder). `[weather] show`, `place` (cells of the grid as the clock's; the bottom row across the three columns unless said; empty hides it: the forecast has no place off the grid), `align`, `margin`, and its own `ink`, `opacity`, `glass` and `tint`, each the date's unless said; `[measure] weather` its height, the date's unless said. A size the look comes with is fitted to the cells, a size the user set is kept, and a forecast larger than its cells runs over the side it is aligned to, as the clock does. On the same cells as the clock or the date, aligned the same, it shares their glass, in the order clock, date, forecast.
 - **The module sets the forecast for a page.** `forecast_preview` draws it from the look's keys and the player's reading, in the font the page put at `fonts/bold.ttf` under the module's home, as the face draws it on the screen.
 
 ## [0.1.43] - 2026-10-07
 
-Just a Nerd, on the date on the grid, set in the browser's type in the likeness and in the face's on the glass: "Rejected. I requested date to be wired exactly as the clock is." and, before, "module works better like clock, why date is not a module?" Built on Glass 0.8.78.
+The date on the grid was set in the browser's type in the likeness and in the face's on the glass, and the two did not agree: the module draws every line of type for the page. Built on Glass 0.8.78.
 
 - **The module sets a line of type for a page.** `line_preview` sets the date, or the clock in type, as a look's keys describe it, in the font the page put at `/glass/fonts/bold.ttf`, in the room its widest shape takes with the words in the middle, as the face places a line on the screen. The Manager's look panel draws the date and a clock in type through it, in the look's own font, pixel for pixel as the screen.
 
 ## [0.1.42] - 2026-10-07
 
-Just a Nerd, on the accepted clock: "Now - wire date exactly the same way in grid. We are moving the face to grid and only." Built on Glass 0.8.75.
+The date on the grid, wired exactly as the accepted clock. Built on Glass 0.8.75.
 
 - **The date on the grid.** `[date] place` takes cells of the grid beside its three words (`top`, `above`, `below`), as the clock's place names them; `[date] align` is where it stands inside them and `[date] margin` its room from the sides it is aligned to, 20 unless said. A size that came with the look is fitted to the cells; a size the user set is kept; a date larger than its cells runs over the side it is aligned to, as the clock does.
 - **Together on the grid.** A clock and a date on the same cells with the same alignment stand one under the other on one glass, the clock first; the date is set first and the clock takes what it leaves of the cells' height, as before the grid.
@@ -130,19 +130,19 @@ Just a Nerd, on the accepted clock: "Now - wire date exactly the same way in gri
 
 ## [0.1.41] - 2026-10-07
 
-Just a Nerd, aligning a clock larger than its row: "Up is down, down is up." Built on Glass 0.8.75.
+A clock larger than its row aligned the wrong way about. Built on Glass 0.8.75.
 
 - **A clock larger than its cells runs over on the side it is aligned to.** Before, its edge on the side named stood its margin from the cells' edge and the excess hung off the far side, so "top" moved a large clock down and "left" moved it right. Now the far edge stands the margin from the cells' far side and the excess runs over the side named: "top" always moves it up and "left" always left. A clock that fits its cells stands as before, and one in the middle runs over equally on both sides, as before.
 
 ## [0.1.40] - 2026-10-07
 
-Just a Nerd, placing the clock in a corner of the grid and finding it twenty units short: "Perhaps a margin should be introduced?" and "meant user controlled margins!"
+The clock placed in a corner of the grid stood twenty units short of it: a margin of the user's own.
 
 - **The clock's margin on the grid is the user's.** `[clock] margin`, in units of a 720th of the picture's height: the room between the clock's glass and the sides of its cells it is aligned to. 20 unless said, as before; 0 puts the glass in the corner.
 
 ## [0.1.39] - 2026-10-07
 
-The first step of the idle screen's grid, at Just a Nerd's word: "introduce grid. We will test only clock in grid end-to-end. Move clock to grid." Built on Glass 0.8.71.
+The first step of the idle screen's grid: the clock on it. Built on Glass 0.8.71.
 
 - **The clock on a grid.** Three rows by three columns in equal thirds above the bar: `top`, `middle`, `bottom` by `left`, `centre`, `right`. `[clock] place` names the cells the clock occupies, rows then columns, each a name or a range: `middle left-right` is the middle row, `middle-bottom centre-right` four cells, `top-bottom left-right` all nine. `[clock] align` is where it stands inside those cells: `left`, `centre` or `right` and `top`, `middle` or `bottom`, the middle unless said. A size that came with the look is fitted to the cells; a size the user set is kept and runs over them where it is larger.
 - **Nothing else moves.** A clock with no place stands as before, in the middle of what the date and the bar leave, to the pixel. The date stands as before; placed above or below a clock that is on the grid, it has the middle to itself.
@@ -162,7 +162,7 @@ Built on Glass 0.8.69, which redraws the radio icons and takes on the FM STEREO 
 
 ## [0.1.36] - 2026-10-06
 
-Asked by Just a Nerd on the screen-off: gradual, not abrupt. Built on Glass 0.8.68, whose look panel has the setting.
+The screen-off was abrupt; asked for gradual. Built on Glass 0.8.68, whose look panel has the setting.
 
 - **The screen goes black and comes back over a fade.** "Over, milliseconds" beside "Screen off after": 500 unless said, 0 for at once, up to 120000. On its way the face draws black over everything by how far it has come, every frame; whole, it is drawn once and stands. A tap during the fade wakes the screen as a tap on black does.
 - For a face theme: `[idle] fade`, milliseconds.
