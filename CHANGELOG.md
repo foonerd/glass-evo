@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.25] - 2026-10-08
+
+- Built on Glass 0.9.25, numbered with it: the first trial pair of install from a file, nothing new in the bundle beyond the re-pin.
+
 ## [0.2.21] - 2026-10-08
 
 - **Install from a file on the bundle remote.** Built on Glass 0.9.24. The Version panel has "Install from a file", off until turned on: the bundle's own archive for this machine, downloaded elsewhere, is verified by the signature inside it with no network and put in place as an upgrade from GitHub is; a Glass archive given there replaces the bundle with Glass once the page has asked.
