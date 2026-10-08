@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.7] - 2026-10-08
+
+Built on Glass 0.9.13: the bundle remote's Assets, Prerequisites and Report panels.
+
+- **The bundle's page has the Assets, Prerequisites and Report panels**, as the standalone remote's from Glass 0.9.11 and 0.9.13: what the theme on show names and whether each file is here, what this machine has for the display to run, and a report made from everything the bundle knows with the player's side as far as it can read it, copied for the forum, opened as a GitHub issue at glass-evo's own repository, or saved as a file, addresses hidden unless revealed. A sync that cannot bring a file goes on and says so. The Connection rows carry stickers.
+- The face itself is unchanged; the Rust crates pin Glass v0.9.13.
+
 ## [0.2.6] - 2026-10-08
 
 Built on Glass 0.9.10: the bundle remote says what is blocked, with no ambiguity.
