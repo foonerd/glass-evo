@@ -1336,7 +1336,7 @@ fn celsius(temp: f32, unit: &str) -> f32 {
 /// whether it is day.
 type Entry = (String, Vec<(String, Option<f32>)>, u8, bool);
 
-/// The forecast's proportions, Andrew's choices of 2026-10-07 (T21 and C4).
+/// The forecast's proportions, Just a Nerd's choices of 2026-10-07 (T21 and C4).
 /// Today's size is its numbers' size, as it always was, so the size's
 /// slider reaches as far as every other piece's: the skies, the captions
 /// under the numbers and how far the captions sit up into the numbers'
