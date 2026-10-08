@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.16] - 2026-10-08
+
+- Built on Glass 0.9.16. The bundle remote's Assets rows list the files brought only with **Show every file** on, a switch the browser remembers; what failed, is missing, optional or elsewhere always shows, with a line counting the files not listed. Each row names the meters that name the file, three by name and the rest counted. A report carries what is not fine; the downloaded one carries every file.
+
 ## [0.2.15] - 2026-10-08
 
 - Built on Glass 0.9.15, the public release of what the pre-releases brought: the public release of glass-evo 0.2.5 to 0.2.8, with nothing new beyond the version. From here a public release of glass-evo carries the same last number as the Glass it is built on.
