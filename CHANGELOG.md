@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.27] - 2026-10-09
+
+- **The bundle remote waits for the persist period before its face.** Built on Glass 0.9.27: the countdown the player pushes over the channel is read before the player's own file, which a remote does not have, so with "After the persist period" the face comes after the period on a remote as on the player's screen.
+
 ## [0.2.26] - 2026-10-09
 
 - **An icon on Windows.** The bundle's program carries its icon and its version block, as Glass's does, so the shortcuts the installer makes show it. Built on Glass 0.9.26, numbered with it: the second trial pair, for the online upgrade.
