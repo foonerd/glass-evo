@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.18] - 2026-10-08
+
+- **Signed releases.** Built on Glass 0.9.21. Every release of glass-evo carries `SHA256SUMS` and `SHA256SUMS.sig`, the Ed25519 signature of the sums made in the release workflow with the project's key, the same key as Glass's, checked there against the public key in `keys/release-signing.pub` before anything is published. The bundle holds its own upgrade to the signature as the standalone remote does, and the player's Manager holds the component's zip to it; a release published before signing installs as before.
+
 ## [0.2.17] - 2026-10-08
 
 - Built on Glass 0.9.17. A picture with an orientation tag, as a phone's portrait photo, stands upright on the face and on the remotes as it does in the Manager's preview: the picture when nothing plays, a theme's backdrop and album art alike. The face draws through Glass's own picture loaders, which now apply the tag.

@@ -175,6 +175,17 @@ jobs:
           [ "$top" = "glass-evo-${GITHUB_REF_NAME#v}-windows-x64" ] || { echo "the bundle laid out is $top" >&2; exit 1; }
           (cd dist/windows && zip -qr "../$top.zip" "$top")
           ls -la "dist/$top.zip"
+      # Every asset's digest in SHA256SUMS, signed with the project's
+      # release key (secret RELEASE_SIGNING_KEY, the Ed25519 private key as
+      # PEM, the same key as Glass's) and checked against the public key the
+      # products carry (keys/release-signing.pub), so no release goes out
+      # that a player or a remote would refuse. Without the secret the
+      # release is published unsigned, and installs as it did before signing.
+      - name: Sign the release
+        if: ${{ secrets.RELEASE_SIGNING_KEY != '' }}
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: scripts/sign-release.sh dist keys/release-signing.pub
       - name: Release notes from the changelog
         run: |
           v="${GITHUB_REF_NAME#v}"
@@ -192,3 +203,5 @@ jobs:
             dist/glass-evo-*.zip
             dist/glass-evo-*-*.tar.gz
             dist/glass-evo-*-android.apk
+            dist/SHA256SUMS
+            dist/SHA256SUMS.sig

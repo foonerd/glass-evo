@@ -50,8 +50,8 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "bank"
-version = "0.9.17"
-source = "git+https://github.com/foonerd/glass?tag=v0.9.17#439aa92bcaf042f62123f18835f4ab1102494a0b"
+version = "0.9.21"
+source = "git+https://github.com/foonerd/glass?tag=v0.9.21#ee0c5c7dd2120de120f1521b3941042ae471a761"
 dependencies = [
  "rustfft",
  "serde",
@@ -62,6 +62,12 @@ name = "base64"
 version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
+
+[[package]]
+name = "base64ct"
+version = "1.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
 name = "bitflags"
@@ -131,9 +137,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
 
 [[package]]
+name = "const-oid"
+version = "0.9.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
+
+[[package]]
 name = "controls"
-version = "0.9.17"
-source = "git+https://github.com/foonerd/glass?tag=v0.9.17#439aa92bcaf042f62123f18835f4ab1102494a0b"
+version = "0.9.21"
+source = "git+https://github.com/foonerd/glass?tag=v0.9.21#ee0c5c7dd2120de120f1521b3941042ae471a761"
 dependencies = [
  "expose",
  "intake",
@@ -171,10 +183,47 @@ dependencies = [
 ]
 
 [[package]]
+name = "curve25519-dalek"
+version = "4.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97fb8b7c4503de7d6ae7b42ab72a5a59857b4c937ec27a3d4539dba95b5ab2be"
+dependencies = [
+ "cfg-if",
+ "cpufeatures",
+ "curve25519-dalek-derive",
+ "digest",
+ "fiat-crypto",
+ "rustc_version",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "curve25519-dalek-derive"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f46882e17999c6cc590af592290432be3bce0428cb0d5f8b6715e4dc7b383eb3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "data-url"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
+
+[[package]]
+name = "der"
+version = "0.7.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7c1832837b905bbfb5101e07cc24c8deddf52f93225eee6ead5f4d63d53ddcb"
+dependencies = [
+ "const-oid",
+ "zeroize",
+]
 
 [[package]]
 name = "digest"
@@ -184,6 +233,30 @@ checksum = "9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292"
 dependencies = [
  "block-buffer",
  "crypto-common",
+]
+
+[[package]]
+name = "ed25519"
+version = "2.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "115531babc129696a58c64a4fef0a8bf9e9698629fb97e9e40767d235cfbcd53"
+dependencies = [
+ "pkcs8",
+ "signature",
+]
+
+[[package]]
+name = "ed25519-dalek"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70e796c081cee67dc755e1a36a0a172b897fab85fc3f6bc48307991f64e4eca9"
+dependencies = [
+ "curve25519-dalek",
+ "ed25519",
+ "serde",
+ "sha2",
+ "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -197,8 +270,8 @@ dependencies = [
 
 [[package]]
 name = "expose"
-version = "0.9.17"
-source = "git+https://github.com/foonerd/glass?tag=v0.9.17#439aa92bcaf042f62123f18835f4ab1102494a0b"
+version = "0.9.21"
+source = "git+https://github.com/foonerd/glass?tag=v0.9.21#ee0c5c7dd2120de120f1521b3941042ae471a761"
 dependencies = [
  "ab_glyph",
  "font8x8",
@@ -211,7 +284,7 @@ dependencies = [
 
 [[package]]
 name = "face"
-version = "0.2.17"
+version = "0.2.18"
 dependencies = [
  "image",
  "libc",
@@ -227,6 +300,12 @@ checksum = "1e6853b52649d4ac5c0bd02320cddc5ba956bdb407c4b75a2c6b75bf51500f8c"
 dependencies = [
  "simd-adler32",
 ]
+
+[[package]]
+name = "fiat-crypto"
+version = "0.2.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "28dea519a9695b9977216879a3ebfddf92f1c08c05d984f8996aecd6ecdc811d"
 
 [[package]]
 name = "find-msvc-tools"
@@ -290,11 +369,12 @@ dependencies = [
 
 [[package]]
 name = "glass"
-version = "0.9.17"
-source = "git+https://github.com/foonerd/glass?tag=v0.9.17#439aa92bcaf042f62123f18835f4ab1102494a0b"
+version = "0.9.21"
+source = "git+https://github.com/foonerd/glass?tag=v0.9.21#ee0c5c7dd2120de120f1521b3941042ae471a761"
 dependencies = [
  "controls",
  "crc32fast",
+ "ed25519-dalek",
  "expose",
  "flate2",
  "intake",
@@ -314,7 +394,7 @@ dependencies = [
 
 [[package]]
 name = "glass-evo"
-version = "0.2.17"
+version = "0.2.18"
 dependencies = [
  "face",
  "glass",
@@ -322,7 +402,7 @@ dependencies = [
 
 [[package]]
 name = "glass-evo-android"
-version = "0.2.17"
+version = "0.2.18"
 dependencies = [
  "face",
  "glass",
@@ -330,7 +410,7 @@ dependencies = [
 
 [[package]]
 name = "glass-evo-face"
-version = "0.2.17"
+version = "0.2.18"
 dependencies = [
  "face",
  "page",
@@ -395,8 +475,8 @@ checksum = "65b27460c2c92b037f3f94c538ed9a3342f3fdf923606781629ccb35f82d042a"
 
 [[package]]
 name = "intake"
-version = "0.9.17"
-source = "git+https://github.com/foonerd/glass?tag=v0.9.17#439aa92bcaf042f62123f18835f4ab1102494a0b"
+version = "0.9.21"
+source = "git+https://github.com/foonerd/glass?tag=v0.9.21#ee0c5c7dd2120de120f1521b3941042ae471a761"
 dependencies = [
  "bank",
  "lead",
@@ -435,8 +515,8 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 
 [[package]]
 name = "lead"
-version = "0.9.17"
-source = "git+https://github.com/foonerd/glass?tag=v0.9.17#439aa92bcaf042f62123f18835f4ab1102494a0b"
+version = "0.9.21"
+source = "git+https://github.com/foonerd/glass?tag=v0.9.21#ee0c5c7dd2120de120f1521b3941042ae471a761"
 dependencies = [
  "bank",
  "serde",
@@ -456,8 +536,8 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "logline"
-version = "0.9.17"
-source = "git+https://github.com/foonerd/glass?tag=v0.9.17#439aa92bcaf042f62123f18835f4ab1102494a0b"
+version = "0.9.21"
+source = "git+https://github.com/foonerd/glass?tag=v0.9.21#ee0c5c7dd2120de120f1521b3941042ae471a761"
 
 [[package]]
 name = "memchr"
@@ -539,8 +619,8 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
 name = "overlay"
-version = "0.9.17"
-source = "git+https://github.com/foonerd/glass?tag=v0.9.17#439aa92bcaf042f62123f18835f4ab1102494a0b"
+version = "0.9.21"
+source = "git+https://github.com/foonerd/glass?tag=v0.9.21#ee0c5c7dd2120de120f1521b3941042ae471a761"
 dependencies = [
  "controls",
  "expose",
@@ -560,8 +640,8 @@ dependencies = [
 
 [[package]]
 name = "page"
-version = "0.9.17"
-source = "git+https://github.com/foonerd/glass?tag=v0.9.17#439aa92bcaf042f62123f18835f4ab1102494a0b"
+version = "0.9.21"
+source = "git+https://github.com/foonerd/glass?tag=v0.9.21#ee0c5c7dd2120de120f1521b3941042ae471a761"
 dependencies = [
  "controls",
  "expose",
@@ -574,8 +654,8 @@ dependencies = [
 
 [[package]]
 name = "pane"
-version = "0.9.17"
-source = "git+https://github.com/foonerd/glass?tag=v0.9.17#439aa92bcaf042f62123f18835f4ab1102494a0b"
+version = "0.9.21"
+source = "git+https://github.com/foonerd/glass?tag=v0.9.21#ee0c5c7dd2120de120f1521b3941042ae471a761"
 dependencies = [
  "expose",
  "plot",
@@ -595,9 +675,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5be167a7af36ee22fe3115051bc51f6e6c7054c9348e28deb4f49bd6f705a315"
 
 [[package]]
+name = "pkcs8"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f950b2377845cebe5cf8b5165cb3cc1a5e0fa5cfa3e1f7f55707d8fd82e0a7b7"
+dependencies = [
+ "der",
+ "spki",
+]
+
+[[package]]
 name = "plot"
-version = "0.9.17"
-source = "git+https://github.com/foonerd/glass?tag=v0.9.17#439aa92bcaf042f62123f18835f4ab1102494a0b"
+version = "0.9.21"
+source = "git+https://github.com/foonerd/glass?tag=v0.9.21#ee0c5c7dd2120de120f1521b3941042ae471a761"
 dependencies = [
  "bank",
  "lead",
@@ -666,6 +756,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_core"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
+dependencies = [
+ "getrandom",
+]
+
+[[package]]
 name = "resvg"
 version = "0.48.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -710,6 +809,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1964b10c76125c36f8afe190065a4bf9a87bf324842c05701330bba9f1cacbb"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "rustc_version"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
+dependencies = [
+ "semver",
 ]
 
 [[package]]
@@ -785,6 +893,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "semver"
+version = "1.0.28"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
+
+[[package]]
 name = "serde"
 version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -811,7 +925,7 @@ checksum = "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 3.0.6",
 ]
 
 [[package]]
@@ -845,6 +959,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
+name = "signature"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
+dependencies = [
+ "rand_core",
+]
+
+[[package]]
 name = "simd-adler32"
 version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -870,6 +993,16 @@ name = "smallvec"
 version = "1.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9395f0f0eee849a9b707b2f06bb92a6a422090e2123bb2ef8e87a0e61892a8e"
+
+[[package]]
+name = "spki"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d91ed6c858b01f942cd56b37a94b3e0a1798290327d1236e4d9cf4eaca44d29d"
+dependencies = [
+ "base64ct",
+ "der",
+]
 
 [[package]]
 name = "strength_reduce"
@@ -904,6 +1037,17 @@ dependencies = [
 
 [[package]]
 name = "syn"
+version = "2.0.119"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-ident",
+]
+
+[[package]]
+name = "syn"
 version = "3.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8593e8e72159ed2257d083c7a454a85cbf854f37a0966d8d483aff8c8a3ebcee"
@@ -915,8 +1059,8 @@ dependencies = [
 
 [[package]]
 name = "tap"
-version = "0.9.17"
-source = "git+https://github.com/foonerd/glass?tag=v0.9.17#439aa92bcaf042f62123f18835f4ab1102494a0b"
+version = "0.9.21"
+source = "git+https://github.com/foonerd/glass?tag=v0.9.21#ee0c5c7dd2120de120f1521b3941042ae471a761"
 dependencies = [
  "bank",
  "libc",
