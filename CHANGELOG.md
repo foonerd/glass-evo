@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.17] - 2026-10-08
+
+- Built on Glass 0.9.17. A picture with an orientation tag, as a phone's portrait photo, stands upright on the face and on the remotes as it does in the Manager's preview: the picture when nothing plays, a theme's backdrop and album art alike. The face draws through Glass's own picture loaders, which now apply the tag.
+
 ## [0.2.16] - 2026-10-08
 
 - Built on Glass 0.9.16. The bundle remote's Assets rows list the files brought only with **Show every file** on, a switch the browser remembers; what failed, is missing, optional or elsewhere always shows, with a line counting the files not listed. Each row names the meters that name the file, three by name and the rest counted. A report carries what is not fine; the downloaded one carries every file.
