@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.20] - 2026-10-08
+
+- **The signature travels inside the archive.** Built on Glass 0.9.23. Every archive of a release, the component zip, the remotes' archives and the Windows zip, carries `MANIFEST`, every file's digest, and `MANIFEST.sig`, its signature with the project's key: a component zip brought by hand to the player's Manager is verified with no network. The sums beside the assets stay for the online path.
+
 ## [0.2.19] - 2026-10-08
 
 - Built on Glass 0.9.22. The release of 0.2.18's signing, whose workflow file GitHub rejected before any build: the signing step now reads the secret in its shell. Nothing else is new.
