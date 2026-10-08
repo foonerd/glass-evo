@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.26] - 2026-10-09
+
+- **An icon on Windows.** The bundle's program carries its icon and its version block, as Glass's does, so the shortcuts the installer makes show it. Built on Glass 0.9.26, numbered with it: the second trial pair, for the online upgrade.
+
 ## [0.2.25] - 2026-10-08
 
 - Built on Glass 0.9.25, numbered with it: the first trial pair of install from a file, nothing new in the bundle beyond the re-pin.
