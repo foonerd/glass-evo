@@ -14,7 +14,7 @@ face = { path = "../../crates/face" }
 serde_json = "1"
 # Glass's pipeline for a page, which draws the theme in a browser and
 # takes a face over it. Pinned to the same Glass release as the display.
-page = { git = "https://github.com/foonerd/glass", tag = "v0.9.23" }
+page = { git = "https://github.com/foonerd/glass", tag = "v0.9.24" }
 
 [lints]
 workspace = true
