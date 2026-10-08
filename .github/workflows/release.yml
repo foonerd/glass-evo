@@ -182,10 +182,14 @@ jobs:
       # that a player or a remote would refuse. Without the secret the
       # release is published unsigned, and installs as it did before signing.
       - name: Sign the release
-        if: ${{ secrets.RELEASE_SIGNING_KEY != '' }}
         env:
           RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
-        run: scripts/sign-release.sh dist keys/release-signing.pub
+        run: |
+          if [ -z "$RELEASE_SIGNING_KEY" ]; then
+            echo "no RELEASE_SIGNING_KEY in this repository: the release is published unsigned"
+            exit 0
+          fi
+          scripts/sign-release.sh dist keys/release-signing.pub
       - name: Release notes from the changelog
         run: |
           v="${GITHUB_REF_NAME#v}"
