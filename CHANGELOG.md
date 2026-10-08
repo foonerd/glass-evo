@@ -2,6 +2,13 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.5] - 2026-10-08
+
+Built on Glass 0.9.9: the bundle remote takes test releases too.
+
+- **The bundle's Version panel has "Offer test releases".** A bundle remote, the display with the face in it, offered the latest glass-evo release only; with the switch on its settings page, as on the player's System tab, it is offered the newest of the repository's last ten releases, a test release among them and said so beside its version, as soon as it is published. Off unless said; applied with the other settings. The upgrade's checks stay as they were.
+- The face itself is unchanged; the Rust crates pin Glass v0.9.9.
+
 ## [0.2.4] - 2026-10-07
 
 Built on Glass 0.9.3, for the look panel's likeness with Glass 0.9.4.
