@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.30] - 2026-10-09
+
+- Built on Glass 0.9.30, in step with it: **the bundle remote upgrades from the player's shelf.** "Look for a later release" asks the player's Manager for this machine's glass-evo archive before GitHub and takes the newer of the two; an archive from the shelf is held to the signature it carries inside before it goes in, and the panel says the release offered is from the player's shelf. The player keeps the archives under "Install from a file" on its System tab.
+
 ## [0.2.29] - 2026-10-09
 
 - Built on Glass 0.9.29, in step with it: no fanart.tv key ships with Glass.
