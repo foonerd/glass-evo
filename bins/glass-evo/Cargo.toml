@@ -8,7 +8,7 @@ publish.workspace = true
 
 [dependencies]
 face = { path = "../../crates/face" }
-glass = { git = "https://github.com/foonerd/glass", tag = "v0.9.27" }
+glass = { git = "https://github.com/foonerd/glass", tag = "v0.9.28" }
 
 [lints]
 workspace = true

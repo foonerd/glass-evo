@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.28] - 2026-10-09
+
+- Built on Glass 0.9.28: a font uploaded to the player draws on a Windows bundle remote, where its copy lies under a drive path.
+
 ## [0.2.27] - 2026-10-09
 
 - **The bundle remote waits for the persist period before its face.** Built on Glass 0.9.27: the countdown the player pushes over the channel is read before the player's own file, which a remote does not have, so with "After the persist period" the face comes after the period on a remote as on the player's screen.
