@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.29] - 2026-10-09
+
+- Built on Glass 0.9.29, in step with it: no fanart.tv key ships with Glass.
+
 ## [0.2.28] - 2026-10-09
 
 - Built on Glass 0.9.28: a font uploaded to the player draws on a Windows bundle remote, where its copy lies under a drive path.
