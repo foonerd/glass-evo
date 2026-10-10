@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.32] - 2026-10-10
+
+- Built on Glass 0.9.32, in step with it: **album art shows on the Android bundle**, kept under the app's own cache rather than a folder of the system's that an app may not write; and **a theme from a folder on the device is read** once the app has access to the device's files, which the app asks for the first time such a theme cannot be read. Asked on the forum.
+
 ## [0.2.31] - 2026-10-09
 
 - Built on Glass 0.9.31, in step with it: the player's shelf answers a remote asking by its archive's stem, so the bundle is offered glass-evo from the shelf.
