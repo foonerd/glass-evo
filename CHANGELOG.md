@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.34] - 2026-10-10
+
+- Built on Glass 0.9.34, in step with it: an uploaded font draws again in the browser views (the Face tab, Anymote), lost there from 0.9.28.
+
 ## [0.2.33] - 2026-10-10
 
 - Built on Glass 0.9.33, in step with it: the album art fetch says why it gave up, so a remote's report names the fault.
