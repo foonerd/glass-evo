@@ -37,27 +37,25 @@ for theme in themes/*/; do
 done
 install -D -m 644 themes/Example/face.txt "$STAGE/face.txt"
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
-python3 - "$STAGE" "$VERSION" "$COMMIT" "$GLASS" <<'EOF'
-import hashlib, json, sys, time
-stage, version, commit, glass = sys.argv[1:5]
-binaries = {}
-for arch in ("arm", "armv7", "armv8", "x64"):
-    path = f"bin/{arch}/glass-evo"
-    with open(f"{stage}/{path}", "rb") as f:
-        binaries[arch] = {"path": path, "sha256": hashlib.sha256(f.read()).hexdigest()}
-with open(f"{stage}/face/glass-evo-face.wasm", "rb") as f:
-    module = {"path": "face/glass-evo-face.wasm", "sha256": hashlib.sha256(f.read()).hexdigest()}
-manifest = {
-    "name": "glass-evo",
-    "version": version,
-    "requires": {"glass": glass},
-    "built": {"commit": commit, "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
-    "binaries": binaries,
-    "face": module,
+node - "$STAGE" "$VERSION" "$COMMIT" "$GLASS" <<'EOF'
+const fs = require('fs');
+const crypto = require('crypto');
+const [stage, version, commit, glass] = process.argv.slice(2);
+const digest = (path) => crypto.createHash('sha256').update(fs.readFileSync(stage + '/' + path)).digest('hex');
+const binaries = {};
+for (const arch of ['arm', 'armv7', 'armv8', 'x64']) {
+  const path = 'bin/' + arch + '/glass-evo';
+  binaries[arch] = { path: path, sha256: digest(path) };
 }
-with open(f"{stage}/manifest.json", "w") as f:
-    json.dump(manifest, f, indent=2)
-    f.write("\n")
+const manifest = {
+  name: 'glass-evo',
+  version: version,
+  requires: { glass: glass },
+  built: { commit: commit, time: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') },
+  binaries: binaries,
+  face: { path: 'face/glass-evo-face.wasm', sha256: digest('face/glass-evo-face.wasm') }
+};
+fs.writeFileSync(stage + '/manifest.json', JSON.stringify(manifest, null, 2) + '\n');
 EOF
 ( cd "$STAGE" && rm -f "$ROOT/dist/glass-evo-$VERSION.zip" && zip -qr "$ROOT/dist/glass-evo-$VERSION.zip" . )
 cat "$STAGE/manifest.json"
@@ -67,10 +65,11 @@ ls -la "$ROOT/dist/glass-evo-$VERSION.zip"
 # Glass's own, taken from the Glass this face is built on (the checkout
 # cargo keeps of the tag the crates name), so there is one installer for
 # both flavours of a remote and it cannot come to differ between them.
-GLASS_SRC=$(cargo metadata --format-version 1 --locked | python3 -c '
-import json, os, sys
-packages = [p for p in json.load(sys.stdin)["packages"] if p["name"] == "glass"]
-print(os.path.dirname(os.path.dirname(os.path.dirname(packages[0]["manifest_path"]))) if packages else "")')
+GLASS_SRC=$(cargo metadata --format-version 1 --locked | node -e '
+let s = ""; process.stdin.on("data", (d) => s += d).on("end", () => {
+  const p = JSON.parse(s).packages.find((p) => p.name === "glass");
+  process.stdout.write(p ? require("path").dirname(require("path").dirname(require("path").dirname(p.manifest_path))) : "");
+});')
 [ -n "$GLASS_SRC" ] && [ -f "$GLASS_SRC/remote/linux/install.sh" ] || { echo "package: Glass's remote installer was not found (looked under: $GLASS_SRC)" >&2; exit 1; }
 grep -q 'binary_named glass-evo' "$GLASS_SRC/remote/linux/install.sh" || { echo "package: the Glass this is built on has an installer that does not know the bundle (0.8.21 or later is needed)" >&2; exit 1; }
 for arch in arm armv7 armv8 x64; do

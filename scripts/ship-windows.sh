@@ -57,10 +57,11 @@ done
 
 # The bundle, laid out as Glass's Windows archive is: the display and
 # SDL2.dll under bin, Glass's installer and its instructions under remote.
-GLASS_SRC=$(cargo metadata --format-version 1 --locked | python3 -c '
-import json, os, sys
-packages = [p for p in json.load(sys.stdin)["packages"] if p["name"] == "glass"]
-print(os.path.dirname(os.path.dirname(os.path.dirname(packages[0]["manifest_path"]))) if packages else "")')
+GLASS_SRC=$(cargo metadata --format-version 1 --locked | node -e '
+let s = ""; process.stdin.on("data", (d) => s += d).on("end", () => {
+  const p = JSON.parse(s).packages.find((p) => p.name === "glass");
+  process.stdout.write(p ? require("path").dirname(require("path").dirname(require("path").dirname(p.manifest_path))) : "");
+});')
 [ -n "$GLASS_SRC" ] && [ -f "$GLASS_SRC/remote/windows/install.ps1" ] || { echo "ship-windows: Glass's Windows installer was not found (looked under: $GLASS_SRC)" >&2; exit 1; }
 grep -q "glass-evo.exe" "$GLASS_SRC/remote/windows/install.ps1" || { echo "ship-windows: the Glass this is built on has an installer that does not know the bundle (0.8.23 or later is needed)" >&2; exit 1; }
 TOP=glass-evo-$VERSION-windows-x64

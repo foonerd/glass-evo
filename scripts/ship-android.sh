@@ -47,11 +47,11 @@ export ANDROID_NDK_HOME=$NDK
 
 VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
 # The Glass this face is built on: where its app project is, and its version.
-GLASS=$(cargo metadata --format-version 1 --locked | python3 -c '
-import json, os, sys
-packages = [p for p in json.load(sys.stdin)["packages"] if p["name"] == "glass"]
-if packages:
-    print(os.path.dirname(os.path.dirname(os.path.dirname(packages[0]["manifest_path"]))), packages[0]["version"])')
+GLASS=$(cargo metadata --format-version 1 --locked | node -e '
+let s = ""; process.stdin.on("data", (d) => s += d).on("end", () => {
+  const p = JSON.parse(s).packages.find((p) => p.name === "glass");
+  if (p) process.stdout.write(require("path").dirname(require("path").dirname(require("path").dirname(p.manifest_path))) + " " + p.version);
+});')
 GLASS_SRC=${GLASS% *}
 GLASS_RELEASE=${GLASS##* }
 [ -n "$GLASS_SRC" ] && [ -f "$GLASS_SRC/remote/android/app/build.gradle" ] || { echo "ship-android: Glass's Android app project was not found (looked under: $GLASS_SRC)" >&2; exit 1; }
