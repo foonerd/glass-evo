@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.36] - 2026-10-11
+
+- Built on Glass 0.9.36, in step with it: a test of the remote's that could fail by chance takes a port of its own.
+
 ## [0.2.35] - 2026-10-11
 
 - Built on Glass 0.9.35, in step with it: the Face tab and Anymote pass a misbehaving browser store over and try a failed start again by themselves.
