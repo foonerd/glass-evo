@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.37] - 2026-10-11
+
+- Built on Glass 0.9.37, in step with it: the first install is checked and python is gone from both repositories; the release scripts write the manifest and find the Glass source with Node.
+
 ## [0.2.36] - 2026-10-11
 
 - Built on Glass 0.9.36, in step with it: a test of the remote's that could fail by chance takes a port of its own.
