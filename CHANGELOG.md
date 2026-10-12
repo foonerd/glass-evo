@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.41] - 2026-10-12
+
+- Built on Glass 0.9.41, in step with it: the two trace lines left from 0.9.27 are gone from the player's journal, and the chosen theme comes back at once after a plugin update.
+
 ## [0.2.39] - 2026-10-11
 
 - Built on Glass 0.9.39, in step with it: a browser face put on another meter of its theme keeps the artist's fanart slideshow at its place, as the screen does, instead of asking the set again and starting it over.
