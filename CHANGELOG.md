@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.2.43] - 2026-10-12
+
+- Built on Glass 0.9.43, in step with it: the pair goes back together, held to the pair about to run; this glass-evo needs Glass 0.9.43, which names it as the least it works with.
+
 ## [0.2.42] - 2026-10-12
 
 - Built on Glass 0.9.42, in step with it: the engine's configuration lives under the data folder, out of the plugin folder an install replaces; this glass-evo needs Glass 0.9.42, which names it as the least it works with.
