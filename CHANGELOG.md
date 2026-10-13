@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.0] - 2026-10-13
+
+- Built on Glass 0.10.0, in step with it: the CD changer, a theme kind of its own, and the record and the reels that keep turning across a meter switch. From 0.10.0 Glass and glass-evo carry one version; this glass-evo needs Glass 0.10.0, which names it as the least it works with.
+
 ## [0.2.44] - 2026-10-12
 
 - Built on Glass 0.9.44, in step with it: the About tab in the Manager; this glass-evo needs Glass 0.9.44, which names it as the least it works with.
