@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.3] - 2026-10-14
+
+- Built on Glass 0.10.3, in step with it: the CD changer's laser comes back wherever the read was lost, on the screen and in the face alike; this glass-evo needs Glass 0.10.3, which names it as the least it works with.
+
 ## [0.10.2] - 2026-10-14
 
 - Built on Glass 0.10.2, in step with it: the CD changer's mechanism carries on across a meter change inside the theme, on the screen and in the face alike; this glass-evo needs Glass 0.10.2, which names it as the least it works with.
