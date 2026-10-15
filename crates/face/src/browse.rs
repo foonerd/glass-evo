@@ -1196,7 +1196,7 @@ impl BrowseView {
             alpha,
             clip,
         );
-        // A length before the three; a row that opens says so by opening.
+        // A length, or a chevron for what opens, before the three.
         let right = replace_x - pad / 2;
         if let Some(duration) = self
             .cache
@@ -1209,6 +1209,16 @@ impl BrowseView {
                 duration,
                 right - duration.width as i32,
                 y + (h as i32 - duration.height as i32) / 2,
+                alpha,
+                clip,
+            );
+        } else if !item.leaf {
+            let chevron = self.glyph("chevron-right", m.title, dim);
+            blit_clipped(
+                frame,
+                chevron,
+                right - chevron.width as i32,
+                y + (h as i32 - chevron.height as i32) / 2,
                 alpha,
                 clip,
             );
