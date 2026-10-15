@@ -2926,7 +2926,7 @@ impl Overlay for Face {
                         .apply(frame, panel.x, panel.y, panel.w, panel.h, alpha);
                 }
                 glass(frame, panel.x, panel.y, panel.w, panel.h, theme.sheet);
-                let back = self.icons.as_ref().map(|set| set.get(Icon::Back));
+                let back = Some(icons.get(Icon::Back));
                 self.queue.draw(
                     frame,
                     view.fonts,
