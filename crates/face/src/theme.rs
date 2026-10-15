@@ -14,6 +14,29 @@ pub enum Paint {
     Fixed([u8; 3]),
 }
 
+/// The shape the queue and the browser take on the screen: by the screen
+/// (a sheet on a wide screen, the whole screen on one taller than wide), a
+/// sheet rising over the theme, a drawer at the right, or the whole screen.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ListShape {
+    #[default]
+    Auto,
+    Sheet,
+    Drawer,
+    Screen,
+}
+
+impl ListShape {
+    /// The shape for a screen of this size, `Auto` resolved.
+    pub fn on(self, width: u32, height: u32) -> ListShape {
+        match self {
+            ListShape::Auto if height > width => ListShape::Screen,
+            ListShape::Auto => ListShape::Sheet,
+            other => other,
+        }
+    }
+}
+
 /// Whether glass over a moving picture is frosted: as suits the board,
 /// which the plugin says, or as the user or the theme has it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -160,6 +183,10 @@ pub struct Theme {
     pub sheet: f32,
     /// `glass.hairline`: the line on a glass's inner edge.
     pub hairline: f32,
+    /// `lists.shape`: the shape the queue and the browser take: by the
+    /// screen (a sheet on a wide screen, the whole screen on a portrait
+    /// one), a sheet, a drawer at the right, or the whole screen.
+    pub lists_shape: ListShape,
     /// `glass.frost`: `auto`, `on` or `off`.
     pub frost: Frost,
     /// `buttons.ink`, `buttons.opacity`: the icons, when they have their own.
@@ -317,6 +344,7 @@ impl Default for Theme {
             bar: 0.75,
             sheet: 0.78,
             hairline: 0.12,
+            lists_shape: ListShape::Auto,
             frost: Frost::Auto,
             buttons_ink: None,
             buttons_opacity: 1.0,
@@ -510,6 +538,15 @@ impl Theme {
                         .filter(|n| n.is_finite())
                         .map(|n| n.clamp(0.0, 1.0))
                         .unwrap_or(self.hairline)
+                }
+                "lists.shape" => {
+                    self.lists_shape = match v.trim().to_ascii_lowercase().as_str() {
+                        "auto" | "screen-size" | "by the screen" => ListShape::Auto,
+                        "sheet" => ListShape::Sheet,
+                        "drawer" => ListShape::Drawer,
+                        "screen" | "full" | "whole" => ListShape::Screen,
+                        _ => self.lists_shape,
+                    }
                 }
                 "glass.frost" => {
                     self.frost = match v.to_ascii_lowercase().as_str() {

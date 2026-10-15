@@ -22,9 +22,15 @@ pub enum Icon {
     Shuffle,
     Speaker,
     Muted,
+    /// Lucide's `list-music`: the queue.
+    Queue,
+    /// Lucide's `chevron-left`: the way back.
+    Back,
+    /// Lucide's `x`: shut.
+    Close,
 }
 
-const ICONS: [Icon; 12] = [
+const ICONS: [Icon; 15] = [
     Icon::Previous,
     Icon::Play,
     Icon::Pause,
@@ -37,7 +43,12 @@ const ICONS: [Icon; 12] = [
     Icon::Shuffle,
     Icon::Speaker,
     Icon::Muted,
+    Icon::Queue,
+    Icon::Back,
+    Icon::Close,
 ];
+
+use crate::lucide::{self, Shape};
 
 type Point = (f32, f32);
 
@@ -159,7 +170,350 @@ fn distance(icon: Icon, p: Point) -> f32 {
         Icon::Muted => speaker(p)
             .min(segment(p, (15.5, 9.3), (20.9, 14.7), STROKE))
             .min(segment(p, (15.5, 14.7), (20.9, 9.3), STROKE)),
+        Icon::Queue | Icon::Back | Icon::Close => {
+            lucide_distance(&flatten(lucide_shapes(icon).unwrap_or(&[])), p)
+        }
     }
+}
+
+/// The Lucide shapes behind an icon drawn from that set; none for the
+/// face's own.
+fn lucide_shapes(icon: Icon) -> Option<&'static [Shape]> {
+    match icon {
+        Icon::Queue => Some(lucide::LIST_MUSIC),
+        Icon::Back => Some(lucide::CHEVRON_LEFT),
+        Icon::Close => Some(lucide::X),
+        _ => None,
+    }
+}
+
+/// A Lucide shape flattened for the distance: a run of points, or a
+/// circle or a rounded box kept exact.
+enum Flat {
+    Run(Vec<Point>),
+    Circle(Point, f32),
+    Box(Point, (f32, f32), f32),
+}
+
+/// The distance to the stroke of flattened shapes, each stroke two units
+/// wide and round at its ends, as Lucide draws them.
+fn lucide_distance(flat: &[Flat], p: Point) -> f32 {
+    let mut d = f32::MAX;
+    for shape in flat {
+        let here = match shape {
+            Flat::Run(points) => points
+                .windows(2)
+                .map(|ab| segment(p, ab[0], ab[1], STROKE))
+                .fold(f32::MAX, f32::min),
+            Flat::Circle(c, r) => ((p.0 - c.0).hypot(p.1 - c.1) - r).abs() - STROKE,
+            Flat::Box(c, half, r) => {
+                let q = (
+                    (p.0 - c.0).abs() - (half.0 - r),
+                    (p.1 - c.1).abs() - (half.1 - r),
+                );
+                let outside = (q.0.max(0.0)).hypot(q.1.max(0.0));
+                let inside = q.0.max(q.1).min(0.0);
+                (outside + inside - r).abs() - STROKE
+            }
+        };
+        d = d.min(here);
+    }
+    d
+}
+
+/// Lucide's shapes flattened: paths and runs of points as runs, curves
+/// and arcs sampled finely, circles and boxes kept as they are.
+fn flatten(shapes: &[Shape]) -> Vec<Flat> {
+    let mut out = Vec::new();
+    for shape in shapes {
+        match shape {
+            Shape::Path(d) => out.extend(flatten_path(d).into_iter().map(Flat::Run)),
+            Shape::Circle(cx, cy, r) => out.push(Flat::Circle((*cx, *cy), *r)),
+            Shape::Rect(x, y, w, h, rx) => out.push(Flat::Box(
+                (x + w / 2.0, y + h / 2.0),
+                (w / 2.0, h / 2.0),
+                rx.min(w / 2.0).min(h / 2.0),
+            )),
+            Shape::Line(x1, y1, x2, y2) => out.push(Flat::Run(vec![(*x1, *y1), (*x2, *y2)])),
+            Shape::Polyline(points) => out.push(Flat::Run(points.to_vec())),
+            Shape::Polygon(points) => {
+                let mut run = points.to_vec();
+                if let Some(first) = points.first() {
+                    run.push(*first);
+                }
+                out.push(Flat::Run(run));
+            }
+        }
+    }
+    out
+}
+
+/// The numbers of a path's data, with the commands between them: a
+/// command is a letter, a number ends at the next sign, letter or gap.
+fn path_tokens(d: &str) -> Vec<Result<char, f32>> {
+    let mut tokens = Vec::new();
+    let mut number = String::new();
+    let flush = |number: &mut String, tokens: &mut Vec<Result<char, f32>>| {
+        if !number.is_empty() {
+            if let Ok(value) = number.parse::<f32>() {
+                tokens.push(Err(value));
+            }
+            number.clear();
+        }
+    };
+    for c in d.chars() {
+        match c {
+            'a'..='z' | 'A'..='Z' if c != 'e' && c != 'E' => {
+                flush(&mut number, &mut tokens);
+                tokens.push(Ok(c));
+            }
+            '-' => {
+                if !number.is_empty() && !number.ends_with('e') && !number.ends_with('E') {
+                    flush(&mut number, &mut tokens);
+                }
+                number.push(c);
+            }
+            '.' => {
+                if number.contains('.') && !number.contains('e') {
+                    flush(&mut number, &mut tokens);
+                }
+                number.push(c);
+            }
+            '0'..='9' | 'e' | 'E' | '+' => number.push(c),
+            _ => flush(&mut number, &mut tokens),
+        }
+    }
+    flush(&mut number, &mut tokens);
+    tokens
+}
+
+/// A path's data as runs of points on the grid: lines as they are, cubic
+/// and quadratic curves and arcs sampled in sixteen steps, each move a
+/// new run, a close a step back to the run's start.
+fn flatten_path(d: &str) -> Vec<Vec<Point>> {
+    const STEPS: usize = 16;
+    let tokens = path_tokens(d);
+    let mut runs: Vec<Vec<Point>> = Vec::new();
+    let mut at = (0.0f32, 0.0f32);
+    let mut start = at;
+    let mut command = 'M';
+    let mut last_control: Option<Point> = None;
+    let mut i = 0;
+    let num = |i: &mut usize| -> Option<f32> {
+        let v = match tokens.get(*i) {
+            Some(Err(v)) => Some(*v),
+            _ => None,
+        };
+        if v.is_some() {
+            *i += 1;
+        }
+        v
+    };
+    while i < tokens.len() {
+        if let Some(Ok(c)) = tokens.get(i) {
+            command = *c;
+            i += 1;
+            if command == 'Z' || command == 'z' {
+                if let Some(run) = runs.last_mut() {
+                    run.push(start);
+                }
+                at = start;
+                last_control = None;
+                continue;
+            }
+        }
+        let relative = command.is_ascii_lowercase();
+        let base = if relative { at } else { (0.0, 0.0) };
+        let mut control = None;
+        match command.to_ascii_uppercase() {
+            'M' => {
+                let (Some(x), Some(y)) = (num(&mut i), num(&mut i)) else {
+                    break;
+                };
+                at = (base.0 + x, base.1 + y);
+                start = at;
+                runs.push(vec![at]);
+                // Pairs that follow a move are lines.
+                command = if relative { 'l' } else { 'L' };
+            }
+            'L' => {
+                let (Some(x), Some(y)) = (num(&mut i), num(&mut i)) else {
+                    break;
+                };
+                at = (base.0 + x, base.1 + y);
+                push_point(&mut runs, at);
+            }
+            'H' => {
+                let Some(x) = num(&mut i) else { break };
+                at = (base.0 + x, at.1);
+                push_point(&mut runs, at);
+            }
+            'V' => {
+                let Some(y) = num(&mut i) else { break };
+                at = (at.0, base.1 + y);
+                push_point(&mut runs, at);
+            }
+            'C' | 'S' => {
+                let first = if command.eq_ignore_ascii_case(&'C') {
+                    let (Some(x1), Some(y1)) = (num(&mut i), num(&mut i)) else {
+                        break;
+                    };
+                    (base.0 + x1, base.1 + y1)
+                } else {
+                    last_control.map_or(at, |c| (2.0 * at.0 - c.0, 2.0 * at.1 - c.1))
+                };
+                let (Some(x2), Some(y2), Some(x), Some(y)) =
+                    (num(&mut i), num(&mut i), num(&mut i), num(&mut i))
+                else {
+                    break;
+                };
+                let second = (base.0 + x2, base.1 + y2);
+                let end = (base.0 + x, base.1 + y);
+                for k in 1..=STEPS {
+                    let t = k as f32 / STEPS as f32;
+                    let u = 1.0 - t;
+                    let x = u * u * u * at.0
+                        + 3.0 * u * u * t * first.0
+                        + 3.0 * u * t * t * second.0
+                        + t * t * t * end.0;
+                    let y = u * u * u * at.1
+                        + 3.0 * u * u * t * first.1
+                        + 3.0 * u * t * t * second.1
+                        + t * t * t * end.1;
+                    push_point(&mut runs, (x, y));
+                }
+                control = Some(second);
+                at = end;
+            }
+            'Q' | 'T' => {
+                let one = if command.eq_ignore_ascii_case(&'Q') {
+                    let (Some(x1), Some(y1)) = (num(&mut i), num(&mut i)) else {
+                        break;
+                    };
+                    (base.0 + x1, base.1 + y1)
+                } else {
+                    last_control.map_or(at, |c| (2.0 * at.0 - c.0, 2.0 * at.1 - c.1))
+                };
+                let (Some(x), Some(y)) = (num(&mut i), num(&mut i)) else {
+                    break;
+                };
+                let end = (base.0 + x, base.1 + y);
+                for k in 1..=STEPS {
+                    let t = k as f32 / STEPS as f32;
+                    let u = 1.0 - t;
+                    let x = u * u * at.0 + 2.0 * u * t * one.0 + t * t * end.0;
+                    let y = u * u * at.1 + 2.0 * u * t * one.1 + t * t * end.1;
+                    push_point(&mut runs, (x, y));
+                }
+                control = Some(one);
+                at = end;
+            }
+            'A' => {
+                let (Some(rx), Some(ry), Some(rot), Some(large), Some(sweep), Some(x), Some(y)) = (
+                    num(&mut i),
+                    num(&mut i),
+                    num(&mut i),
+                    num(&mut i),
+                    num(&mut i),
+                    num(&mut i),
+                    num(&mut i),
+                ) else {
+                    break;
+                };
+                let end = (base.0 + x, base.1 + y);
+                for point in arc_points(at, end, rx, ry, rot, large != 0.0, sweep != 0.0, STEPS) {
+                    push_point(&mut runs, point);
+                }
+                at = end;
+            }
+            _ => break,
+        }
+        last_control = control;
+    }
+    runs.retain(|run| run.len() > 1);
+    runs
+}
+
+fn push_point(runs: &mut Vec<Vec<Point>>, p: Point) {
+    match runs.last_mut() {
+        Some(run) => run.push(p),
+        None => runs.push(vec![p]),
+    }
+}
+
+/// An SVG arc from `from` to `to`, sampled in `steps` points after the
+/// start: the endpoint form turned into a centre and two angles, as the
+/// SVG specification lays it out, the radii grown where they are too small.
+#[allow(clippy::too_many_arguments)]
+fn arc_points(
+    from: Point,
+    to: Point,
+    rx: f32,
+    ry: f32,
+    rot_deg: f32,
+    large: bool,
+    sweep: bool,
+    steps: usize,
+) -> Vec<Point> {
+    let (mut rx, mut ry) = (rx.abs(), ry.abs());
+    if rx == 0.0 || ry == 0.0 || from == to {
+        return vec![to];
+    }
+    let rot = rot_deg.to_radians();
+    let (cos, sin) = (rot.cos(), rot.sin());
+    let dx = (from.0 - to.0) / 2.0;
+    let dy = (from.1 - to.1) / 2.0;
+    let x1 = cos * dx + sin * dy;
+    let y1 = -sin * dx + cos * dy;
+    let lambda = (x1 * x1) / (rx * rx) + (y1 * y1) / (ry * ry);
+    if lambda > 1.0 {
+        rx *= lambda.sqrt();
+        ry *= lambda.sqrt();
+    }
+    let num = (rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1).max(0.0);
+    let den = rx * rx * y1 * y1 + ry * ry * x1 * x1;
+    let mut factor = if den == 0.0 { 0.0 } else { (num / den).sqrt() };
+    if large == sweep {
+        factor = -factor;
+    }
+    let cx1 = factor * rx * y1 / ry;
+    let cy1 = -factor * ry * x1 / rx;
+    let cx = cos * cx1 - sin * cy1 + (from.0 + to.0) / 2.0;
+    let cy = sin * cx1 + cos * cy1 + (from.1 + to.1) / 2.0;
+    let angle = |ux: f32, uy: f32, vx: f32, vy: f32| {
+        let dot = ux * vx + uy * vy;
+        let len = (ux * ux + uy * uy).sqrt() * (vx * vx + vy * vy).sqrt();
+        let mut a = (dot / len).clamp(-1.0, 1.0).acos();
+        if ux * vy - uy * vx < 0.0 {
+            a = -a;
+        }
+        a
+    };
+    let start = angle(1.0, 0.0, (x1 - cx1) / rx, (y1 - cy1) / ry);
+    let mut delta = angle(
+        (x1 - cx1) / rx,
+        (y1 - cy1) / ry,
+        (-x1 - cx1) / rx,
+        (-y1 - cy1) / ry,
+    );
+    if !sweep && delta > 0.0 {
+        delta -= std::f32::consts::TAU;
+    } else if sweep && delta < 0.0 {
+        delta += std::f32::consts::TAU;
+    }
+    (1..=steps)
+        .map(|k| {
+            let a = start + delta * k as f32 / steps as f32;
+            let (ex, ey) = (rx * a.cos(), ry * a.sin());
+            (cos * ex - sin * ey + cx, sin * ex + cos * ey + cy)
+        })
+        .collect()
+}
+
+/// A Lucide icon rastered at a size in an ink, its shapes flattened once.
+pub fn lucide(shapes: &[Shape], size: u32, ink: [u8; 3]) -> Frame {
+    let flat = flatten(shapes);
+    raster_by(size, ink, |p| lucide_distance(&flat, p))
 }
 
 /// A cloud, flat underneath: three bumps on a base, its lowest edge at
@@ -295,9 +649,13 @@ fn raster_by(size: u32, ink: [u8; 3], distance: impl Fn(Point) -> f32) -> Frame 
     }
 }
 
-/// One icon rastered at a size in an ink.
+/// One icon rastered at a size in an ink: Lucide's from their shapes,
+/// flattened once; the face's own from their distance.
 fn raster(icon: Icon, size: u32, ink: [u8; 3]) -> Frame {
-    raster_by(size, ink, |p| distance(icon, p))
+    match lucide_shapes(icon) {
+        Some(shapes) => lucide(shapes, size, ink),
+        None => raster_by(size, ink, |p| distance(icon, p)),
+    }
 }
 
 /// The sky as a picture `size` pixels square in an ink: what a forecast's
@@ -1018,5 +1376,83 @@ mod tests {
         // More is three dots, clear between them.
         assert!(distance(Icon::More, (12.0, 12.0)) < 0.0);
         assert!(distance(Icon::More, (8.5, 12.0)) > 0.0);
+    }
+}
+
+#[cfg(test)]
+mod lucide_tests {
+    use super::*;
+
+    fn inked(frame: &Frame) -> Vec<(u32, u32)> {
+        let mut out = Vec::new();
+        for y in 0..frame.height {
+            for x in 0..frame.width {
+                if frame.rgba[((y * frame.width + x) * 4 + 3) as usize] > 128 {
+                    out.push((x, y));
+                }
+            }
+        }
+        out
+    }
+
+    /// The path's words read: a relative chevron runs left of the middle,
+    /// absolute lines where they say, a close back to the start.
+    #[test]
+    fn a_paths_words_are_read_absolute_and_relative() {
+        let runs = flatten_path("m15 18-6-6 6-6");
+        assert_eq!(runs, vec![vec![(15.0, 18.0), (9.0, 12.0), (15.0, 6.0)]]);
+        let runs = flatten_path("M16 5H3");
+        assert_eq!(runs, vec![vec![(16.0, 5.0), (3.0, 5.0)]]);
+        let runs = flatten_path("M2 2v4h3z");
+        assert_eq!(
+            runs,
+            vec![vec![(2.0, 2.0), (2.0, 6.0), (5.0, 6.0), (2.0, 2.0)]]
+        );
+        let curve = flatten_path("M0 0c0 10 10 10 10 0");
+        assert_eq!(curve[0].len(), 17, "sixteen steps after the start");
+        assert!((curve[0][16].0 - 10.0).abs() < 1e-4 && curve[0][16].1.abs() < 1e-4);
+        let arc = flatten_path("M0 0A5 5 0 0 1 10 0");
+        assert_eq!(arc[0].len(), 17);
+        assert!(
+            (arc[0][8].1 + 5.0).abs() < 0.05,
+            "the arc's middle is five above: {:?}",
+            arc[0][8]
+        );
+    }
+
+    /// Lucide's icons ink: the queue's lines and its note, the chevron on
+    /// the left, the cross through the middle; and the set has them.
+    #[test]
+    fn the_lucide_icons_ink_where_their_shapes_are() {
+        let queue = lucide(lucide::LIST_MUSIC, 48, [255, 255, 255]);
+        let ink = inked(&queue);
+        assert!(ink.len() > 200, "the queue icon has ink: {}", ink.len());
+        assert!(
+            ink.iter().any(|(x, y)| *x < 12 && *y < 12),
+            "a line at the top left"
+        );
+        assert!(
+            ink.iter().any(|(x, y)| *x > 30 && *y > 24),
+            "the note at the bottom right"
+        );
+        let back = lucide(lucide::CHEVRON_LEFT, 48, [255, 255, 255]);
+        let ink = inked(&back);
+        assert!(
+            ink.iter().all(|(x, _)| *x >= 10 && *x <= 36),
+            "the chevron sits in the middle: {:?}",
+            ink.iter().map(|p| p.0).min()
+        );
+        assert!(
+            ink.iter()
+                .any(|(x, y)| *x < 18 && (*y as i32 - 24).abs() < 3),
+            "its point is at the left"
+        );
+        let set = Set::new(40, [0, 0, 0]);
+        assert!(
+            inked(set.get(Icon::Close))
+                .iter()
+                .any(|(x, y)| (*x as i32 - 20).abs() < 3 && (*y as i32 - 20).abs() < 3),
+            "the cross meets in the middle"
+        );
     }
 }

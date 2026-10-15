@@ -31,7 +31,9 @@ use std::path::{Path, PathBuf};
 
 pub mod clock;
 pub mod icon;
+pub mod lists;
 pub mod look;
+pub mod lucide;
 pub mod theme;
 pub mod when;
 use icon::Icon;
@@ -164,9 +166,11 @@ pub enum Tile {
     Repeat,
     Random,
     Mute,
+    /// The queue as a list over the theme.
+    Queue,
 }
 
-const TILES: [Tile; 3] = [Tile::Repeat, Tile::Random, Tile::Mute];
+const TILES: [Tile; 4] = [Tile::Repeat, Tile::Random, Tile::Mute, Tile::Queue];
 
 /// How far a volume button moves the volume, in points of a hundred.
 pub const VOLUME_STEP: u32 = 5;
@@ -364,8 +368,10 @@ pub fn mute_command(muted: bool) -> Command {
 
 /// The command a tile sends, given the player's state: repeat walks off,
 /// all, single and off again; random and mute turn over.
-pub fn tile_command(tile: Tile, meta: &Metadata) -> Command {
-    match tile {
+pub fn tile_command(tile: Tile, meta: &Metadata) -> Option<Command> {
+    Some(match tile {
+        // The queue tile opens the list; it sends the player nothing.
+        Tile::Queue => return None,
         Tile::Repeat => {
             let next = match (meta.repeat, meta.repeat_single) {
                 (false, _) => "all",
@@ -376,12 +382,13 @@ pub fn tile_command(tile: Tile, meta: &Metadata) -> Command {
         }
         Tile::Random => Command::with("random", serde_json::json!(!meta.random)),
         Tile::Mute => mute_command(meta.mute),
-    }
+    })
 }
 
 /// Whether a tile is lit: its mode is on in the player.
 pub fn tile_lit(tile: Tile, meta: &Metadata) -> bool {
     match tile {
+        Tile::Queue => false,
         Tile::Repeat => meta.repeat,
         Tile::Random => meta.random,
         Tile::Mute => meta.mute,
@@ -406,6 +413,7 @@ pub fn button_icon(button: Button, meta: &Metadata) -> Icon {
 /// The icon a tile wears, saying how its mode stands in the player.
 pub fn tile_icon(tile: Tile, meta: &Metadata) -> Icon {
     match tile {
+        Tile::Queue => Icon::Queue,
         Tile::Repeat if meta.repeat && meta.repeat_single => Icon::RepeatOne,
         Tile::Repeat => Icon::Repeat,
         Tile::Random => Icon::Shuffle,
@@ -543,6 +551,8 @@ pub struct Face {
     track: TrackLook,
     frost: Frost,
     clock: ClockFace,
+    /// The queue as a list over the theme, when it is open.
+    queue: lists::QueueView,
     /// What was last drawn, as `stamp` puts it; none when nothing was.
     drawn: Option<u64>,
     /// The folders face themes are kept in, where the face was told them;
@@ -2721,6 +2731,7 @@ impl Face {
             self.pressed.map(|b| b as u8).hash(&mut h);
             self.pressed_tile.map(|t| t as u8).hash(&mut h);
             self.sheet_open.hash(&mut h);
+            self.queue.stamp(view.input, &mut h);
             for button in BUTTONS {
                 (button_icon(button, meta) as u8).hash(&mut h);
             }
@@ -2775,7 +2786,13 @@ impl Overlay for Face {
             self.drawn = None;
             return Cover::Nothing;
         }
-        if alpha == 0 && !clock && !picture && !dark && self.black(view.now_ms) == 0 {
+        if alpha == 0
+            && !clock
+            && !picture
+            && !dark
+            && !self.queue.open
+            && self.black(view.now_ms) == 0
+        {
             self.drawn = None;
             return Cover::Nothing;
         }
@@ -2893,6 +2910,36 @@ impl Overlay for Face {
                     [255, 255, 255, share(theme.hairline, alpha)],
                 );
             };
+            // The queue over the theme and under the bar, in the shape the
+            // look names; the bar stays while it is open.
+            if self.queue.open {
+                let panel = lists::Panel::place(
+                    theme.lists_shape,
+                    view.width,
+                    view.height,
+                    bar.h,
+                    view.scale,
+                );
+                let m = lists::Measure::at(view.scale);
+                if frosted {
+                    self.frost
+                        .apply(frame, panel.x, panel.y, panel.w, panel.h, alpha);
+                }
+                glass(frame, panel.x, panel.y, panel.w, panel.h, theme.sheet);
+                let back = self.icons.as_ref().map(|set| set.get(Icon::Back));
+                self.queue.draw(
+                    frame,
+                    view.fonts,
+                    view.input,
+                    &panel,
+                    &m,
+                    theme.ink,
+                    look.accent,
+                    back,
+                    alpha,
+                );
+                self.presence.kept(view.now_ms);
+            }
             let button_alpha = share(theme.buttons_opacity, alpha);
             // The bar: glass over the picture, frosted where that is on.
             if frosted {
@@ -3035,6 +3082,23 @@ impl Overlay for Face {
         }
         let units = self.tokens(view).theme.measure_bar;
         let bar = Bar::measured(view.width, view.height, view.scale, units);
+        // The queue open: every touch beside the bar is the list's; a row
+        // plays from its place, a touch beside the list shuts it.
+        if self.queue.open && bar.button_at(x, y).is_none() {
+            let shape = self.tokens(view).theme.lists_shape;
+            let panel = lists::Panel::place(shape, view.width, view.height, bar.h, view.scale);
+            let m = lists::Measure::at(view.scale);
+            match self.queue.pointer(kind, x, y, &panel, &m, view.input) {
+                lists::Action::Play(at) => {
+                    self.pending
+                        .push(Command::with("play", serde_json::json!(at)));
+                }
+                lists::Action::Close => self.queue.close(),
+                lists::Action::Taken => {}
+            }
+            self.presence.kept(now);
+            return true;
+        }
         let on_bar = if self.presence.visible() {
             bar.button_at(x, y)
         } else {
@@ -3077,7 +3141,12 @@ impl Overlay for Face {
                 }
                 if let Some(tile) = was_tile {
                     if on_sheet == Some(tile) {
-                        self.pending.push(tile_command(tile, meta));
+                        if tile == Tile::Queue {
+                            self.sheet_open = false;
+                            self.queue.open();
+                        } else if let Some(command) = tile_command(tile, meta) {
+                            self.pending.push(command);
+                        }
                     }
                     self.presence.kept(now);
                     return true;
@@ -3259,22 +3328,23 @@ mod tests {
         assert_eq!(
             sheet,
             Sheet {
-                x: 641,
+                x: 428,
                 y: 576,
-                w: 639,
+                w: 852,
                 h: 72
             }
         );
-        assert_eq!(sheet.tile_at(650, 600), Some(Tile::Repeat));
-        assert_eq!(sheet.tile_at(960, 600), Some(Tile::Random));
-        assert_eq!(sheet.tile_at(1270, 600), Some(Tile::Mute));
+        assert_eq!(sheet.tile_at(500, 600), Some(Tile::Repeat));
+        assert_eq!(sheet.tile_at(750, 600), Some(Tile::Random));
+        assert_eq!(sheet.tile_at(960, 600), Some(Tile::Mute));
+        assert_eq!(sheet.tile_at(1270, 600), Some(Tile::Queue));
         assert_eq!(
-            sheet.tile_at(600, 600),
+            sheet.tile_at(400, 600),
             None,
             "left of the sheet is the theme's"
         );
         assert_eq!(sheet.tile_at(960, 660), None, "below it is the bar");
-        assert_eq!(sheet.tile_rect(1), (854, 576, 213, 72));
+        assert_eq!(sheet.tile_rect(1), (641, 576, 213, 72));
     }
 
     #[test]
@@ -3323,30 +3393,30 @@ mod tests {
         );
         let mut meta = Metadata::default();
         assert_eq!(
-            pair(tile_command(Tile::Repeat, &meta)),
+            pair(tile_command(Tile::Repeat, &meta).unwrap()),
             ("repeat".to_string(), Some(serde_json::json!("all")))
         );
         meta.repeat = true;
         assert_eq!(
-            pair(tile_command(Tile::Repeat, &meta)),
+            pair(tile_command(Tile::Repeat, &meta).unwrap()),
             ("repeat".to_string(), Some(serde_json::json!("single")))
         );
         meta.repeat_single = true;
         assert_eq!(
-            pair(tile_command(Tile::Repeat, &meta)),
+            pair(tile_command(Tile::Repeat, &meta).unwrap()),
             ("repeat".to_string(), Some(serde_json::json!("off")))
         );
         assert_eq!(
-            pair(tile_command(Tile::Random, &meta)),
+            pair(tile_command(Tile::Random, &meta).unwrap()),
             ("random".to_string(), Some(serde_json::json!(true)))
         );
         assert_eq!(
-            pair(tile_command(Tile::Mute, &meta)),
+            pair(tile_command(Tile::Mute, &meta).unwrap()),
             ("volume".to_string(), Some(serde_json::json!("mute")))
         );
         meta.mute = true;
         assert_eq!(
-            pair(tile_command(Tile::Mute, &meta)),
+            pair(tile_command(Tile::Mute, &meta).unwrap()),
             ("volume".to_string(), Some(serde_json::json!("unmute")))
         );
         assert!(
@@ -3566,8 +3636,8 @@ mod tests {
         assert!(face.sheet_open());
         assert!(face.commands().is_empty(), "opening sends nothing");
         // Random, pressed and released in place, turns over.
-        assert!(face.pointer(PointerKind::Down, 960, 600, &view(&input, &fonts, 2000)));
-        assert!(face.pointer(PointerKind::Up, 960, 600, &view(&input, &fonts, 2050)));
+        assert!(face.pointer(PointerKind::Down, 750, 600, &view(&input, &fonts, 2000)));
+        assert!(face.pointer(PointerKind::Up, 750, 600, &view(&input, &fonts, 2050)));
         let sent = face.commands();
         assert_eq!(sent.len(), 1);
         assert_eq!(
@@ -3773,12 +3843,12 @@ mod tests {
             [frame.rgba[i], frame.rgba[i + 1], frame.rgba[i + 2]]
         };
         // The random tile is lit: an accent wash on the black glass; repeat is not.
-        let lit = at(860, 580);
+        let lit = at(750, 580);
         assert!(
             lit[1] > 30 && lit[0] == 0 && lit[2] == 0,
             "a green wash: {lit:?}"
         );
-        assert_eq!(at(650, 580), [0, 0, 0], "an unlit tile is plain glass");
+        assert_eq!(at(500, 580), [0, 0, 0], "an unlit tile is plain glass");
     }
 
     #[test]
@@ -5182,5 +5252,62 @@ mod tests {
         assert!(!face.advance(&at(1_119_000)).3);
         assert!(face.advance(&at(1_120_100)).3);
         assert_eq!(face.screen(), Some(false));
+    }
+
+    /// The sheet's last tile opens the queue over the theme: a tap on a
+    /// row sends play from its place, a tap beside the sheet shuts the
+    /// list, and the list is part of what is drawn.
+    #[test]
+    fn the_queue_tile_opens_the_list_and_a_row_plays_from_its_place() {
+        use overlay::face::QueueEntry;
+        let mut input = input("pause");
+        input.queue = std::sync::Arc::new(
+            (0..5)
+                .map(|i| QueueEntry {
+                    title: format!("Track {i}"),
+                    duration: 100.0,
+                    ..Default::default()
+                })
+                .collect(),
+        );
+        input.queue_position = Some(1);
+        let fonts = Fonts::default();
+        let mut face = Face::new();
+        let mut frame = blank();
+        // More, then the queue's tile.
+        assert!(face.pointer(PointerKind::Down, 1200, 700, &view(&input, &fonts, 1000)));
+        assert!(face.pointer(PointerKind::Up, 1200, 700, &view(&input, &fonts, 1050)));
+        assert!(face.sheet_open());
+        let bar = Bar::for_picture(1280, 720, 1.0);
+        let (tx, ty, tw, th) = bar.sheet().tile_rect(3);
+        let (cx, cy) = (tx + tw as i32 / 2, ty + th as i32 / 2);
+        assert!(face.pointer(PointerKind::Down, cx, cy, &view(&input, &fonts, 2000)));
+        assert!(face.pointer(PointerKind::Up, cx, cy, &view(&input, &fonts, 2050)));
+        assert!(face.queue.open, "the list opens");
+        assert!(!face.sheet_open(), "and the sheet shuts");
+        assert!(face.commands().is_empty(), "opening sends nothing");
+        assert_eq!(face.covers(&view(&input, &fonts, 2100)), Cover::New);
+        assert!(face.draw(&mut frame, &view(&input, &fonts, 2100)));
+        assert_eq!(
+            face.covers(&view(&input, &fonts, 2116)),
+            Cover::Same,
+            "the list standing still costs nothing"
+        );
+        // A tap on the first row: play from the queue's start.
+        let panel = lists::Panel::place(theme::ListShape::Auto, 1280, 720, bar.h, 1.0);
+        let m = lists::Measure::at(1.0);
+        let y = panel.y + m.header as i32 + m.row as i32 / 2;
+        assert!(face.pointer(PointerKind::Down, 300, y, &view(&input, &fonts, 3000)));
+        assert!(face.pointer(PointerKind::Up, 300, y, &view(&input, &fonts, 3050)));
+        let sent = face.commands();
+        assert_eq!(sent.len(), 1);
+        let line: serde_json::Value = serde_json::from_str(sent[0].line().trim()).unwrap();
+        assert_eq!(line["name"], "play");
+        assert_eq!(line["value"], 0);
+        assert!(face.queue.open, "the list stays for the next choice");
+        // A tap beside the sheet shuts the list; the bar's buttons act through it.
+        assert!(face.pointer(PointerKind::Down, 300, 100, &view(&input, &fonts, 4000)));
+        assert!(face.pointer(PointerKind::Up, 300, 100, &view(&input, &fonts, 4050)));
+        assert!(!face.queue.open);
     }
 }
