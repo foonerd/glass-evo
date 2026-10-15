@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.16] - 2026-10-15
+
+- Built on Glass 0.10.16, in step with it: the favourite tile in the More sheet's library row, and a close on every page of the browser below the first; this glass-evo needs Glass 0.10.16, which names it as the least it works with.
+
 ## [0.10.15] - 2026-10-15
 
 - Built on Glass 0.10.15, in step with it: the sources as tiles of glass as the mockup had them, and a row without a title drawn by the line under it; this glass-evo needs Glass 0.10.15, which names every item and names this glass-evo as the least it works with.
