@@ -44,6 +44,8 @@ enum Press {
     Add(usize),
     /// The add-and-play symbol before the plus.
     Play(usize),
+    /// The clear-and-play symbol before that.
+    Replace(usize),
     Back,
     Close,
     Key(usize),
@@ -404,6 +406,13 @@ impl BrowseView {
         !self.on_sources() && x >= plus - m.row as i32 && x < plus
     }
 
+    /// Whether a point is on a row's clear-and-play symbol, the square
+    /// before the add-and-play one.
+    fn on_replace(&self, panel: &Panel, m: &Measure, x: i32) -> bool {
+        let play = panel.x + panel.w as i32 - 2 * m.row as i32 - m.pad as i32 / 2;
+        !self.on_sources() && x >= play - m.row as i32 && x < play
+    }
+
     /// The key under a point on the keyboard.
     fn key_at(&self, panel: &Panel, m: &Measure, x: i32, y: i32) -> Option<usize> {
         let (top, key_h) = self.keys_top(panel, m);
@@ -469,6 +478,8 @@ impl BrowseView {
                         Press::Add(i)
                     } else if self.on_play(panel, m, x) {
                         Press::Play(i)
+                    } else if self.on_replace(panel, m, x) {
+                        Press::Replace(i)
                     } else {
                         Press::Row(i)
                     }
@@ -516,6 +527,11 @@ impl BrowseView {
                         if still && self.item_at(panel, m, count, cols, cell, x, y) == Some(i) =>
                     {
                         self.play_added(i, input)
+                    }
+                    Some(Press::Replace(i))
+                        if still && self.item_at(panel, m, count, cols, cell, x, y) == Some(i) =>
+                    {
+                        self.play_replacing(i, input)
                     }
                     _ => Action::Taken,
                 }
@@ -572,6 +588,34 @@ impl BrowseView {
         self.reset_touch();
         let command = self.ask(uri, title);
         Action::Send(command)
+    }
+
+    /// The clear-and-play symbol on an item: the queue emptied, then a
+    /// track's list played from the track, or a collection played whole,
+    /// as the player's own interface does it.
+    fn play_replacing(&mut self, i: usize, input: &Input) -> Action {
+        let Some(answer) = self.answer(input) else {
+            return Action::Taken;
+        };
+        let Some(item) = answer.items.get(i) else {
+            return Action::Taken;
+        };
+        if item.heading || item.uri.is_empty() {
+            return Action::Taken;
+        }
+        if item.leaf {
+            return Action::Send(Command::with(
+                "play",
+                serde_json::json!({ "uri": answer.uri, "index": i }),
+            ));
+        }
+        Action::Send(Command::with(
+            "play",
+            serde_json::json!({ "item": {
+                "uri": item.uri, "service": item.service, "title": item.title,
+                "type": item.kind, "albumart": item.art,
+            } }),
+        ))
     }
 
     /// The add-and-play symbol on an item: the queue kept, a track's list
@@ -704,7 +748,8 @@ impl BrowseView {
         let item = &answer.items[i];
         let dim = dimmed(ink);
         // The cover or glyph at the left, the plus and a length at the right.
-        let text_w = width.saturating_sub(m.pad * 2 + m.cover + m.pad / 2 + m.row + m.title * 3);
+        let text_w =
+            width.saturating_sub(m.pad * 2 + m.cover + m.pad / 2 + m.row * 3 + m.title * 3);
         *slot = Some(if item.heading {
             RowLines {
                 title: fitted(
@@ -1128,8 +1173,31 @@ impl BrowseView {
             alpha,
             clip,
         );
-        // A length, or a chevron for what opens, before both.
-        let right = play_x - pad / 2;
+        // Clear and play before add and play: a plain play, lit while pressed.
+        let replace_x = play_x - m.row as i32;
+        if self.pressed == Some(Press::Replace(i)) {
+            fill_clipped(
+                frame,
+                replace_x,
+                y,
+                m.row,
+                h,
+                [accent[0], accent[1], accent[2], alpha / 4],
+                clip,
+            );
+        }
+        let replace = self.glyph("play", m.title, dim);
+        let (rw, rh) = (replace.width as i32, replace.height as i32);
+        blit_clipped(
+            frame,
+            replace,
+            replace_x + (m.row as i32 - rw) / 2,
+            y + (h as i32 - rh) / 2,
+            alpha,
+            clip,
+        );
+        // A length before the three; a row that opens says so by opening.
+        let right = replace_x - pad / 2;
         if let Some(duration) = self
             .cache
             .as_ref()
@@ -1141,16 +1209,6 @@ impl BrowseView {
                 duration,
                 right - duration.width as i32,
                 y + (h as i32 - duration.height as i32) / 2,
-                alpha,
-                clip,
-            );
-        } else if !item.leaf {
-            let chevron = self.glyph("chevron-right", m.title, dim);
-            blit_clipped(
-                frame,
-                chevron,
-                right - chevron.width as i32,
-                y + (h as i32 - chevron.height as i32) / 2,
                 alpha,
                 clip,
             );
@@ -1446,6 +1504,42 @@ mod tests {
         assert_eq!(whole.name, "play");
         assert_eq!(whole.value.as_ref().unwrap()["add"], true);
         assert_eq!(whole.value.as_ref().unwrap()["item"]["uri"], "radio/top500");
+        // The symbol before that clears and plays: a track its list from
+        // there, a collection whole, the queue emptied by the player.
+        let replace_x = play_x - m.row as i32;
+        assert_eq!(
+            view.pointer(PointerKind::Down, replace_x, row_y(1), &panel, &m, &radio),
+            Action::Taken
+        );
+        let Action::Send(cleared) =
+            view.pointer(PointerKind::Up, replace_x, row_y(1), &panel, &m, &radio)
+        else {
+            panic!("the symbol clears and plays");
+        };
+        assert_eq!(
+            pair(&cleared),
+            (
+                "play".to_string(),
+                serde_json::json!({ "uri": "radio", "index": 1 })
+            )
+        );
+        assert_eq!(
+            view.pointer(PointerKind::Down, replace_x, row_y(0), &panel, &m, &radio),
+            Action::Taken
+        );
+        let Action::Send(collection) =
+            view.pointer(PointerKind::Up, replace_x, row_y(0), &panel, &m, &radio)
+        else {
+            panic!("a collection whole");
+        };
+        assert_eq!(
+            collection.value.as_ref().unwrap()["item"]["uri"],
+            "radio/top500"
+        );
+        assert!(
+            collection.value.as_ref().unwrap().get("add").is_none(),
+            "no add: the queue is emptied"
+        );
         // A drag scrolls and plays nothing.
         assert_eq!(
             view.pointer(PointerKind::Down, 300, row_y(1), &panel, &m, &radio),
