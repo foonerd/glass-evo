@@ -302,7 +302,7 @@ impl BrowseView {
     /// rows for a list, tiles across for the sources.
     fn grid(&self, panel: &Panel, m: &Measure) -> (usize, u32) {
         if self.on_sources() {
-            let cols = (panel.w / (m.cell * 2)).clamp(2, 6) as usize;
+            let cols = (panel.w / (m.cell * 2)).clamp(2, 4) as usize;
             (cols, m.cell)
         } else {
             (1, m.row)
@@ -771,12 +771,23 @@ impl BrowseView {
             } else {
                 col_w
             };
-            if pressed == Some(Press::Row(i)) {
-                fill_clipped(frame, x, y, w, cell, [255, 255, 255, alpha / 10], clip);
-            }
             if cols > 1 {
-                self.draw_tile(frame, fonts, item, (x, y, w, cell), m, ink, alpha, clip);
+                let lit = pressed == Some(Press::Row(i));
+                self.draw_tile(
+                    frame,
+                    fonts,
+                    item,
+                    (x, y, w, cell),
+                    m,
+                    ink,
+                    alpha,
+                    lit,
+                    clip,
+                );
             } else {
+                if pressed == Some(Press::Row(i)) {
+                    fill_clipped(frame, x, y, w, cell, [255, 255, 255, alpha / 10], clip);
+                }
                 self.row_lines(fonts, &answer, i, m, panel.w, ink);
                 self.draw_row(frame, item, i, (x, y, w, cell), m, ink, accent, alpha, clip);
             }
@@ -801,7 +812,9 @@ impl BrowseView {
         }
     }
 
-    /// A source as a tile: its own picture or its glyph above its name.
+    /// A source as a tile of lighter glass with rounded corners, its own
+    /// picture or its glyph at the top left and its name at the bottom
+    /// left, as the accepted mockup has it; lit while pressed.
     #[allow(clippy::too_many_arguments)]
     fn draw_tile(
         &mut self,
@@ -812,38 +825,61 @@ impl BrowseView {
         m: &Measure,
         ink: [u8; 3],
         alpha: u8,
+        lit: bool,
         clip: (i32, i32, u32, u32),
     ) {
         let (x, y, w, h) = rect;
+        let gap = (m.pad / 2) as i32;
+        let (tx, ty) = (x + gap, y + gap);
+        let (tw, th) = (
+            w.saturating_sub(2 * gap as u32).max(1),
+            h.saturating_sub(2 * gap as u32).max(1),
+        );
+        let wash = if lit { alpha / 5 } else { alpha / 12 };
+        rounded(
+            frame,
+            tx,
+            ty,
+            tw,
+            th,
+            m.pad / 2,
+            [255, 255, 255, wash],
+            clip,
+        );
+        let inner = m.pad as i32;
         let side = m.cover;
-        let cx = x + w as i32 / 2;
-        let py = y + (h as i32 - side as i32 - m.small as i32 - m.pad as i32 / 2) / 2;
+        let (px, py) = (tx + inner, ty + inner);
         let drawn = match self.covers.get(&item.art_file, side) {
             Some(cover) => {
-                blit_clipped(frame, cover, cx - side as i32 / 2, py, alpha, clip);
+                blit_clipped(frame, cover, px, py, alpha, clip);
                 true
             }
             None => false,
         };
         if !drawn {
             let glyph = self.glyph(&item.icon, side, ink);
-            let gx = cx - glyph.width as i32 / 2;
-            let gy = py + (side as i32 - glyph.height as i32) / 2;
-            blit_clipped(frame, glyph, gx, gy, alpha, clip);
+            blit_clipped(
+                frame,
+                glyph,
+                px + (side as i32 - glyph.width as i32) / 2,
+                py + (side as i32 - glyph.height as i32) / 2,
+                alpha,
+                clip,
+            );
         }
         if let Some(line) = fitted(
             fonts,
             TextStyle::Regular,
-            m.small,
+            m.title,
             ink,
             &item.title,
-            w.saturating_sub(m.pad),
+            tw.saturating_sub(2 * inner as u32),
         ) {
             blit_clipped(
                 frame,
                 &line,
-                cx - line.width as i32 / 2,
-                py + side as i32 + m.pad as i32 / 2,
+                tx + inner,
+                ty + th as i32 - inner - line.height as i32,
                 alpha,
                 clip,
             );
@@ -927,7 +963,18 @@ impl BrowseView {
                         clip,
                     );
                 }
-                _ => {}
+                // No title: the line under it stands in its place.
+                (None, Some(sub)) => {
+                    blit_clipped(
+                        frame,
+                        sub,
+                        x_text,
+                        y + (h as i32 - sub.height as i32) / 2,
+                        alpha,
+                        clip,
+                    );
+                }
+                (None, None) => {}
             }
         }
         // The plus at the right end, lit while pressed.
@@ -1066,6 +1113,50 @@ impl BrowseView {
             }
         }
     }
+}
+
+/// A fill with rounded corners of radius `r`, held to a clip box: the
+/// rows through the corners are shorter by the circle's inset.
+fn rounded(
+    frame: &mut Frame,
+    x: i32,
+    y: i32,
+    w: u32,
+    h: u32,
+    r: u32,
+    rgba: [u8; 4],
+    clip: (i32, i32, u32, u32),
+) {
+    let r = r.min(w / 2).min(h / 2);
+    if r == 0 {
+        fill_clipped(frame, x, y, w, h, rgba, clip);
+        return;
+    }
+    let rf = r as f32;
+    for row in 0..r {
+        let d = rf - row as f32 - 0.5;
+        let inset = (rf - (rf * rf - d * d).max(0.0).sqrt()).round() as i32;
+        let short = w.saturating_sub(2 * inset as u32);
+        fill_clipped(frame, x + inset, y + row as i32, short, 1, rgba, clip);
+        fill_clipped(
+            frame,
+            x + inset,
+            y + h as i32 - 1 - row as i32,
+            short,
+            1,
+            rgba,
+            clip,
+        );
+    }
+    fill_clipped(
+        frame,
+        x,
+        y + r as i32,
+        w,
+        h.saturating_sub(2 * r),
+        rgba,
+        clip,
+    );
 }
 
 #[cfg(test)]

@@ -122,7 +122,7 @@ impl Measure {
             small: unit(16.0),
             pad: unit(24.0),
             cover: unit(44.0),
-            cell: unit(104.0),
+            cell: unit(150.0),
         }
     }
 }
