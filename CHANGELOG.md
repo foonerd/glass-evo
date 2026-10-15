@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.10] - 2026-10-15
+
+- Built on Glass 0.10.10, in step with it: the queue's way out before its title in every shape, pointing where the shape leaves; this glass-evo needs Glass 0.10.10, which names it as the least it works with.
+
 ## [0.10.9] - 2026-10-15
 
 - Built on Glass 0.10.9, in step with it: the queue's sheet and drawer have a close of their own at the header's right; this glass-evo needs Glass 0.10.9, which names it as the least it works with.
