@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.12] - 2026-10-15
+
+- Built on Glass 0.10.12, in step with it: the heart on the More sheet drawn whole, Lucide's glyphs rastered over the whole of their grid so nothing of one that draws out to the edge is cut; this glass-evo needs Glass 0.10.12, which names it as the least it works with.
+
 ## [0.10.11] - 2026-10-15
 
 - Built on Glass 0.10.11, in step with it: a heart on the More sheet, lit while the playing track is one of the player's favourites, a press adding the track or taking it out; this glass-evo needs Glass 0.10.11, which carries the player's word and the command, and names it as the least it works with.
