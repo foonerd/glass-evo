@@ -2926,8 +2926,12 @@ impl Overlay for Face {
                         .apply(frame, panel.x, panel.y, panel.w, panel.h, alpha);
                 }
                 glass(frame, panel.x, panel.y, panel.w, panel.h, theme.sheet);
-                let back = Some(icons.get(Icon::Back));
-                let close = Some(icons.get(Icon::Close));
+                // The way out points where the shape leaves.
+                let leave = Some(icons.get(match panel.shape {
+                    theme::ListShape::Sheet => Icon::Down,
+                    theme::ListShape::Drawer => Icon::Right,
+                    _ => Icon::Back,
+                }));
                 self.queue.draw(
                     frame,
                     view.fonts,
@@ -2936,8 +2940,7 @@ impl Overlay for Face {
                     &m,
                     theme.ink,
                     look.accent,
-                    back,
-                    close,
+                    leave,
                     alpha,
                 );
                 self.presence.kept(view.now_ms);

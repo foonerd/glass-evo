@@ -28,9 +28,13 @@ pub enum Icon {
     Back,
     /// Lucide's `x`: shut.
     Close,
+    /// Lucide's `chevron-down`: a sheet's way out, down.
+    Down,
+    /// Lucide's `chevron-right`: a drawer's way out, to the right.
+    Right,
 }
 
-const ICONS: [Icon; 15] = [
+const ICONS: [Icon; 17] = [
     Icon::Previous,
     Icon::Play,
     Icon::Pause,
@@ -46,6 +50,8 @@ const ICONS: [Icon; 15] = [
     Icon::Queue,
     Icon::Back,
     Icon::Close,
+    Icon::Down,
+    Icon::Right,
 ];
 
 use crate::lucide::{self, Shape};
@@ -170,7 +176,7 @@ fn distance(icon: Icon, p: Point) -> f32 {
         Icon::Muted => speaker(p)
             .min(segment(p, (15.5, 9.3), (20.9, 14.7), STROKE))
             .min(segment(p, (15.5, 14.7), (20.9, 9.3), STROKE)),
-        Icon::Queue | Icon::Back | Icon::Close => {
+        Icon::Queue | Icon::Back | Icon::Close | Icon::Down | Icon::Right => {
             lucide_distance(&flatten(lucide_shapes(icon).unwrap_or(&[])), p)
         }
     }
@@ -183,6 +189,8 @@ fn lucide_shapes(icon: Icon) -> Option<&'static [Shape]> {
         Icon::Queue => Some(lucide::LIST_MUSIC),
         Icon::Back => Some(lucide::CHEVRON_LEFT),
         Icon::Close => Some(lucide::X),
+        Icon::Down => Some(lucide::CHEVRON_DOWN),
+        Icon::Right => Some(lucide::CHEVRON_RIGHT),
         _ => None,
     }
 }

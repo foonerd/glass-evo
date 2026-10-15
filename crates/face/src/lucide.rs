@@ -60,8 +60,14 @@ pub enum Shape {
     Polygon(&'static [(f32, f32)]),
 }
 
+/// Lucide's `chevron-down`.
+pub const CHEVRON_DOWN: &[Shape] = &[Shape::Path("m6 9 6 6 6-6")];
+
 /// Lucide's `chevron-left`.
 pub const CHEVRON_LEFT: &[Shape] = &[Shape::Path("m15 18-6-6 6-6")];
+
+/// Lucide's `chevron-right`.
+pub const CHEVRON_RIGHT: &[Shape] = &[Shape::Path("m9 18 6-6-6-6")];
 
 /// Lucide's `disc-3`.
 pub const DISC_3: &[Shape] = &[
@@ -184,7 +190,9 @@ pub const X: &[Shape] = &[Shape::Path("M18 6 6 18"), Shape::Path("m6 6 12 12")];
 
 /// Every icon here by its Lucide name.
 pub const ALL: &[(&str, &[Shape])] = &[
+    ("chevron-down", CHEVRON_DOWN),
     ("chevron-left", CHEVRON_LEFT),
+    ("chevron-right", CHEVRON_RIGHT),
     ("disc-3", DISC_3),
     ("folder", FOLDER),
     ("hard-drive", HARD_DRIVE),

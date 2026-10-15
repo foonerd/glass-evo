@@ -59,19 +59,12 @@ impl Panel {
         x >= self.x && y >= self.y && x < self.x + self.w as i32 && y < self.y + self.h as i32
     }
 
-    /// Where the list's own close stands: at the header's right end on a
-    /// sheet and a drawer, a square as tall as the header; the whole
-    /// screen has its way back at the left instead.
-    pub fn close_rect(&self, m: &Measure) -> Option<(i32, i32, u32, u32)> {
-        match self.shape {
-            ListShape::Screen => None,
-            _ => Some((
-                self.x + self.w as i32 - m.header as i32,
-                self.y,
-                m.header,
-                m.header,
-            )),
-        }
+    /// Where the list's way out stands, in every shape: at the header's
+    /// left, before the title, a square as tall as the header. Its glyph
+    /// points where the shape leaves: down for a sheet, right for a
+    /// drawer, left for the whole screen.
+    pub fn leave_rect(&self, m: &Measure) -> (i32, i32, u32, u32) {
+        (self.x, self.y, m.header, m.header)
     }
 }
 
@@ -230,14 +223,9 @@ impl QueueView {
     ) -> Action {
         let rows = input.queue.len();
         let inside = panel.contains(x, y);
-        let on_back = panel.shape == ListShape::Screen
-            && inside
-            && y < panel.y + m.header as i32
-            && x < panel.x + (m.header * 2) as i32;
-        let on_close = panel.close_rect(m).is_some_and(|(cx, cy, cw, ch)| {
-            x >= cx && y >= cy && x < cx + cw as i32 && y < cy + ch as i32
-        });
-        let on_back = on_back || on_close;
+        // The way out: the header's left, before the title, in every shape.
+        let on_back =
+            inside && y < panel.y + m.header as i32 && x < panel.x + (m.header * 2) as i32;
         match kind {
             PointerKind::Down => {
                 self.closing = !inside || on_back;
@@ -382,8 +370,7 @@ impl QueueView {
         m: &Measure,
         ink: [u8; 3],
         accent: [u8; 3],
-        back: Option<&Frame>,
-        close: Option<&Frame>,
+        leave: Option<&Frame>,
         alpha: u8,
     ) {
         self.bring(panel, m, input);
@@ -393,10 +380,12 @@ impl QueueView {
         let hx = panel.x + m.pad as i32;
         let hy = panel.y + (m.header as i32 - m.title as i32 * 13 / 10) / 2;
         let mut title_x = hx;
-        if let (ListShape::Screen, Some(back)) = (panel.shape, back) {
-            let by = panel.y + (m.header as i32 - back.height as i32) / 2;
-            ui::blit(frame, back, hx, by, alpha);
-            title_x += back.width as i32 + m.pad as i32 / 2;
+        if let Some(leave) = leave {
+            let (lx, ly, lw, lh) = panel.leave_rect(m);
+            let x = lx + (lw as i32 - leave.width as i32) / 2;
+            let y = ly + (lh as i32 - leave.height as i32) / 2;
+            ui::blit(frame, leave, x, y, alpha);
+            title_x = lx + lw as i32 + m.pad as i32 / 4;
         }
         if let Some(line) = ui::line(fonts, TextStyle::Bold, m.title * 13 / 10, ink, "Queue") {
             ui::blit(frame, &line, title_x, hy, alpha);
@@ -405,16 +394,8 @@ impl QueueView {
             Some(at) if rows > 0 => format!("{rows} tracks · now {} of {rows}", at + 1),
             _ => format!("{rows} tracks"),
         };
-        // The close at the header's right, and the count left of it.
-        let mut right = panel.x + panel.w as i32 - m.pad as i32;
-        if let (Some((cx, cy, cw, ch)), Some(close)) = (panel.close_rect(m), close) {
-            let x = cx + (cw as i32 - close.width as i32) / 2;
-            let y = cy + (ch as i32 - close.height as i32) / 2;
-            ui::blit(frame, close, x, y, alpha);
-            right = cx - m.pad as i32 / 2;
-        }
         if let Some(line) = ui::line(fonts, TextStyle::Regular, m.small, dim, &count) {
-            let x = right - line.width as i32;
+            let x = panel.x + panel.w as i32 - m.pad as i32 - line.width as i32;
             let y = panel.y + (m.header as i32 - line.height as i32) / 2;
             ui::blit(frame, &line, x, y, alpha);
         }
@@ -716,7 +697,6 @@ mod tests {
             [240, 240, 240],
             [80, 140, 240],
             None,
-            None,
             255,
         );
         let (window, most) = list.extent(&panel, &m, 40);
@@ -766,21 +746,23 @@ mod tests {
             list.pointer(PointerKind::Up, 300, 10, &panel, &m, &input),
             Action::Close
         );
-        // The sheet's own close, at the header's right, shuts it.
-        let (cx, cy, cw, ch) = panel.close_rect(&m).expect("a sheet has a close");
-        assert_eq!((cx, cy, cw, ch), (1280 - 60, 240, 60, 60));
+        // The sheet's way out, before its title at the header's left, shuts it.
+        let (lx, ly, lw, lh) = panel.leave_rect(&m);
+        assert_eq!((lx, ly, lw, lh), (0, 240, 60, 60));
         list.open();
         assert_eq!(
-            list.pointer(PointerKind::Down, cx + 30, cy + 30, &panel, &m, &input),
+            list.pointer(PointerKind::Down, lx + 30, ly + 30, &panel, &m, &input),
             Action::Taken
         );
         assert_eq!(
-            list.pointer(PointerKind::Up, cx + 30, cy + 30, &panel, &m, &input),
+            list.pointer(PointerKind::Up, lx + 30, ly + 30, &panel, &m, &input),
             Action::Close
         );
-        // The whole screen: no close of its own, the way back at the top left shuts it.
+        // The drawer's, likewise, at its own left edge.
+        let drawer = Panel::place(ListShape::Drawer, 1280, 720, 64, 1.0);
+        assert_eq!(drawer.leave_rect(&m).0, drawer.x);
+        // The whole screen: the way back at the top left shuts it.
         let whole = Panel::place(ListShape::Screen, 1280, 720, 64, 1.0);
-        assert_eq!(whole.close_rect(&m), None);
         let mut list = QueueView::default();
         list.open();
         assert_eq!(
