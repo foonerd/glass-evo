@@ -3248,6 +3248,10 @@ impl Overlay for Face {
                     self.pending
                         .push(Command::with("play", serde_json::json!(at)));
                 }
+                lists::Action::Remove(at) => self
+                    .pending
+                    .push(Command::with("remove", serde_json::json!(at))),
+                lists::Action::Clear => self.pending.push(Command::new("clear")),
                 lists::Action::Close => self.queue.close(),
                 lists::Action::Taken => {}
             }

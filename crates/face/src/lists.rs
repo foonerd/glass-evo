@@ -78,6 +78,29 @@ pub enum Action {
     Close,
     /// Play from this place in the queue.
     Play(usize),
+    /// Take the track at this place out of the queue.
+    Remove(usize),
+    /// Empty the queue.
+    Clear,
+}
+
+/// What a finger's drag became: nothing yet, a scroll of the rows, or a
+/// swipe of one row towards its bin.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Intent {
+    Undecided,
+    Scroll,
+    Swipe(usize),
+}
+
+/// A finger down: where it went down, the scroll then, and what the drag
+/// became.
+#[derive(Clone, Copy, Debug)]
+struct Drag {
+    x0: i32,
+    y0: i32,
+    scroll0: f32,
+    intent: Intent,
 }
 
 /// The lines set for one row at a size, and the row's number.
@@ -134,13 +157,22 @@ pub struct QueueView {
     pub open: bool,
     /// How far the rows are scrolled, in pixels.
     scroll: f32,
-    /// A finger down: where it went down, the scroll then, and whether it
-    /// has moved far enough to be a drag rather than a tap.
-    drag: Option<(i32, f32, bool)>,
+    drag: Option<Drag>,
     /// The row a finger is down on, for its highlight.
     pressed: Option<usize>,
     /// The press beside the list, or on its way back, that shuts it.
     closing: bool,
+    /// The row swiped towards its bin, and how far its content stands to
+    /// the left; open at the bin's whole width.
+    swiped: Option<(usize, f32)>,
+    /// A finger down on a swiped row's bin.
+    pressed_bin: Option<usize>,
+    /// Clear asked once: the header says how many, and a second press
+    /// on it empties the queue; a touch elsewhere withdraws the ask.
+    clearing: bool,
+    pressed_clear: bool,
+    /// The queue the swipe and the ask were made on; another lets them go.
+    seen_queue: usize,
     /// Whether the rows were brought to the playing track since the list
     /// opened, so it opens on what plays and is not pulled back after.
     brought: bool,
@@ -168,6 +200,32 @@ impl QueueView {
         self.drag = None;
         self.pressed = None;
         self.closing = false;
+        self.swiped = None;
+        self.pressed_bin = None;
+        self.clearing = false;
+        self.pressed_clear = false;
+    }
+
+    /// The bin's width at the right end of a swiped row.
+    fn reveal(m: &Measure) -> f32 {
+        (m.row * 2) as f32
+    }
+
+    /// Whether a point is on the bin of the row swiped open.
+    fn on_bin(&self, panel: &Panel, m: &Measure, rows: usize, row: usize, x: i32, y: i32) -> bool {
+        self.swiped
+            .is_some_and(|(r, offset)| r == row && offset <= -Self::reveal(m))
+            && x >= panel.x + panel.w as i32 - Self::reveal(m) as i32
+            && x < panel.x + panel.w as i32
+            && self.row_at(panel, m, rows, y) == Some(row)
+    }
+
+    /// Whether a point is on the header's clear, at its right end.
+    fn on_clear(panel: &Panel, m: &Measure, x: i32, y: i32) -> bool {
+        y >= panel.y
+            && y < panel.y + m.header as i32
+            && x >= panel.x + panel.w as i32 - m.header as i32
+            && x < panel.x + panel.w as i32
     }
 
     /// What the list draws from, for the face's stamp: open, where it is
@@ -179,6 +237,9 @@ impl QueueView {
         }
         (self.scroll as i32).hash(h);
         self.pressed.hash(h);
+        self.swiped.map(|(r, o)| (r, o as i32)).hash(h);
+        self.pressed_bin.hash(h);
+        (self.clearing, self.pressed_clear).hash(h);
         (std::sync::Arc::as_ptr(&input.queue) as usize).hash(h);
         (std::sync::Arc::as_ptr(&input.queue_art) as usize).hash(h);
         input.queue_position.hash(h);
@@ -219,10 +280,12 @@ impl QueueView {
         self.scroll = centre.clamp(0.0, most);
     }
 
-    /// A touch on the list, in picture pixels, with the panel it stands in.
-    /// Every touch inside is the list's; a touch outside a sheet or a
+    /// A touch on the list, in picture pixels, with the panel it stands
+    /// in. Every touch inside is the list's; a touch outside a sheet or a
     /// drawer shuts it, a touch on the way back at the top of the whole
-    /// screen likewise.
+    /// screen likewise. A drag up or down scrolls; a drag to the left on
+    /// a row swipes it towards its bin, which a tap then empties; clear at
+    /// the header's right end asks once and acts at the second press.
     pub fn pointer(
         &mut self,
         kind: PointerKind,
@@ -237,26 +300,60 @@ impl QueueView {
         // The way out: the header's left, before the title, in every shape.
         let on_back =
             inside && y < panel.y + m.header as i32 && x < panel.x + (m.header * 2) as i32;
+        let on_clear = inside && Self::on_clear(panel, m, x, y);
         match kind {
             PointerKind::Down => {
                 self.closing = !inside || on_back;
                 if self.closing {
                     return Action::Taken;
                 }
-                self.drag = Some((y, self.scroll, false));
+                if on_clear {
+                    self.pressed_clear = true;
+                    return Action::Taken;
+                }
+                // Clear asked and the finger went elsewhere: the ask is withdrawn.
+                self.clearing = false;
+                if let Some((row, _)) = self.swiped {
+                    if self.on_bin(panel, m, rows, row, x, y) {
+                        self.pressed_bin = Some(row);
+                        return Action::Taken;
+                    }
+                    // A touch elsewhere shuts the swiped row.
+                    self.swiped = None;
+                }
+                self.drag = Some(Drag {
+                    x0: x,
+                    y0: y,
+                    scroll0: self.scroll,
+                    intent: Intent::Undecided,
+                });
                 self.pressed = self.row_at(panel, m, rows, y);
                 Action::Taken
             }
             PointerKind::Move => {
-                if let Some((y0, scroll0, moved)) = self.drag {
-                    let dy = y - y0;
-                    let moved = moved || dy.abs() > DRAG_PX;
-                    if moved {
-                        let (_, most) = self.extent(panel, m, rows);
-                        self.scroll = (scroll0 - dy as f32).clamp(0.0, most);
+                if let Some(mut drag) = self.drag {
+                    let (dx, dy) = (x - drag.x0, y - drag.y0);
+                    if drag.intent == Intent::Undecided
+                        && (dx.abs() > DRAG_PX || dy.abs() > DRAG_PX)
+                    {
+                        drag.intent = match self.pressed {
+                            Some(row) if dx.abs() > dy.abs() => Intent::Swipe(row),
+                            _ => Intent::Scroll,
+                        };
                         self.pressed = None;
                     }
-                    self.drag = Some((y0, scroll0, moved));
+                    match drag.intent {
+                        Intent::Scroll => {
+                            let (_, most) = self.extent(panel, m, rows);
+                            self.scroll = (drag.scroll0 - dy as f32).clamp(0.0, most);
+                        }
+                        Intent::Swipe(row) => {
+                            let reveal = Self::reveal(m);
+                            self.swiped = Some((row, (dx as f32).clamp(-reveal, 0.0)));
+                        }
+                        Intent::Undecided => {}
+                    }
+                    self.drag = Some(drag);
                 }
                 Action::Taken
             }
@@ -264,15 +361,42 @@ impl QueueView {
                 if std::mem::take(&mut self.closing) {
                     return Action::Close;
                 }
+                if std::mem::take(&mut self.pressed_clear) {
+                    if !on_clear {
+                        self.clearing = false;
+                        return Action::Taken;
+                    }
+                    if self.clearing {
+                        self.clearing = false;
+                        return Action::Clear;
+                    }
+                    self.clearing = rows > 0;
+                    return Action::Taken;
+                }
+                if let Some(row) = self.pressed_bin.take() {
+                    if self.on_bin(panel, m, rows, row, x, y) {
+                        self.swiped = None;
+                        return Action::Remove(row);
+                    }
+                    return Action::Taken;
+                }
                 let drag = self.drag.take();
                 let pressed = self.pressed.take();
-                match (drag, pressed) {
-                    (Some((_, _, false)), Some(row))
-                        if self.row_at(panel, m, rows, y) == Some(row) =>
-                    {
-                        Action::Play(row)
+                match drag.map(|d| d.intent) {
+                    Some(Intent::Swipe(row)) => {
+                        // Past half way the row stays open at its bin; short of it, it springs back.
+                        let reveal = Self::reveal(m);
+                        let offset = self.swiped.map_or(0.0, |(_, o)| o);
+                        self.swiped = (offset <= -reveal / 2.0).then_some((row, -reveal));
+                        Action::Taken
                     }
-                    _ => Action::Taken,
+                    Some(Intent::Scroll) => Action::Taken,
+                    Some(Intent::Undecided) | None => match pressed {
+                        Some(row) if self.row_at(panel, m, rows, y) == Some(row) => {
+                            Action::Play(row)
+                        }
+                        _ => Action::Taken,
+                    },
                 }
             }
         }
@@ -402,12 +526,52 @@ impl QueueView {
         if let Some(line) = ui::line(fonts, TextStyle::Bold, m.title * 13 / 10, ink, "Queue") {
             ui::blit(frame, &line, title_x, hy, alpha);
         }
-        let count = match input.queue_position {
-            Some(at) if rows > 0 => format!("{rows} tracks · now {} of {rows}", at + 1),
-            _ => format!("{rows} tracks"),
+        // Another queue lets a swipe and a clear's ask go.
+        let queue_key = std::sync::Arc::as_ptr(&input.queue) as usize;
+        if queue_key != self.seen_queue {
+            self.seen_queue = queue_key;
+            self.swiped = None;
+            self.clearing = false;
+        }
+        // Clear at the header's right end: lit while asked or pressed.
+        let (clear_x, clear_y, side) = (
+            panel.x + panel.w as i32 - m.header as i32,
+            panel.y,
+            m.header,
+        );
+        if self.clearing || self.pressed_clear {
+            ui::fill(
+                frame,
+                clear_x,
+                clear_y,
+                side,
+                side,
+                [accent[0], accent[1], accent[2], alpha / 4],
+            );
+        }
+        let bin_ink = if self.clearing { ink } else { dim };
+        let clear = self
+            .glyphs
+            .get("list-x", m.title + m.small / 2, bin_ink)
+            .clone();
+        ui::blit(
+            frame,
+            &clear,
+            clear_x + (side as i32 - clear.width as i32) / 2,
+            clear_y + (side as i32 - clear.height as i32) / 2,
+            alpha,
+        );
+        let count = if self.clearing {
+            format!("clear {rows} tracks?")
+        } else {
+            match input.queue_position {
+                Some(at) if rows > 0 => format!("{rows} tracks · now {} of {rows}", at + 1),
+                _ => format!("{rows} tracks"),
+            }
         };
-        if let Some(line) = ui::line(fonts, TextStyle::Regular, m.small, dim, &count) {
-            let x = panel.x + panel.w as i32 - m.pad as i32 - line.width as i32;
+        let count_ink = if self.clearing { ink } else { dim };
+        if let Some(line) = ui::line(fonts, TextStyle::Regular, m.small, count_ink, &count) {
+            let x = clear_x - m.pad as i32 / 4 - line.width as i32;
             let y = panel.y + (m.header as i32 - line.height as i32) / 2;
             ui::blit(frame, &line, x, y, alpha);
         }
@@ -421,6 +585,8 @@ impl QueueView {
         let (window, _) = self.extent(panel, m, rows);
         let scroll = self.scroll;
         let pressed = self.pressed;
+        let swiped = self.swiped;
+        let pressed_bin = self.pressed_bin;
         let position = input.queue_position;
         let first = (scroll / m.row as f32).floor().max(0.0) as usize;
         let last = ((scroll + window as f32) / m.row as f32).ceil() as usize;
@@ -430,6 +596,45 @@ impl QueueView {
         for (i, row) in lines.iter().enumerate().take(last.min(rows)).skip(first) {
             let y = clip.1 + (i as f32 * m.row as f32 - scroll).round() as i32;
             let playing = position == Some(i as u32);
+            // A swiped row stands to the left by its offset, its bin shown
+            // in the room it leaves at the right.
+            let shift = swiped
+                .filter(|(r, _)| *r == i)
+                .map_or(0, |(_, o)| o.round() as i32);
+            if shift < 0 {
+                let edge = panel.x + panel.w as i32 + shift;
+                fill_clipped(
+                    frame,
+                    edge,
+                    y,
+                    (-shift) as u32,
+                    m.row,
+                    [196, 40, 40, alpha - alpha / 8],
+                    clip,
+                );
+                if pressed_bin == Some(i) {
+                    fill_clipped(
+                        frame,
+                        edge,
+                        y,
+                        (-shift) as u32,
+                        m.row,
+                        [255, 255, 255, alpha / 6],
+                        clip,
+                    );
+                }
+                let bin = glyphs.get("trash-2", m.title + m.small / 2, [255, 255, 255]);
+                if (-shift) as u32 >= bin.width + 8 {
+                    blit_clipped(
+                        frame,
+                        bin,
+                        edge + ((-shift) - bin.width as i32) / 2,
+                        y + (m.row as i32 - bin.height as i32) / 2,
+                        alpha,
+                        clip,
+                    );
+                }
+            }
             if pressed == Some(i) {
                 fill_clipped(
                     frame,
@@ -454,7 +659,7 @@ impl QueueView {
                 );
             }
             // The cover after the number, or a note where none has come.
-            let cx = panel.x + m.pad as i32 + m.title as i32 * 2;
+            let cx = panel.x + shift + m.pad as i32 + m.title as i32 * 2;
             let cy = y + (m.row as i32 - m.cover as i32) / 2;
             let file = input.queue_art.get(i).map_or("", String::as_str);
             match covers.get(file, m.cover) {
@@ -473,7 +678,7 @@ impl QueueView {
             }
             let x_text = cx + m.cover as i32 + m.pad as i32 / 2;
             if let Some(number) = &row.number {
-                let nx = panel.x + m.pad as i32 - 2;
+                let nx = panel.x + shift + m.pad as i32 - 2;
                 blit_clipped(
                     frame,
                     number,
@@ -502,7 +707,7 @@ impl QueueView {
                 blit_clipped(frame, sub, x_text, y + m.row as i32 / 2 + 2, alpha, clip);
             }
             if let Some(duration) = &row.duration {
-                let dx = panel.x + panel.w as i32
+                let dx = panel.x + shift + panel.w as i32
                     - m.pad as i32
                     - duration.width as i32
                     - m.title as i32 / 2;
@@ -809,6 +1014,93 @@ mod tests {
 
     /// Text is cut with an ellipsis where it does not fit, and a clock
     /// reads seconds as minutes and seconds, hours above an hour.
+    /// A drag to the left on a row swipes it to its bin past half way and
+    /// springs it back short of that; a tap on the bin takes the track
+    /// out; a touch elsewhere shuts the swipe and is a touch as any; clear
+    /// at the header's right end asks once, a second press empties the
+    /// queue, and a touch elsewhere withdraws the ask.
+    #[test]
+    fn a_swipe_reveals_the_bin_and_clear_asks_once() {
+        let input = queue(6, Some(1));
+        let panel = Panel::place(ListShape::Auto, 1280, 720, 72, 1.0);
+        let m = Measure::at(1.0);
+        let mut view = QueueView::default();
+        view.open();
+        let row_y = |i: i32| panel.y + m.header as i32 + m.row as i32 * i + m.row as i32 / 2;
+        // Short of half way the row springs back.
+        assert_eq!(
+            view.pointer(PointerKind::Down, 600, row_y(1), &panel, &m, &input),
+            Action::Taken
+        );
+        assert_eq!(
+            view.pointer(PointerKind::Move, 570, row_y(1), &panel, &m, &input),
+            Action::Taken
+        );
+        assert_eq!(
+            view.pointer(PointerKind::Up, 570, row_y(1), &panel, &m, &input),
+            Action::Taken
+        );
+        assert_eq!(view.swiped, None);
+        // Past half way it stays open at the bin's width.
+        view.pointer(PointerKind::Down, 600, row_y(1), &panel, &m, &input);
+        view.pointer(PointerKind::Move, 400, row_y(1), &panel, &m, &input);
+        assert_eq!(
+            view.pointer(PointerKind::Up, 400, row_y(1), &panel, &m, &input),
+            Action::Taken
+        );
+        assert_eq!(view.swiped, Some((1, -(m.row as f32 * 2.0))));
+        // A tap on the bin takes the track out.
+        let bin_x = panel.x + panel.w as i32 - m.row as i32;
+        assert_eq!(
+            view.pointer(PointerKind::Down, bin_x, row_y(1), &panel, &m, &input),
+            Action::Taken
+        );
+        assert_eq!(
+            view.pointer(PointerKind::Up, bin_x, row_y(1), &panel, &m, &input),
+            Action::Remove(1)
+        );
+        assert_eq!(view.swiped, None);
+        // Swiped open, a touch elsewhere shuts it and is a touch as any.
+        view.pointer(PointerKind::Down, 600, row_y(2), &panel, &m, &input);
+        view.pointer(PointerKind::Move, 400, row_y(2), &panel, &m, &input);
+        view.pointer(PointerKind::Up, 400, row_y(2), &panel, &m, &input);
+        assert!(view.swiped.is_some());
+        assert_eq!(
+            view.pointer(PointerKind::Down, 300, row_y(4), &panel, &m, &input),
+            Action::Taken
+        );
+        assert_eq!(view.swiped, None);
+        assert_eq!(
+            view.pointer(PointerKind::Up, 300, row_y(4), &panel, &m, &input),
+            Action::Play(4)
+        );
+        // Clear: asked once, withdrawn by a touch elsewhere, done at the second press.
+        let (cx, cy) = (
+            panel.x + panel.w as i32 - m.header as i32 / 2,
+            panel.y + m.header as i32 / 2,
+        );
+        assert_eq!(
+            view.pointer(PointerKind::Down, cx, cy, &panel, &m, &input),
+            Action::Taken
+        );
+        assert_eq!(
+            view.pointer(PointerKind::Up, cx, cy, &panel, &m, &input),
+            Action::Taken
+        );
+        assert!(view.clearing, "asked once");
+        view.pointer(PointerKind::Down, 300, row_y(0), &panel, &m, &input);
+        assert!(!view.clearing, "a touch elsewhere withdraws the ask");
+        view.pointer(PointerKind::Up, 300, row_y(0), &panel, &m, &input);
+        view.pointer(PointerKind::Down, cx, cy, &panel, &m, &input);
+        view.pointer(PointerKind::Up, cx, cy, &panel, &m, &input);
+        view.pointer(PointerKind::Down, cx, cy, &panel, &m, &input);
+        assert_eq!(
+            view.pointer(PointerKind::Up, cx, cy, &panel, &m, &input),
+            Action::Clear
+        );
+        assert!(!view.clearing);
+    }
+
     #[test]
     fn long_text_is_cut_and_seconds_read_as_a_clock() {
         assert_eq!(clock(65.0), "1:05");
