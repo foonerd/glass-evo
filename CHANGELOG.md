@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.4] - 2026-10-15
+
+- Built on Glass 0.10.4, in step with it: the album art blurred and dimmed behind a theme that leaves part of the screen bare, at a switch off by default; this glass-evo needs Glass 0.10.4, which names it as the least it works with.
+
 ## [0.10.3] - 2026-10-14
 
 - Built on Glass 0.10.3, in step with it: the CD changer's laser comes back wherever the read was lost, on the screen and in the face alike; this glass-evo needs Glass 0.10.3, which names it as the least it works with.
