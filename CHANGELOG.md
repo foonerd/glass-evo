@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.20] - 2026-10-15
+
+- Built on Glass 0.10.20, in step with it: every browsed row with clear and play, add and play and add to queue; this glass-evo needs Glass 0.10.20, which names it as the least it works with.
+
 ## [0.10.19] - 2026-10-15
 
 - Built on Glass 0.10.19, in step with it: a queue row swiped to its bin and the queue cleared from the header, asking once; this glass-evo needs Glass 0.10.19, which carries the verbs and names it as the least it works with.
