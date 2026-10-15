@@ -60,6 +60,14 @@ pub enum Shape {
     Polygon(&'static [(f32, f32)]),
 }
 
+/// Lucide's `cast`.
+pub const CAST: &[Shape] = &[
+    Shape::Path("M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"),
+    Shape::Path("M2 12a9 9 0 0 1 8 8"),
+    Shape::Path("M2 16a5 5 0 0 1 4 4"),
+    Shape::Line(0.0, 0.0, 0.0, 0.0),
+];
+
 /// Lucide's `chevron-down`.
 pub const CHEVRON_DOWN: &[Shape] = &[Shape::Path("m6 9 6 6 6-6")];
 
@@ -69,6 +77,25 @@ pub const CHEVRON_LEFT: &[Shape] = &[Shape::Path("m15 18-6-6 6-6")];
 /// Lucide's `chevron-right`.
 pub const CHEVRON_RIGHT: &[Shape] = &[Shape::Path("m9 18 6-6-6-6")];
 
+/// Lucide's `cloud`.
+pub const CLOUD: &[Shape] = &[Shape::Path(
+    "M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z",
+)];
+
+/// Lucide's `cpu`.
+pub const CPU: &[Shape] = &[
+    Shape::Rect(4.0, 4.0, 16.0, 16.0, 2.0),
+    Shape::Rect(9.0, 9.0, 6.0, 6.0, 1.0),
+    Shape::Path("M15 2v2"),
+    Shape::Path("M15 20v2"),
+    Shape::Path("M2 15h2"),
+    Shape::Path("M2 9h2"),
+    Shape::Path("M20 15h2"),
+    Shape::Path("M20 9h2"),
+    Shape::Path("M9 2v2"),
+    Shape::Path("M9 20v2"),
+];
+
 /// Lucide's `disc-3`.
 pub const DISC_3: &[Shape] = &[
     Shape::Circle(12.0, 12.0, 10.0),
@@ -77,9 +104,21 @@ pub const DISC_3: &[Shape] = &[
     Shape::Path("M18 12c0 1.7-.7 3.2-1.8 4.2"),
 ];
 
+/// Lucide's `folder-open`.
+pub const FOLDER_OPEN: &[Shape] = &[
+    Shape::Path("m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"),
+];
+
 /// Lucide's `folder`.
 pub const FOLDER: &[Shape] = &[
     Shape::Path("M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"),
+];
+
+/// Lucide's `globe`.
+pub const GLOBE: &[Shape] = &[
+    Shape::Circle(12.0, 12.0, 10.0),
+    Shape::Path("M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"),
+    Shape::Path("M2 12h20"),
 ];
 
 /// Lucide's `hard-drive`.
@@ -88,6 +127,12 @@ pub const HARD_DRIVE: &[Shape] = &[
     Shape::Path("M2.212 11.577a2 2 0 0 0-.212.896V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5.527a2 2 0 0 0-.212-.896L18.55 5.11A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"),
     Shape::Path("M21.946 12.013H2.054"),
     Shape::Path("M6 16h.01"),
+];
+
+/// Lucide's `heart-pulse`.
+pub const HEART_PULSE: &[Shape] = &[
+    Shape::Path("M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"),
+    Shape::Path("M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"),
 ];
 
 /// Lucide's `heart`.
@@ -120,6 +165,16 @@ pub const LIST_MUSIC: &[Shape] = &[
     Shape::Circle(18.0, 16.0, 3.0),
 ];
 
+/// Lucide's `list-ordered`.
+pub const LIST_ORDERED: &[Shape] = &[
+    Shape::Path("M10 12h11"),
+    Shape::Path("M10 18h11"),
+    Shape::Path("M10 6h11"),
+    Shape::Path("M4 10h2"),
+    Shape::Path("M4 6h1v4"),
+    Shape::Path("M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"),
+];
+
 /// Lucide's `list-plus`.
 pub const LIST_PLUS: &[Shape] = &[
     Shape::Path("M16 5H3"),
@@ -137,6 +192,19 @@ pub const LIST: &[Shape] = &[
     Shape::Path("M8 5h13"),
     Shape::Path("M8 12h13"),
     Shape::Path("M8 19h13"),
+];
+
+/// Lucide's `map-pin`.
+pub const MAP_PIN: &[Shape] = &[
+    Shape::Path("M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"),
+    Shape::Circle(12.0, 10.0, 3.0),
+];
+
+/// Lucide's `mic`.
+pub const MIC: &[Shape] = &[
+    Shape::Path("M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"),
+    Shape::Path("M19 10v2a7 7 0 0 1-14 0v-2"),
+    Shape::Line(0.0, 0.0, 0.0, 0.0),
 ];
 
 /// Lucide's `music`.
@@ -169,9 +237,29 @@ pub const SEARCH: &[Shape] = &[
     Shape::Circle(11.0, 11.0, 8.0),
 ];
 
+/// Lucide's `server`.
+pub const SERVER: &[Shape] = &[
+    Shape::Rect(2.0, 2.0, 20.0, 8.0, 2.0),
+    Shape::Rect(2.0, 14.0, 20.0, 8.0, 2.0),
+    Shape::Line(0.0, 0.0, 0.0, 0.0),
+    Shape::Line(0.0, 0.0, 0.0, 0.0),
+];
+
 /// Lucide's `star`.
 pub const STAR: &[Shape] = &[
     Shape::Path("M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"),
+];
+
+/// Lucide's `tag`.
+pub const TAG: &[Shape] = &[
+    Shape::Path("M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"),
+    Shape::Circle(7.5, 7.5, 0.5),
+];
+
+/// Lucide's `thumbs-up`.
+pub const THUMBS_UP: &[Shape] = &[
+    Shape::Path("M7 10v12"),
+    Shape::Path("M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"),
 ];
 
 /// Lucide's `usb`.
@@ -185,29 +273,48 @@ pub const USB: &[Shape] = &[
     Shape::Path("m18 12 1-1 1 1-1 1Z"),
 ];
 
+/// Lucide's `user-round`.
+pub const USER_ROUND: &[Shape] = &[
+    Shape::Circle(12.0, 8.0, 5.0),
+    Shape::Path("M20 21a8 8 0 0 0-16 0"),
+];
+
 /// Lucide's `x`.
 pub const X: &[Shape] = &[Shape::Path("M18 6 6 18"), Shape::Path("m6 6 12 12")];
 
 /// Every icon here by its Lucide name.
 pub const ALL: &[(&str, &[Shape])] = &[
+    ("cast", CAST),
     ("chevron-down", CHEVRON_DOWN),
     ("chevron-left", CHEVRON_LEFT),
     ("chevron-right", CHEVRON_RIGHT),
+    ("cloud", CLOUD),
+    ("cpu", CPU),
     ("disc-3", DISC_3),
+    ("folder-open", FOLDER_OPEN),
     ("folder", FOLDER),
+    ("globe", GLOBE),
     ("hard-drive", HARD_DRIVE),
+    ("heart-pulse", HEART_PULSE),
     ("heart", HEART),
     ("library-big", LIBRARY_BIG),
     ("list-end", LIST_END),
     ("list-music", LIST_MUSIC),
+    ("list-ordered", LIST_ORDERED),
     ("list-plus", LIST_PLUS),
     ("list", LIST),
+    ("map-pin", MAP_PIN),
+    ("mic", MIC),
     ("music", MUSIC),
     ("play", PLAY),
     ("plus", PLUS),
     ("radio", RADIO),
     ("search", SEARCH),
+    ("server", SERVER),
     ("star", STAR),
+    ("tag", TAG),
+    ("thumbs-up", THUMBS_UP),
     ("usb", USB),
+    ("user-round", USER_ROUND),
     ("x", X),
 ];

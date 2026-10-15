@@ -107,6 +107,9 @@ pub struct Measure {
     pub title: u32,
     pub small: u32,
     pub pad: u32,
+    /// A cover's side in a browse row, and a source tile's height.
+    pub cover: u32,
+    pub cell: u32,
 }
 
 impl Measure {
@@ -118,6 +121,8 @@ impl Measure {
             title: unit(22.0),
             small: unit(16.0),
             pad: unit(24.0),
+            cover: unit(44.0),
+            cell: unit(104.0),
         }
     }
 }
@@ -514,7 +519,7 @@ impl QueueView {
 }
 
 /// The ink at about half strength, for what is said in a lower voice.
-fn dimmed(ink: [u8; 3]) -> [u8; 3] {
+pub(crate) fn dimmed(ink: [u8; 3]) -> [u8; 3] {
     [
         ink[0] / 2 + ink[0] / 8,
         ink[1] / 2 + ink[1] / 8,
@@ -523,7 +528,7 @@ fn dimmed(ink: [u8; 3]) -> [u8; 3] {
 }
 
 /// Seconds as a clock reads them.
-fn clock(seconds: f32) -> String {
+pub(crate) fn clock(seconds: f32) -> String {
     let s = seconds.max(0.0).round() as u64;
     if s >= 3600 {
         format!("{}:{:02}:{:02}", s / 3600, (s / 60) % 60, s % 60)
@@ -534,7 +539,7 @@ fn clock(seconds: f32) -> String {
 
 /// A line of text set to fit a width: whole where it does, else cut with
 /// an ellipsis at the widest prefix that does.
-fn fitted(
+pub(crate) fn fitted(
     fonts: &Fonts,
     style: TextStyle,
     size: u32,
@@ -572,7 +577,7 @@ fn fitted(
 }
 
 /// A fill held to a clip box.
-fn fill_clipped(
+pub(crate) fn fill_clipped(
     frame: &mut Frame,
     x: i32,
     y: i32,
@@ -591,7 +596,7 @@ fn fill_clipped(
 }
 
 /// A picture laid at a place, held to a clip box.
-fn blit_clipped(
+pub(crate) fn blit_clipped(
     frame: &mut Frame,
     src: &Frame,
     x: i32,

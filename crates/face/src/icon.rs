@@ -34,9 +34,13 @@ pub enum Icon {
     Right,
     /// Lucide's `heart`: the playing track among the favourites.
     Heart,
+    /// Lucide's `library-big`: the player's library, to browse.
+    Browse,
+    /// Lucide's `search`: a search of the player's sources.
+    Search,
 }
 
-const ICONS: [Icon; 18] = [
+const ICONS: [Icon; 20] = [
     Icon::Previous,
     Icon::Play,
     Icon::Pause,
@@ -55,6 +59,8 @@ const ICONS: [Icon; 18] = [
     Icon::Down,
     Icon::Right,
     Icon::Heart,
+    Icon::Browse,
+    Icon::Search,
 ];
 
 use crate::lucide::{self, Shape};
@@ -181,9 +187,14 @@ fn distance(icon: Icon, p: Point) -> f32 {
         Icon::Muted => speaker(p)
             .min(segment(p, (15.5, 9.3), (20.9, 14.7), STROKE))
             .min(segment(p, (15.5, 14.7), (20.9, 9.3), STROKE)),
-        Icon::Queue | Icon::Back | Icon::Close | Icon::Down | Icon::Right | Icon::Heart => {
-            lucide_distance(&flatten(lucide_shapes(icon).unwrap_or(&[])), p)
-        }
+        Icon::Queue
+        | Icon::Back
+        | Icon::Close
+        | Icon::Down
+        | Icon::Right
+        | Icon::Heart
+        | Icon::Browse
+        | Icon::Search => lucide_distance(&flatten(lucide_shapes(icon).unwrap_or(&[])), p),
     }
 }
 
@@ -197,6 +208,8 @@ fn lucide_shapes(icon: Icon) -> Option<&'static [Shape]> {
         Icon::Down => Some(lucide::CHEVRON_DOWN),
         Icon::Right => Some(lucide::CHEVRON_RIGHT),
         Icon::Heart => Some(lucide::HEART),
+        Icon::Browse => Some(lucide::LIBRARY_BIG),
+        Icon::Search => Some(lucide::SEARCH),
         _ => None,
     }
 }
