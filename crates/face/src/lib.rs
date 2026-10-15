@@ -564,6 +564,13 @@ pub struct Face {
     /// for the fade between.
     dark_since: Option<u64>,
     wake_since: Option<u64>,
+    /// The face's word on the panel's power, said once per change: off
+    /// once the black has come whole, on when it begins to go; whether the
+    /// black stood whole last frame; and whether the player held the panel
+    /// off last frame, so its coming back counts as a touch.
+    screen_wish: Option<bool>,
+    dark_whole: bool,
+    panel_off: bool,
     fade_ms: u32,
 }
 
@@ -2599,6 +2606,18 @@ impl Face {
         let off_ms = u64::from(off_min) * 60_000;
         // The screen goes black after the minutes the look names with
         // nothing playing and no touch; music coming wakes it.
+        // The player's own off: nothing is drawn while it holds, and the
+        // panel coming back counts as a touch, so the idle minutes run
+        // from then and the black does not come back at once.
+        if view.screen_off {
+            self.panel_off = true;
+        } else if std::mem::take(&mut self.panel_off) {
+            self.touched_at = Some(now);
+            self.idle_since = None;
+            self.dark = false;
+            self.dark_since = None;
+            self.wake_since = None;
+        }
         let was_dark = self.dark;
         if idle {
             let since = *self.idle_since.get_or_insert(now);
@@ -2619,6 +2638,12 @@ impl Face {
         // Black that has come whole: nothing under it is drawn. While it
         // fades, in or out, what is under it is.
         let dark = self.black(now) == 255;
+        // The panel's power follows the black: off once it has come whole,
+        // on when it begins to go. Said once per change.
+        if dark != self.dark_whole {
+            self.dark_whole = dark;
+            self.screen_wish = Some(!dark);
+        }
         let clock = idle && !dark && (clock_show || date_show);
         // The picture for when nothing plays, where one is chosen and read:
         // in a browser the page brings it (none until it is in), on a
@@ -2745,6 +2770,11 @@ impl Overlay for Face {
     /// that too, and leaves the screen as it is.
     fn covers(&mut self, view: &View) -> Cover {
         let (alpha, clock, picture, dark) = self.advance(view);
+        // The player holds the panel off: nothing is shown until it is back.
+        if view.screen_off {
+            self.drawn = None;
+            return Cover::Nothing;
+        }
         if alpha == 0 && !clock && !picture && !dark && self.black(view.now_ms) == 0 {
             self.drawn = None;
             return Cover::Nothing;
@@ -2781,6 +2811,9 @@ impl Overlay for Face {
     fn draw(&mut self, frame: &mut Frame, view: &View) -> bool {
         let meta = &view.input.metadata;
         let (alpha, clock, picture, dark) = self.advance(view);
+        if view.screen_off {
+            return false;
+        }
         let time = clock.then_some(view.wall);
         // Black, and nothing on it: the screen is off as far as its pixels go.
         if dark {
@@ -3074,6 +3107,9 @@ impl Overlay for Face {
         }
     }
 
+    fn screen(&mut self) -> Option<bool> {
+        self.screen_wish.take()
+    }
     fn name(&self) -> Option<String> {
         Some(banner())
     }
@@ -3134,6 +3170,7 @@ mod tests {
             now_ms,
             wall: &A_THURSDAY,
             ours: true,
+            screen_off: false,
             scale: 1.0,
             settings: &NO_SETTINGS,
             theme_dir: "",
@@ -5094,5 +5131,56 @@ mod tests {
             .0
             .iter()
             .any(|p| p[3] == 255 && p[0] == 255 && p[1] == 0));
+    }
+
+    /// The black come whole asks the panel off, once; waking asks it on,
+    /// once. The player's own off shows nothing while it holds and, lifted,
+    /// counts as a touch: the idle minutes run again from then.
+    #[test]
+    fn the_black_come_whole_asks_the_panel_off_and_the_players_off_lifted_counts_as_a_touch() {
+        let paused = input("pause");
+        let fonts = Fonts::default();
+        let set = settings(&[("idle.off", "2"), ("idle.fade", "0"), ("clock.show", "on")]);
+        let at = |ms: u64| {
+            let mut v = view(&paused, &fonts, ms);
+            v.settings = &set;
+            v
+        };
+        let mut face = Face::new();
+        let mut frame = blank();
+        face.draw(&mut frame, &at(0));
+        assert_eq!(face.screen(), None, "nothing to say while the clock shows");
+        assert!(face.draw(&mut frame, &at(120_000)));
+        assert!(face.dark);
+        assert_eq!(
+            face.screen(),
+            Some(false),
+            "black come whole: the panel may go off"
+        );
+        assert_eq!(face.screen(), None, "said once");
+        let _ = face.covers(&at(130_000));
+        assert_eq!(face.screen(), None, "and not again while it stands");
+        // A tap wakes it: the panel must come on, said once.
+        assert!(face.pointer(PointerKind::Down, 640, 690, &at(200_000)));
+        let _ = face.covers(&at(200_016));
+        assert_eq!(face.screen(), Some(true));
+        assert_eq!(face.screen(), None);
+        // The player's own off: nothing drawn while it holds.
+        let mut off = at(300_000);
+        off.screen_off = true;
+        assert_eq!(face.covers(&off), Cover::Nothing);
+        assert!(!face.draw(&mut frame, &off));
+        let mut off_later = at(900_000);
+        off_later.screen_off = true;
+        assert_eq!(face.covers(&off_later), Cover::Nothing);
+        let _ = face.screen();
+        // Lifted at a thousand seconds: the clock, not black, as after a
+        // touch; black again two minutes on.
+        assert_ne!(face.covers(&at(1_000_000)), Cover::Nothing);
+        assert!(!face.dark, "the panel back on counts as a touch");
+        let _ = face.screen();
+        assert!(!face.advance(&at(1_119_000)).3);
+        assert!(face.advance(&at(1_120_100)).3);
+        assert_eq!(face.screen(), Some(false));
     }
 }
