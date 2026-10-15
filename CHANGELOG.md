@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.22] - 2026-10-15
+
+- Built on Glass 0.10.22, in step with it: the covers of the queue and the browser no longer flicker on the Face tab and Anymote, the engine giving them a cache of their own; nothing of the face changes; this glass-evo needs Glass 0.10.22, which names it as the least it works with.
+
 ## [0.10.21] - 2026-10-15
 
 - Built on Glass 0.10.21, in step with it: every browsed row carries clear and play, add and play and add to queue, and the chevron for what opens stays as it was (0.10.20 had dropped it unasked); this glass-evo needs Glass 0.10.21, which names it as the least it works with.
