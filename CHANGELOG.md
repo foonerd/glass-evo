@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.15] - 2026-10-15
+
+- Built on Glass 0.10.15, in step with it: the sources as tiles of glass as the mockup had them, and a row without a title drawn by the line under it; this glass-evo needs Glass 0.10.15, which names every item and names this glass-evo as the least it works with.
+
 ## [0.10.14] - 2026-10-15
 
 - Built on Glass 0.10.14, in step with it: the player's library, playlists and radios browsed over the theme and searched on a keyboard the face draws, from the More sheet, now two rows of labelled tiles; this glass-evo needs Glass 0.10.14, which carries the browse road and names it as the least it works with.
