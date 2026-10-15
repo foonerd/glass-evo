@@ -2927,6 +2927,7 @@ impl Overlay for Face {
                 }
                 glass(frame, panel.x, panel.y, panel.w, panel.h, theme.sheet);
                 let back = Some(icons.get(Icon::Back));
+                let close = Some(icons.get(Icon::Close));
                 self.queue.draw(
                     frame,
                     view.fonts,
@@ -2936,6 +2937,7 @@ impl Overlay for Face {
                     theme.ink,
                     look.accent,
                     back,
+                    close,
                     alpha,
                 );
                 self.presence.kept(view.now_ms);
