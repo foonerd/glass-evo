@@ -166,11 +166,20 @@ pub enum Tile {
     Repeat,
     Random,
     Mute,
+    /// The playing track among the player's favourites: lit when it is
+    /// one, a press adds it or takes it out.
+    Favourite,
     /// The queue as a list over the theme.
     Queue,
 }
 
-const TILES: [Tile; 4] = [Tile::Repeat, Tile::Random, Tile::Mute, Tile::Queue];
+const TILES: [Tile; 5] = [
+    Tile::Repeat,
+    Tile::Random,
+    Tile::Mute,
+    Tile::Favourite,
+    Tile::Queue,
+];
 
 /// How far a volume button moves the volume, in points of a hundred.
 pub const VOLUME_STEP: u32 = 5;
@@ -284,7 +293,7 @@ impl Bar {
         (self.x + x as i32, self.y, w, self.h)
     }
 
-    /// The sheet More opens: three tiles the width of a button each,
+    /// The sheet More opens: the tiles, each the width of a button,
     /// standing on the bar at its right end.
     pub fn sheet(&self) -> Sheet {
         let tile = self.slot_width();
@@ -367,7 +376,7 @@ pub fn mute_command(muted: bool) -> Command {
 }
 
 /// The command a tile sends, given the player's state: repeat walks off,
-/// all, single and off again; random and mute turn over.
+/// all, single and off again; random, mute and the favourite turn over.
 pub fn tile_command(tile: Tile, meta: &Metadata) -> Option<Command> {
     Some(match tile {
         // The queue tile opens the list; it sends the player nothing.
@@ -382,6 +391,7 @@ pub fn tile_command(tile: Tile, meta: &Metadata) -> Option<Command> {
         }
         Tile::Random => Command::with("random", serde_json::json!(!meta.random)),
         Tile::Mute => mute_command(meta.mute),
+        Tile::Favourite => Command::with("favourite", serde_json::json!(!meta.favourite)),
     })
 }
 
@@ -392,6 +402,7 @@ pub fn tile_lit(tile: Tile, meta: &Metadata) -> bool {
         Tile::Repeat => meta.repeat,
         Tile::Random => meta.random,
         Tile::Mute => meta.mute,
+        Tile::Favourite => meta.favourite,
     }
 }
 
@@ -419,6 +430,7 @@ pub fn tile_icon(tile: Tile, meta: &Metadata) -> Icon {
         Tile::Random => Icon::Shuffle,
         Tile::Mute if meta.mute => Icon::Muted,
         Tile::Mute => Icon::Speaker,
+        Tile::Favourite => Icon::Heart,
     }
 }
 
@@ -3333,23 +3345,24 @@ mod tests {
         assert_eq!(
             sheet,
             Sheet {
-                x: 428,
+                x: 215,
                 y: 576,
-                w: 852,
+                w: 1065,
                 h: 72
             }
         );
-        assert_eq!(sheet.tile_at(500, 600), Some(Tile::Repeat));
-        assert_eq!(sheet.tile_at(750, 600), Some(Tile::Random));
-        assert_eq!(sheet.tile_at(960, 600), Some(Tile::Mute));
+        assert_eq!(sheet.tile_at(300, 600), Some(Tile::Repeat));
+        assert_eq!(sheet.tile_at(500, 600), Some(Tile::Random));
+        assert_eq!(sheet.tile_at(750, 600), Some(Tile::Mute));
+        assert_eq!(sheet.tile_at(960, 600), Some(Tile::Favourite));
         assert_eq!(sheet.tile_at(1270, 600), Some(Tile::Queue));
         assert_eq!(
-            sheet.tile_at(400, 600),
+            sheet.tile_at(100, 600),
             None,
             "left of the sheet is the theme's"
         );
         assert_eq!(sheet.tile_at(960, 660), None, "below it is the bar");
-        assert_eq!(sheet.tile_rect(1), (641, 576, 213, 72));
+        assert_eq!(sheet.tile_rect(1), (428, 576, 213, 72));
     }
 
     #[test]
@@ -3424,10 +3437,27 @@ mod tests {
             pair(tile_command(Tile::Mute, &meta).unwrap()),
             ("volume".to_string(), Some(serde_json::json!("unmute")))
         );
+        assert_eq!(
+            pair(tile_command(Tile::Favourite, &meta).unwrap()),
+            ("favourite".to_string(), Some(serde_json::json!(true))),
+            "a track that is no favourite is made one"
+        );
+        meta.favourite = true;
+        assert_eq!(
+            pair(tile_command(Tile::Favourite, &meta).unwrap()),
+            ("favourite".to_string(), Some(serde_json::json!(false))),
+            "and one that is, is taken out"
+        );
+        assert_eq!(tile_icon(Tile::Favourite, &meta), Icon::Heart);
         assert!(
             tile_lit(Tile::Repeat, &meta)
                 && tile_lit(Tile::Mute, &meta)
+                && tile_lit(Tile::Favourite, &meta)
                 && !tile_lit(Tile::Random, &meta)
+        );
+        assert!(
+            tile_command(Tile::Queue, &meta).is_none(),
+            "the queue tile opens the list and sends nothing"
         );
     }
 
@@ -3641,8 +3671,8 @@ mod tests {
         assert!(face.sheet_open());
         assert!(face.commands().is_empty(), "opening sends nothing");
         // Random, pressed and released in place, turns over.
-        assert!(face.pointer(PointerKind::Down, 750, 600, &view(&input, &fonts, 2000)));
-        assert!(face.pointer(PointerKind::Up, 750, 600, &view(&input, &fonts, 2050)));
+        assert!(face.pointer(PointerKind::Down, 500, 600, &view(&input, &fonts, 2000)));
+        assert!(face.pointer(PointerKind::Up, 500, 600, &view(&input, &fonts, 2050)));
         let sent = face.commands();
         assert_eq!(sent.len(), 1);
         assert_eq!(
@@ -3654,16 +3684,25 @@ mod tests {
         assert!(face.pointer(PointerKind::Down, 1270, 600, &view(&input, &fonts, 3000)));
         assert!(face.pointer(PointerKind::Up, 700, 600, &view(&input, &fonts, 3050)));
         assert!(face.commands().is_empty());
+        // The heart, pressed and released in place, makes the track a favourite.
+        assert!(face.pointer(PointerKind::Down, 960, 600, &view(&input, &fonts, 3500)));
+        assert!(face.pointer(PointerKind::Up, 960, 600, &view(&input, &fonts, 3550)));
+        let sent = face.commands();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(
+            (sent[0].name.as_str(), sent[0].value.clone()),
+            ("favourite", Some(serde_json::json!(true)))
+        );
         // A tap beside the sheet shuts it and is the face's own: the theme
         // under it does not act.
-        assert!(face.pointer(PointerKind::Down, 300, 300, &view(&input, &fonts, 4000)));
-        assert!(face.pointer(PointerKind::Move, 302, 300, &view(&input, &fonts, 4020)));
-        assert!(face.pointer(PointerKind::Up, 302, 300, &view(&input, &fonts, 4050)));
+        assert!(face.pointer(PointerKind::Down, 100, 300, &view(&input, &fonts, 4000)));
+        assert!(face.pointer(PointerKind::Move, 102, 300, &view(&input, &fonts, 4020)));
+        assert!(face.pointer(PointerKind::Up, 102, 300, &view(&input, &fonts, 4050)));
         assert!(!face.sheet_open());
         assert!(face.presence().visible(), "the bar stays");
         // The next tap there is the theme's again.
-        assert!(!face.pointer(PointerKind::Down, 300, 300, &view(&input, &fonts, 5000)));
-        assert!(!face.pointer(PointerKind::Up, 300, 300, &view(&input, &fonts, 5050)));
+        assert!(!face.pointer(PointerKind::Down, 100, 300, &view(&input, &fonts, 5000)));
+        assert!(!face.pointer(PointerKind::Up, 100, 300, &view(&input, &fonts, 5050)));
     }
 
     #[test]
@@ -3765,7 +3804,7 @@ mod tests {
         let pixel = |frame: &Frame, x: usize, y: usize| frame.rgba[(y * 1280 + x) * 4 + 3];
         assert_ne!(pixel(&frame, 100, 700), 0, "the bar");
         assert_ne!(pixel(&frame, 960, 600), 0, "the sheet above its right end");
-        assert_eq!(pixel(&frame, 300, 600), 0, "nothing beside the sheet");
+        assert_eq!(pixel(&frame, 100, 600), 0, "nothing beside the sheet");
         assert_eq!(face.icons.as_ref().map(|set| set.size()), Some(36));
         let first = face
             .icons
@@ -3848,12 +3887,12 @@ mod tests {
             [frame.rgba[i], frame.rgba[i + 1], frame.rgba[i + 2]]
         };
         // The random tile is lit: an accent wash on the black glass; repeat is not.
-        let lit = at(750, 580);
+        let lit = at(530, 580);
         assert!(
             lit[1] > 30 && lit[0] == 0 && lit[2] == 0,
             "a green wash: {lit:?}"
         );
-        assert_eq!(at(500, 580), [0, 0, 0], "an unlit tile is plain glass");
+        assert_eq!(at(300, 580), [0, 0, 0], "an unlit tile is plain glass");
     }
 
     #[test]
@@ -5284,7 +5323,7 @@ mod tests {
         assert!(face.pointer(PointerKind::Up, 1200, 700, &view(&input, &fonts, 1050)));
         assert!(face.sheet_open());
         let bar = Bar::for_picture(1280, 720, 1.0);
-        let (tx, ty, tw, th) = bar.sheet().tile_rect(3);
+        let (tx, ty, tw, th) = bar.sheet().tile_rect(4);
         let (cx, cy) = (tx + tw as i32 / 2, ty + th as i32 / 2);
         assert!(face.pointer(PointerKind::Down, cx, cy, &view(&input, &fonts, 2000)));
         assert!(face.pointer(PointerKind::Up, cx, cy, &view(&input, &fonts, 2050)));
