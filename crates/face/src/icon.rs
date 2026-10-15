@@ -63,6 +63,8 @@ type Point = (f32, f32);
 
 /// The grid's span across an icon's box: 2 to 22 of the twenty-four.
 const SPAN: f32 = 20.0;
+/// The whole grid, which Lucide's glyphs draw out to.
+const LUCIDE_GRID: f32 = 24.0;
 /// A stroke's half width on the grid.
 const STROKE: f32 = 1.0;
 
@@ -523,9 +525,14 @@ fn arc_points(
 }
 
 /// A Lucide icon rastered at a size in an ink, its shapes flattened once.
+/// Lucide draws on the whole grid of twenty-four, out to its first and
+/// last unit, where the face's own icons keep to the twenty within: the
+/// glyph is rastered over the whole grid at the same scale as the face's
+/// own at `size`, so its frame is a fifth larger and nothing of it is cut.
 pub fn lucide(shapes: &[Shape], size: u32, ink: [u8; 3]) -> Frame {
     let flat = flatten(shapes);
-    raster_by(size, ink, |p| lucide_distance(&flat, p))
+    let px = (size as f32 * LUCIDE_GRID / SPAN).round().max(1.0) as u32;
+    raster_grid(px, 0.0, LUCIDE_GRID, ink, |p| lucide_distance(&flat, p))
 }
 
 /// A cloud, flat underneath: three bumps on a base, its lowest edge at
@@ -643,11 +650,27 @@ fn sky_distance(sky: Sky, day: bool, p: Point) -> f32 {
 /// A shape rastered at a size in an ink: the ink everywhere, the shape in
 /// the alpha.
 fn raster_by(size: u32, ink: [u8; 3], distance: impl Fn(Point) -> f32) -> Frame {
-    let mut rgba = Vec::with_capacity((size * size * 4) as usize);
-    let step = SPAN / size as f32;
-    for y in 0..size {
-        for x in 0..size {
-            let p = (2.0 + (x as f32 + 0.5) * step, 2.0 + (y as f32 + 0.5) * step);
+    raster_grid(size, 2.0, SPAN, ink, distance)
+}
+
+/// A glyph rastered at `px` pixels a side over `span` units of the grid
+/// from `origin`: the face's own icons over their twenty units from two
+/// in, Lucide's over the whole grid.
+fn raster_grid(
+    px: u32,
+    origin: f32,
+    span: f32,
+    ink: [u8; 3],
+    distance: impl Fn(Point) -> f32,
+) -> Frame {
+    let mut rgba = Vec::with_capacity((px * px * 4) as usize);
+    let step = span / px as f32;
+    for y in 0..px {
+        for x in 0..px {
+            let p = (
+                origin + (x as f32 + 0.5) * step,
+                origin + (y as f32 + 0.5) * step,
+            );
             // Half a pixel either side of the edge is the edge.
             let cover = (0.5 - distance(p) / step).clamp(0.0, 1.0);
             rgba.extend_from_slice(&[ink[0], ink[1], ink[2], (cover * 255.0).round() as u8]);
@@ -655,8 +678,8 @@ fn raster_by(size: u32, ink: [u8; 3], distance: impl Fn(Point) -> f32) -> Frame 
     }
     Frame {
         blend: Default::default(),
-        width: size,
-        height: size,
+        width: px,
+        height: px,
         rgba,
     }
 }
@@ -1097,14 +1120,24 @@ mod tests {
         assert_eq!(set.size(), 36);
         for icon in ICONS {
             let frame = set.get(icon);
-            assert_eq!((frame.width, frame.height), (36, 36));
-            assert_eq!(frame.rgba.len(), 36 * 36 * 4);
-            let inked = (0..36 * 36)
+            // The face's own icons at the size; Lucide's a fifth larger,
+            // over the whole of their grid.
+            let n = if lucide_shapes(icon).is_some() {
+                43
+            } else {
+                36
+            };
+            assert_eq!((frame.width, frame.height), (n, n), "{icon:?}");
+            assert_eq!(frame.rgba.len(), (n * n * 4) as usize);
+            let inked = (0..(n * n) as usize)
                 .filter(|i| frame.rgba[i * 4 + 3] == 255)
                 .count();
             assert!(inked > 40, "{icon:?} has a body: {inked} full pixels");
-            assert!(inked < 36 * 36 / 2, "{icon:?} is a shape, not a block");
-            for (x, y) in [(0, 0), (35, 0), (0, 35), (35, 35)] {
+            assert!(
+                inked < (n * n / 2) as usize,
+                "{icon:?} is a shape, not a block"
+            );
+            for (x, y) in [(0, 0), (n - 1, 0), (0, n - 1), (n - 1, n - 1)] {
                 assert_eq!(alpha(frame, x, y), 0, "{icon:?} leaves its corners clear");
             }
             assert_eq!(&frame.rgba[..3], &[235, 235, 240], "the ink is the set's");
@@ -1436,35 +1469,69 @@ mod lucide_tests {
     /// the left, the cross through the middle; and the set has them.
     #[test]
     fn the_lucide_icons_ink_where_their_shapes_are() {
+        // At 48 the Lucide frame is 58 a side, the whole grid at the scale.
         let queue = lucide(lucide::LIST_MUSIC, 48, [255, 255, 255]);
+        assert_eq!((queue.width, queue.height), (58, 58));
         let ink = inked(&queue);
         assert!(ink.len() > 200, "the queue icon has ink: {}", ink.len());
         assert!(
-            ink.iter().any(|(x, y)| *x < 12 && *y < 12),
+            ink.iter().any(|(x, y)| *x < 12 && *y < 18),
             "a line at the top left"
         );
         assert!(
-            ink.iter().any(|(x, y)| *x > 30 && *y > 24),
+            ink.iter().any(|(x, y)| *x > 40 && *y > 34),
             "the note at the bottom right"
         );
         let back = lucide(lucide::CHEVRON_LEFT, 48, [255, 255, 255]);
         let ink = inked(&back);
         assert!(
-            ink.iter().all(|(x, _)| *x >= 10 && *x <= 36),
+            ink.iter().all(|(x, _)| *x >= 16 && *x <= 42),
             "the chevron sits in the middle: {:?}",
             ink.iter().map(|p| p.0).min()
         );
         assert!(
             ink.iter()
-                .any(|(x, y)| *x < 18 && (*y as i32 - 24).abs() < 3),
+                .any(|(x, y)| *x < 23 && (*y as i32 - 29).abs() < 3),
             "its point is at the left"
         );
         let set = Set::new(40, [0, 0, 0]);
+        let close = set.get(Icon::Close);
+        let mid = close.width as i32 / 2;
         assert!(
-            inked(set.get(Icon::Close))
+            inked(close)
                 .iter()
-                .any(|(x, y)| (*x as i32 - 20).abs() < 3 && (*y as i32 - 20).abs() < 3),
+                .any(|(x, y)| (*x as i32 - mid).abs() < 3 && (*y as i32 - mid).abs() < 3),
             "the cross meets in the middle"
         );
+    }
+}
+
+#[cfg(test)]
+mod lucide_frame_tests {
+    use super::*;
+
+    /// Lucide's glyphs run out to the grid's first and last unit, where
+    /// the face's own keep two units in: the heart, rastered at the tile's
+    /// size, is whole, its stroke clear of the frame's edge on every side
+    /// and reaching the grid's first unit, in a frame a fifth larger than
+    /// the face's own icons', which keep their size.
+    #[test]
+    fn a_lucide_glyph_is_whole_within_its_frame() {
+        let heart = lucide(lucide::HEART, 36, [255, 255, 255]);
+        assert_eq!((heart.width, heart.height), (43, 43));
+        let n = heart.width;
+        let filled = |x: u32, y: u32| heart.rgba[((y * n + x) * 4 + 3) as usize] > 128;
+        for i in 0..n {
+            assert!(
+                !filled(0, i) && !filled(n - 1, i) && !filled(i, 0) && !filled(i, n - 1),
+                "the frame's edge is clear at {i}"
+            );
+        }
+        assert!(
+            (0..n).any(|y| filled(2, y)) && (0..n).any(|y| filled(n - 3, y)),
+            "the lobes reach the grid's first and last unit"
+        );
+        let own = raster(Icon::Play, 36, [255, 255, 255]);
+        assert_eq!((own.width, own.height), (36, 36));
     }
 }
