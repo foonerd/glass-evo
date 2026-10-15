@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.6] - 2026-10-15
+
+- Built on Glass 0.10.6, in step with it: the blurred backdrop switch saving from the plugin's settings page, and the Status tab and Find a problem knowing the panel's power and the backdrop; this glass-evo needs Glass 0.10.6, which names it as the least it works with.
+
 ## [0.10.5] - 2026-10-15
 
 - Built on Glass 0.10.5, in step with it: the panel switched off and on and a backlight's brightness set from the Manager, an IR remote, a script or Home Assistant, with the face's own part: a look that goes black after its idle minutes switches the panel off for real and its waking switches it on, nothing is drawn while the player holds the panel off, and the panel coming back counts as a touch; this glass-evo needs Glass 0.10.5, which names it as the least it works with.
