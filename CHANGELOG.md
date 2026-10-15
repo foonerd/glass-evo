@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.8] - 2026-10-15
+
+- Built on Glass 0.10.8, in step with it: the queue's whole-screen shape draws its way back; this glass-evo needs Glass 0.10.8, which names it as the least it works with.
+
 ## [0.10.7] - 2026-10-15
 
 - Built on Glass 0.10.7, in step with it: the queue as a list over the theme, a Queue tile on the More sheet, the list in the shape the look names, the playing track marked, a tap playing from a row and a drag scrolling, on every surface; Lucide's icons drawn by the face from their shapes under their ISC licence; this glass-evo needs Glass 0.10.7, which names it as the least it works with.
