@@ -189,8 +189,12 @@ const TILES: [Tile; 7] = [
     Tile::Queue,
     Tile::Search,
 ];
-/// The sheet's rows; the columns follow from the tiles.
-const TILE_ROWS: usize = 2;
+/// The sheet's rows: the player's modes above, the library below; the
+/// columns follow from the longest row, a shorter row's last cell empty.
+const TILE_ROWS: [&[Tile]; 2] = [
+    &[Tile::Repeat, Tile::Random, Tile::Mute],
+    &[Tile::Favourite, Tile::Browse, Tile::Queue, Tile::Search],
+];
 
 /// How far a volume button moves the volume, in points of a hundred.
 pub const VOLUME_STEP: u32 = 5;
@@ -310,8 +314,8 @@ impl Bar {
     pub fn sheet(&self) -> Sheet {
         let tw = self.slot_width();
         let th = self.h * 11 / 9;
-        let cols = TILES.len().div_ceil(TILE_ROWS);
-        let rows = TILES.len().div_ceil(cols);
+        let cols = TILE_ROWS.iter().map(|row| row.len()).max().unwrap_or(1);
+        let rows = TILE_ROWS.len();
         let w = tw * cols as u32;
         let h = th * rows as u32;
         Sheet {
@@ -353,7 +357,10 @@ impl Sheet {
         }
         let col = ((x - self.x) as u32 / self.tw) as usize;
         let row = ((y - self.y) as u32 / self.th) as usize;
-        TILES.get(row * self.cols + col.min(self.cols - 1)).copied()
+        TILE_ROWS
+            .get(row)
+            .and_then(|tiles| tiles.get(col.min(self.cols - 1)))
+            .copied()
     }
 
     /// A tile's rectangle: x, y, width, height.
@@ -3100,7 +3107,13 @@ impl Overlay for Face {
                         .apply(frame, sheet.x, sheet.y, sheet.w, sheet.h, alpha);
                 }
                 glass(frame, sheet.x, sheet.y, sheet.w, sheet.h, theme.sheet);
-                for (i, tile) in TILES.iter().enumerate() {
+                let cells = TILE_ROWS.iter().enumerate().flat_map(|(row, tiles)| {
+                    tiles
+                        .iter()
+                        .enumerate()
+                        .map(move |(col, tile)| (row * sheet.cols + col, tile))
+                });
+                for (i, tile) in cells {
                     let rect = sheet.tile_rect(i);
                     let lit = tile_lit(*tile, meta);
                     if lit {
@@ -3492,11 +3505,15 @@ mod tests {
         assert_eq!(sheet.tile_at(500, 500), Some(Tile::Repeat));
         assert_eq!(sheet.tile_at(750, 500), Some(Tile::Random));
         assert_eq!(sheet.tile_at(960, 500), Some(Tile::Mute));
-        assert_eq!(sheet.tile_at(1200, 500), Some(Tile::Favourite));
-        assert_eq!(sheet.tile_at(500, 600), Some(Tile::Browse));
-        assert_eq!(sheet.tile_at(750, 600), Some(Tile::Queue));
-        assert_eq!(sheet.tile_at(960, 600), Some(Tile::Search));
-        assert_eq!(sheet.tile_at(1200, 600), None, "an empty cell is no tile");
+        assert_eq!(
+            sheet.tile_at(1200, 500),
+            None,
+            "the modes row's last cell is empty"
+        );
+        assert_eq!(sheet.tile_at(500, 600), Some(Tile::Favourite));
+        assert_eq!(sheet.tile_at(750, 600), Some(Tile::Browse));
+        assert_eq!(sheet.tile_at(960, 600), Some(Tile::Queue));
+        assert_eq!(sheet.tile_at(1200, 600), Some(Tile::Search));
         assert_eq!(
             sheet.tile_at(400, 500),
             None,
@@ -3504,7 +3521,7 @@ mod tests {
         );
         assert_eq!(sheet.tile_at(960, 660), None, "below it is the bar");
         assert_eq!(sheet.tile_rect(1), (641, 472, 213, 88));
-        assert_eq!(sheet.tile_rect(5), (641, 560, 213, 88));
+        assert_eq!(sheet.tile_rect(6), (854, 560, 213, 88));
     }
 
     #[test]
@@ -3827,8 +3844,8 @@ mod tests {
         assert!(face.pointer(PointerKind::Up, 700, 500, &view(&input, &fonts, 3050)));
         assert!(face.commands().is_empty());
         // The heart, pressed and released in place, makes the track a favourite.
-        assert!(face.pointer(PointerKind::Down, 1200, 500, &view(&input, &fonts, 3500)));
-        assert!(face.pointer(PointerKind::Up, 1200, 500, &view(&input, &fonts, 3550)));
+        assert!(face.pointer(PointerKind::Down, 500, 600, &view(&input, &fonts, 3500)));
+        assert!(face.pointer(PointerKind::Up, 500, 600, &view(&input, &fonts, 3550)));
         let sent = face.commands();
         assert_eq!(sent.len(), 1);
         assert_eq!(
@@ -5461,7 +5478,7 @@ mod tests {
             let (tx, ty, tw, th) = bar.sheet().tile_rect(i);
             (tx + tw as i32 / 2, ty + th as i32 / 2)
         };
-        let (cx, cy) = tile(4);
+        let (cx, cy) = tile(5);
         assert!(face.pointer(PointerKind::Down, cx, cy, &view(&input, &fonts, 2000)));
         assert!(face.pointer(PointerKind::Up, cx, cy, &view(&input, &fonts, 2050)));
         assert!(face.browse.open, "the browser opens");
@@ -5477,7 +5494,7 @@ mod tests {
         // Search: the keys, and nothing asked.
         assert!(face.pointer(PointerKind::Down, 1200, 700, &view(&input, &fonts, 4000)));
         assert!(face.pointer(PointerKind::Up, 1200, 700, &view(&input, &fonts, 4050)));
-        let (sx, sy) = tile(6);
+        let (sx, sy) = tile(7);
         assert!(face.pointer(PointerKind::Down, sx, sy, &view(&input, &fonts, 5000)));
         assert!(face.pointer(PointerKind::Up, sx, sy, &view(&input, &fonts, 5050)));
         assert!(face.browse.open && !face.sheet_open());
@@ -5507,7 +5524,7 @@ mod tests {
         assert!(face.pointer(PointerKind::Up, 1200, 700, &view(&input, &fonts, 1050)));
         assert!(face.sheet_open());
         let bar = Bar::for_picture(1280, 720, 1.0);
-        let (tx, ty, tw, th) = bar.sheet().tile_rect(5);
+        let (tx, ty, tw, th) = bar.sheet().tile_rect(6);
         let (cx, cy) = (tx + tw as i32 / 2, ty + th as i32 / 2);
         assert!(face.pointer(PointerKind::Down, cx, cy, &view(&input, &fonts, 2000)));
         assert!(face.pointer(PointerKind::Up, cx, cy, &view(&input, &fonts, 2050)));

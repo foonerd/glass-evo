@@ -43,6 +43,7 @@ enum Press {
     Row(usize),
     Add(usize),
     Back,
+    Close,
     Key(usize),
 }
 
@@ -348,6 +349,16 @@ impl BrowseView {
         (i < count).then_some(i)
     }
 
+    /// Whether a point is on the way out at the header's right end, which
+    /// is there on every page below the first.
+    fn on_close(&self, panel: &Panel, m: &Measure, x: i32, y: i32) -> bool {
+        self.pages.len() > 1
+            && y >= panel.y
+            && y < panel.y + m.header as i32
+            && x >= panel.x + panel.w as i32 - m.header as i32
+            && x < panel.x + panel.w as i32
+    }
+
     /// Whether a point is on a row's plus, at the row's right end.
     fn on_add(&self, panel: &Panel, m: &Measure, x: i32) -> bool {
         !self.on_sources() && x >= panel.x + panel.w as i32 - m.row as i32 - m.pad as i32 / 2
@@ -404,6 +415,10 @@ impl BrowseView {
                     self.pressed = Some(Press::Back);
                     return Action::Taken;
                 }
+                if self.on_close(panel, m, x, y) {
+                    self.pressed = Some(Press::Close);
+                    return Action::Taken;
+                }
                 if self.on_keys() {
                     self.pressed = self.key_at(panel, m, x, y).map(Press::Key);
                     return Action::Taken;
@@ -440,6 +455,10 @@ impl BrowseView {
                 let still = drag.is_none_or(|(_, _, moved)| !moved);
                 match pressed {
                     Some(Press::Back) if on_back => self.back(),
+                    Some(Press::Close) if self.on_close(panel, m, x, y) => {
+                        self.close();
+                        Action::Close
+                    }
                     Some(Press::Key(k)) if self.key_at(panel, m, x, y) == Some(k) => self.key(k),
                     Some(Press::Row(i))
                         if still && self.item_at(panel, m, count, cols, cell, x, y) == Some(i) =>
@@ -731,8 +750,32 @@ impl BrowseView {
                 None => String::new(),
             }
         };
+        // The way out at the right end on every page below the first: one
+        // tap leaves from any depth, where back goes up one page.
+        let mut right = panel.x + panel.w as i32 - m.pad as i32;
+        if self.pages.len() > 1 {
+            let (cx, cy, side) = (
+                panel.x + panel.w as i32 - m.header as i32,
+                panel.y,
+                m.header,
+            );
+            if self.pressed == Some(Press::Close) {
+                ui::fill(frame, cx, cy, side, side, [255, 255, 255, alpha / 10]);
+            }
+            let glyph = self
+                .glyph("chevron-down", m.title + m.small / 2, ink)
+                .clone();
+            ui::blit(
+                frame,
+                &glyph,
+                cx + (side as i32 - glyph.width as i32) / 2,
+                cy + (side as i32 - glyph.height as i32) / 2,
+                alpha,
+            );
+            right = cx - m.pad as i32 / 4;
+        }
         if let Some(line) = ui::line(fonts, TextStyle::Regular, m.small, dim, &count) {
-            let x = panel.x + panel.w as i32 - m.pad as i32 - line.width as i32;
+            let x = right - line.width as i32;
             let y = panel.y + (m.header as i32 - line.height as i32) / 2;
             ui::blit(frame, &line, x, y, alpha);
         }
@@ -1312,6 +1355,38 @@ mod tests {
         assert_eq!(pair(&again).1["uri"], "");
         assert_eq!(pair(&again).1["serial"], 3);
         assert_eq!(view.pages.len(), 1);
+        // Down a page again, the way out at the right end shuts from there;
+        // on the first page there is none, the left glyph being the way out.
+        assert!(!view.on_close(&panel, &m, panel.x + panel.w as i32 - 10, panel.y + 10));
+        let sources = answer(
+            3,
+            "",
+            vec![
+                item("Music Library", "music-library", false),
+                item("Web Radio", "radio", false),
+            ],
+        );
+        assert_eq!(
+            view.pointer(PointerKind::Down, tx, ty, &panel, &m, &sources),
+            Action::Taken
+        );
+        assert!(matches!(
+            view.pointer(PointerKind::Up, tx, ty, &panel, &m, &sources),
+            Action::Send(_)
+        ));
+        assert_eq!(view.pages.len(), 2);
+        let (cx, cy) = (panel.x + panel.w as i32 - 10, panel.y + 10);
+        assert!(view.on_close(&panel, &m, cx, cy));
+        assert_eq!(
+            view.pointer(PointerKind::Down, cx, cy, &panel, &m, &sources),
+            Action::Taken
+        );
+        assert_eq!(
+            view.pointer(PointerKind::Up, cx, cy, &panel, &m, &sources),
+            Action::Close
+        );
+        assert!(!view.open, "one tap leaves from any depth");
+        view.open_browse();
         // At the first page the way out shuts; so does a tap beside the sheet.
         assert_eq!(
             view.pointer(PointerKind::Down, bx, by, &panel, &m, &radio),
