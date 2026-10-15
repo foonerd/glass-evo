@@ -2,6 +2,7 @@
 //! names, with the playing track marked, a tap playing from a row and a
 //! drag scrolling. The list is one piece; only its frame differs by shape.
 
+use crate::browse::{Covers, Glyphs};
 use crate::theme::ListShape;
 use overlay::face::{ui, Fonts, Frame, Input, PointerKind, TextStyle};
 use std::hash::{Hash, Hasher};
@@ -144,6 +145,9 @@ pub struct QueueView {
     /// opened, so it opens on what plays and is not pulled back after.
     brought: bool,
     cache: Option<RowCache>,
+    /// The covers read for the rows, and a note for a row without one.
+    covers: Covers,
+    glyphs: Glyphs,
 }
 
 /// How far a finger moves before a press is a drag, not a tap.
@@ -176,7 +180,9 @@ impl QueueView {
         (self.scroll as i32).hash(h);
         self.pressed.hash(h);
         (std::sync::Arc::as_ptr(&input.queue) as usize).hash(h);
+        (std::sync::Arc::as_ptr(&input.queue_art) as usize).hash(h);
         input.queue_position.hash(h);
+        self.covers.ready().hash(h);
     }
 
     /// The rows' top within the panel, the rows above and the rows below
@@ -292,7 +298,8 @@ impl QueueView {
         });
         if stale {
             let dim = dimmed(ink);
-            let text_w = width.saturating_sub(m.pad * 2 + m.title * 3 + m.title * 3);
+            let text_w =
+                width.saturating_sub(m.pad * 2 + m.title * 3 + m.cover + m.pad / 2 + m.title * 3);
             let rows = input
                 .queue
                 .iter()
@@ -417,7 +424,9 @@ impl QueueView {
         let position = input.queue_position;
         let first = (scroll / m.row as f32).floor().max(0.0) as usize;
         let last = ((scroll + window as f32) / m.row as f32).ceil() as usize;
-        let lines = self.rows(fonts, input, m, panel.w, ink, accent);
+        self.rows(fonts, input, m, panel.w, ink, accent);
+        let (cache, covers, glyphs) = (&self.cache, &mut self.covers, &mut self.glyphs);
+        let lines = &cache.as_ref().expect("set just now").rows;
         for (i, row) in lines.iter().enumerate().take(last.min(rows)).skip(first) {
             let y = clip.1 + (i as f32 * m.row as f32 - scroll).round() as i32;
             let playing = position == Some(i as u32);
@@ -444,7 +453,25 @@ impl QueueView {
                     clip,
                 );
             }
-            let x_text = panel.x + m.pad as i32 + m.title as i32 * 2;
+            // The cover after the number, or a note where none has come.
+            let cx = panel.x + m.pad as i32 + m.title as i32 * 2;
+            let cy = y + (m.row as i32 - m.cover as i32) / 2;
+            let file = input.queue_art.get(i).map_or("", String::as_str);
+            match covers.get(file, m.cover) {
+                Some(cover) => blit_clipped(frame, cover, cx, cy, alpha, clip),
+                None => {
+                    let note = glyphs.get("music", m.title + m.small / 2, dim);
+                    blit_clipped(
+                        frame,
+                        note,
+                        cx + (m.cover as i32 - note.width as i32) / 2,
+                        cy + (m.cover as i32 - note.height as i32) / 2,
+                        alpha,
+                        clip,
+                    );
+                }
+            }
+            let x_text = cx + m.cover as i32 + m.pad as i32 / 2;
             if let Some(number) = &row.number {
                 let nx = panel.x + m.pad as i32 - 2;
                 blit_clipped(

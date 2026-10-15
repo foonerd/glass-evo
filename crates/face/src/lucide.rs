@@ -77,6 +77,12 @@ pub const CHEVRON_LEFT: &[Shape] = &[Shape::Path("m15 18-6-6 6-6")];
 /// Lucide's `chevron-right`.
 pub const CHEVRON_RIGHT: &[Shape] = &[Shape::Path("m9 18 6-6-6-6")];
 
+/// Lucide's `circle-play`.
+pub const CIRCLE_PLAY: &[Shape] = &[
+    Shape::Circle(12.0, 12.0, 10.0),
+    Shape::Polygon(&[(10.0, 8.0), (16.0, 12.0), (10.0, 16.0), (10.0, 8.0)]),
+];
+
 /// Lucide's `cloud`.
 pub const CLOUD: &[Shape] = &[Shape::Path(
     "M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z",
@@ -288,6 +294,7 @@ pub const ALL: &[(&str, &[Shape])] = &[
     ("chevron-down", CHEVRON_DOWN),
     ("chevron-left", CHEVRON_LEFT),
     ("chevron-right", CHEVRON_RIGHT),
+    ("circle-play", CIRCLE_PLAY),
     ("cloud", CLOUD),
     ("cpu", CPU),
     ("disc-3", DISC_3),

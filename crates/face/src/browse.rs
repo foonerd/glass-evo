@@ -42,6 +42,8 @@ struct Page {
 enum Press {
     Row(usize),
     Add(usize),
+    /// The add-and-play symbol before the plus.
+    Play(usize),
     Back,
     Close,
     Key(usize),
@@ -106,10 +108,41 @@ enum Cover {
 }
 
 /// The covers read for the rows, by file and side; let go all at once
-/// when there are too many.
+/// when there are too many. The queue's rows share the kind.
 #[derive(Default)]
-struct Covers {
+pub(crate) struct Covers {
     have: HashMap<(String, u32), Cover>,
+}
+
+/// Lucide's glyphs rastered by name, side and ink, once each; an unknown
+/// name is a folder.
+#[derive(Default)]
+pub(crate) struct Glyphs {
+    map: HashMap<(String, u32, [u8; 3]), Frame>,
+}
+
+impl Glyphs {
+    pub(crate) fn get(&mut self, name: &str, size: u32, ink: [u8; 3]) -> &Frame {
+        let name = if lucide::ALL.iter().any(|(n, _)| *n == name) {
+            name
+        } else {
+            "folder"
+        };
+        self.map
+            .entry((name.to_string(), size, ink))
+            .or_insert_with(|| {
+                let shapes = lucide::ALL
+                    .iter()
+                    .find(|(n, _)| *n == name)
+                    .map_or(&[][..], |(_, s)| s);
+                icon::lucide(shapes, size, ink)
+            })
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.map.len()
+    }
 }
 
 const COVERS_MOST: usize = 96;
@@ -117,7 +150,7 @@ const COVERS_MOST: usize = 96;
 impl Covers {
     /// The cover of a file at a side, once read; reading starts at the
     /// first ask.
-    fn get(&mut self, file: &str, size: u32) -> Option<&Frame> {
+    pub(crate) fn get(&mut self, file: &str, size: u32) -> Option<&Frame> {
         if file.is_empty() {
             return None;
         }
@@ -141,7 +174,7 @@ impl Covers {
     }
 
     /// How many covers are in hand, for the stamp.
-    fn ready(&self) -> usize {
+    pub(crate) fn ready(&self) -> usize {
         self.have
             .values()
             .filter(|c| matches!(c, Cover::Done(Some(_))))
@@ -202,7 +235,7 @@ pub struct BrowseView {
     cache: Option<RowCache>,
     covers: Covers,
     /// Lucide's glyphs rastered by name, side and ink.
-    glyphs: HashMap<(String, u32, [u8; 3]), Frame>,
+    glyphs: Glyphs,
 }
 
 /// How far a finger moves before a press is a drag, not a tap.
@@ -364,6 +397,13 @@ impl BrowseView {
         !self.on_sources() && x >= panel.x + panel.w as i32 - m.row as i32 - m.pad as i32 / 2
     }
 
+    /// Whether a point is on a row's add-and-play symbol, the square
+    /// before the plus.
+    fn on_play(&self, panel: &Panel, m: &Measure, x: i32) -> bool {
+        let plus = panel.x + panel.w as i32 - m.row as i32 - m.pad as i32 / 2;
+        !self.on_sources() && x >= plus - m.row as i32 && x < plus
+    }
+
     /// The key under a point on the keyboard.
     fn key_at(&self, panel: &Panel, m: &Measure, x: i32, y: i32) -> Option<usize> {
         let (top, key_h) = self.keys_top(panel, m);
@@ -427,6 +467,8 @@ impl BrowseView {
                 self.pressed = self.item_at(panel, m, count, cols, cell, x, y).map(|i| {
                     if self.on_add(panel, m, x) {
                         Press::Add(i)
+                    } else if self.on_play(panel, m, x) {
+                        Press::Play(i)
                     } else {
                         Press::Row(i)
                     }
@@ -469,6 +511,11 @@ impl BrowseView {
                         if still && self.item_at(panel, m, count, cols, cell, x, y) == Some(i) =>
                     {
                         self.add(i, input)
+                    }
+                    Some(Press::Play(i))
+                        if still && self.item_at(panel, m, count, cols, cell, x, y) == Some(i) =>
+                    {
+                        self.play_added(i, input)
                     }
                     _ => Action::Taken,
                 }
@@ -525,6 +572,34 @@ impl BrowseView {
         self.reset_touch();
         let command = self.ask(uri, title);
         Action::Send(command)
+    }
+
+    /// The add-and-play symbol on an item: the queue kept, a track's list
+    /// goes in after it and plays from the track; a folder goes in whole
+    /// and plays from its first.
+    fn play_added(&mut self, i: usize, input: &Input) -> Action {
+        let Some(answer) = self.answer(input) else {
+            return Action::Taken;
+        };
+        let Some(item) = answer.items.get(i) else {
+            return Action::Taken;
+        };
+        if item.heading || item.uri.is_empty() {
+            return Action::Taken;
+        }
+        if item.leaf {
+            return Action::Send(Command::with(
+                "play",
+                serde_json::json!({ "uri": answer.uri, "index": i, "add": true }),
+            ));
+        }
+        Action::Send(Command::with(
+            "play",
+            serde_json::json!({ "item": {
+                "uri": item.uri, "service": item.service, "title": item.title,
+                "type": item.kind, "albumart": item.art,
+            }, "add": true }),
+        ))
     }
 
     /// The plus on an item: added to the queue, a folder whole.
@@ -594,20 +669,7 @@ impl BrowseView {
     /// Lucide's glyph by name at a side in an ink, rastered once; an
     /// unknown name is a folder.
     fn glyph(&mut self, name: &str, size: u32, ink: [u8; 3]) -> &Frame {
-        let name = if lucide::ALL.iter().any(|(n, _)| *n == name) {
-            name
-        } else {
-            "folder"
-        };
-        self.glyphs
-            .entry((name.to_string(), size, ink))
-            .or_insert_with(|| {
-                let shapes = lucide::ALL
-                    .iter()
-                    .find(|(n, _)| *n == name)
-                    .map_or(&[][..], |(_, s)| s);
-                icon::lucide(shapes, size, ink)
-            })
+        self.glyphs.get(name, size, ink)
     }
 
     /// The lines of a row, set when first drawn.
@@ -1043,8 +1105,31 @@ impl BrowseView {
             alpha,
             clip,
         );
-        // A length, or a chevron for what opens, before the plus.
-        let right = plus_x - pad / 2;
+        // Add and play before the plus: a play in a circle, lit while pressed.
+        let play_x = plus_x - m.row as i32;
+        if self.pressed == Some(Press::Play(i)) {
+            fill_clipped(
+                frame,
+                play_x,
+                y,
+                m.row,
+                h,
+                [accent[0], accent[1], accent[2], alpha / 4],
+                clip,
+            );
+        }
+        let play = self.glyph("circle-play", m.title, dim);
+        let (gw, gh) = (play.width as i32, play.height as i32);
+        blit_clipped(
+            frame,
+            play,
+            play_x + (m.row as i32 - gw) / 2,
+            y + (h as i32 - gh) / 2,
+            alpha,
+            clip,
+        );
+        // A length, or a chevron for what opens, before both.
+        let right = play_x - pad / 2;
         if let Some(duration) = self
             .cache
             .as_ref()
@@ -1330,6 +1415,37 @@ mod tests {
         };
         assert_eq!(add.name, "queue");
         assert_eq!(add.value.as_ref().unwrap()["item"]["uri"], "radio/top500");
+        // The symbol before the plus adds and plays: a track its list from
+        // there, the queue kept; a folder whole.
+        let play_x = plus_x - m.row as i32;
+        assert_eq!(
+            view.pointer(PointerKind::Down, play_x, row_y(2), &panel, &m, &radio),
+            Action::Taken
+        );
+        let Action::Send(added) =
+            view.pointer(PointerKind::Up, play_x, row_y(2), &panel, &m, &radio)
+        else {
+            panic!("the symbol adds and plays");
+        };
+        assert_eq!(
+            pair(&added),
+            (
+                "play".to_string(),
+                serde_json::json!({ "uri": "radio", "index": 2, "add": true })
+            )
+        );
+        assert_eq!(
+            view.pointer(PointerKind::Down, play_x, row_y(0), &panel, &m, &radio),
+            Action::Taken
+        );
+        let Action::Send(whole) =
+            view.pointer(PointerKind::Up, play_x, row_y(0), &panel, &m, &radio)
+        else {
+            panic!("a folder whole");
+        };
+        assert_eq!(whole.name, "play");
+        assert_eq!(whole.value.as_ref().unwrap()["add"], true);
+        assert_eq!(whole.value.as_ref().unwrap()["item"]["uri"], "radio/top500");
         // A drag scrolls and plays nothing.
         assert_eq!(
             view.pointer(PointerKind::Down, 300, row_y(1), &panel, &m, &radio),
