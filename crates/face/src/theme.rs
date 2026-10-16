@@ -198,6 +198,9 @@ pub struct Theme {
     /// `buttons.tint`: the bar's and the sheet's colour when the buttons
     /// have their own; none for the look's tint.
     pub buttons_tint: Option<[u8; 3]>,
+    /// `buttons.show`: whether the bar of controls and its sheet are drawn
+    /// at all; off for a screen no finger reaches.
+    pub buttons_show: bool,
     /// `clock.show`: whether there is a clock when nothing plays.
     pub clock_show: bool,
     /// `clock.place`: the cells of the grid the clock occupies. None is
@@ -350,6 +353,7 @@ impl Default for Theme {
             buttons_opacity: 1.0,
             buttons_glass: None,
             buttons_tint: None,
+            buttons_show: true,
             clock_show: true,
             clock_cells: None,
             clock_align: Align::default(),
@@ -649,6 +653,7 @@ impl Theme {
                     }
                 }
                 "clock.card" => self.clock_card = colour(v).unwrap_or(self.clock_card),
+                "buttons.show" => self.buttons_show = switch(v).unwrap_or(self.buttons_show),
                 "clock.show" => self.clock_show = switch(v).unwrap_or(self.clock_show),
                 // Empty, or anything that names no cells: as before the grid.
                 "clock.place" => self.clock_cells = cells(v),
@@ -1034,6 +1039,7 @@ mod tests {
             "glass.frost",
             "buttons.ink",
             "buttons.opacity",
+            "buttons.show",
             "clock.show",
             "clock.format",
             "clock.ink",
@@ -1078,7 +1084,7 @@ mod tests {
         }
         assert_eq!(
             written.len(),
-            65,
+            66,
             "and nothing but what the face reads and the line for a list"
         );
     }

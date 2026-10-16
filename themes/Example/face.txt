@@ -41,6 +41,9 @@ hairline = 0.12
 frost = auto
 
 [buttons]
+# Whether the bar of controls and its sheet are drawn at all: off for a
+# screen no finger reaches. The clock, the date and the forecast stay.
+show = on
 # The icons on their own: a colour, or "ink" for the theme's ink.
 ink = ink
 opacity = 1.0

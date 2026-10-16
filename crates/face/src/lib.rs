@@ -265,6 +265,17 @@ impl Bar {
 
     /// The bar at a theme's measure, in units of a 720th of the picture's
     /// height: 72 as designed.
+    /// No bar at all, for a look that shows no buttons: nothing high at
+    /// the screen's foot, so the lists and the idle screen take the whole.
+    pub fn none(width: u32, height: u32) -> Self {
+        Self {
+            x: 0,
+            y: height as i32,
+            w: width,
+            h: 0,
+        }
+    }
+
     pub fn measured(width: u32, height: u32, scale: f32, units: f32) -> Self {
         let h = ((height as f32 / 720.0 * units * scale.max(0.5)).round() as u32)
             .max(40)
@@ -2918,7 +2929,11 @@ impl Overlay for Face {
             .forecast
             .sources(&[tokens.theme_dir.clone(), tokens.look_dir.clone()]);
         let frosted = tokens.frosted;
-        let bar = Bar::measured(view.width, view.height, view.scale, theme.measure_bar);
+        let bar = if theme.buttons_show {
+            Bar::measured(view.width, view.height, view.scale, theme.measure_bar)
+        } else {
+            Bar::none(view.width, view.height)
+        };
         if alpha > 0 || clock {
             // The look of the track, asked for only while there is something to draw with it.
             if self.track.follow(theme, &meta.art_file) {
@@ -3064,7 +3079,9 @@ impl Overlay for Face {
                 bar.h,
                 theme.buttons_glass.unwrap_or(theme.bar),
             );
-            for (i, button) in BUTTONS.iter().enumerate() {
+            // No bar: nothing of it drawn, the look showing no buttons.
+            let shown = if bar.h > 0 { BUTTONS.len() } else { 0 };
+            for (i, button) in BUTTONS.iter().enumerate().take(shown) {
                 let rect = bar.button_rect(i);
                 if self.pressed == Some(*button) {
                     ui::fill(
@@ -3100,7 +3117,7 @@ impl Overlay for Face {
                     button_alpha,
                 );
             }
-            if self.sheet_open {
+            if self.sheet_open && bar.h > 0 {
                 let sheet = bar.sheet();
                 if frosted {
                     self.frost
@@ -3221,6 +3238,12 @@ impl Overlay for Face {
                 self.presence.playing,
                 meta.status
             );
+        }
+        // A look that shows no buttons: the face takes no touch, the theme
+        // under it does; the sheet and the lists are not to be had.
+        if !self.tokens(view).theme.buttons_show {
+            self.sheet_open = false;
+            return false;
         }
         let units = self.tokens(view).theme.measure_bar;
         let bar = Bar::measured(view.width, view.height, view.scale, units);
@@ -5468,6 +5491,29 @@ mod tests {
     /// sources; the browser draws while the answer is awaited, and a tap
     /// beside it shuts it. The Search tile opens the keyboard and asks
     /// nothing. Either shuts the sheet and the queue's list.
+    /// A look that shows no buttons: a touch is not the face's, the bar and
+    /// the sheet are never drawn, and the clock still is.
+    #[test]
+    fn a_look_without_buttons_draws_no_bar_and_takes_no_touch() {
+        let input = input("pause");
+        let fonts = Fonts::default();
+        let set = settings(&[("buttons.show", "off")]);
+        let mut face = Face::new();
+        let mut frame = blank();
+        let mut v = view(&input, &fonts, 1000);
+        v.settings = &set;
+        assert!(
+            !face.pointer(PointerKind::Down, 1200, 700, &v),
+            "the theme's touch, not the face's"
+        );
+        assert!(!face.pointer(PointerKind::Up, 1200, 700, &v));
+        assert!(!face.sheet_open());
+        face.draw(&mut frame, &v);
+        let pixel = |x: usize, y: usize| frame.rgba[(y * 1280 + x) * 4 + 3];
+        assert_eq!(pixel(100, 700), 0, "no bar at the foot");
+        assert_eq!(pixel(1172, 670), 0, "no More button");
+    }
+
     #[test]
     fn the_browse_and_search_tiles_open_the_browser() {
         let input = input("play");
