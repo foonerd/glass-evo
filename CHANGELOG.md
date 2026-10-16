@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.29] - 2026-10-16
+
+- Built on Glass 0.10.29, in step with it, nothing of the face's own changing: this glass-evo needs Glass 0.10.29, which names this glass-evo, the one whose display fades the backlight, as the least it works with.
+
 ## [0.10.28] - 2026-10-16
 
 - Built on Glass 0.10.28, in step with it, nothing of the face's own changing: this glass-evo needs Glass 0.10.28, whose display fades the backlight between the brightness at play and the brightness when idle, carried in this bundle, and which works with it.
