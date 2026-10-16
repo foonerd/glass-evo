@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.23] - 2026-10-16
+
+- Built on Glass 0.10.23, in step with it: a look may show no buttons, for a screen no finger reaches; this glass-evo needs Glass 0.10.23, whose look panel has the switch and whose remotes have their own word, and which names it as the least it works with.
+
 ## [0.10.22] - 2026-10-15
 
 - Built on Glass 0.10.22, in step with it: the covers of the queue and the browser no longer flicker on the Face tab and Anymote, the engine giving them a cache of their own; nothing of the face changes; this glass-evo needs Glass 0.10.22, which names it as the least it works with.
