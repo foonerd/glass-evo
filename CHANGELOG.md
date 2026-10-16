@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.27] - 2026-10-16
+
+- Built on Glass 0.10.27, in step with it, nothing of the face's own changing: this glass-evo needs Glass 0.10.27, whose Brightness slider keeps the brightness at play while the panel is dimmed, and which works with it.
+
 ## [0.10.26] - 2026-10-16
 
 - Built on Glass 0.10.26, in step with it, nothing of the face's own changing: this glass-evo needs Glass 0.10.26, whose Screen tab may dim the panel while nothing plays, and which works with it.
