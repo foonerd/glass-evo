@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.25] - 2026-10-16
+
+- Built on Glass 0.10.25, in step with it: the bar may leave the idle screen too, as the look says (buttons.idle, stay as it was); this glass-evo needs Glass 0.10.25, whose look panel has the word under Buttons and which names it as the least it works with.
+
 ## [0.10.24] - 2026-10-16
 
 - Built on Glass 0.10.24, in step with it, nothing of the face's own changing: this glass-evo needs Glass 0.10.24, whose Find a problem and status sheet know the look's buttons, the last install and what there is to browse, and which works with it.
