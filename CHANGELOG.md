@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.24] - 2026-10-16
+
+- Built on Glass 0.10.24, in step with it, nothing of the face's own changing: this glass-evo needs Glass 0.10.24, whose Find a problem and status sheet know the look's buttons, the last install and what there is to browse, and which works with it.
+
 ## [0.10.23] - 2026-10-16
 
 - Built on Glass 0.10.23, in step with it: a look may show no buttons, for a screen no finger reaches; this glass-evo needs Glass 0.10.23, whose look panel has the switch and whose remotes have their own word, and which names it as the least it works with.
