@@ -201,6 +201,10 @@ pub struct Theme {
     /// `buttons.show`: whether the bar of controls and its sheet are drawn
     /// at all; off for a screen no finger reaches.
     pub buttons_show: bool,
+    /// `buttons.idle`: whether the bar leaves the idle screen too, as it
+    /// leaves while music plays (`leave`), or stays while the player stands
+    /// still (`stay`, as it was).
+    pub buttons_idle_leaves: bool,
     /// `clock.show`: whether there is a clock when nothing plays.
     pub clock_show: bool,
     /// `clock.place`: the cells of the grid the clock occupies. None is
@@ -354,6 +358,7 @@ impl Default for Theme {
             buttons_glass: None,
             buttons_tint: None,
             buttons_show: true,
+            buttons_idle_leaves: false,
             clock_show: true,
             clock_cells: None,
             clock_align: Align::default(),
@@ -654,6 +659,13 @@ impl Theme {
                 }
                 "clock.card" => self.clock_card = colour(v).unwrap_or(self.clock_card),
                 "buttons.show" => self.buttons_show = switch(v).unwrap_or(self.buttons_show),
+                "buttons.idle" => {
+                    self.buttons_idle_leaves = match v.trim().to_ascii_lowercase().as_str() {
+                        "leave" | "leaves" | "away" => true,
+                        "stay" | "stays" => false,
+                        _ => self.buttons_idle_leaves,
+                    }
+                }
                 "clock.show" => self.clock_show = switch(v).unwrap_or(self.clock_show),
                 // Empty, or anything that names no cells: as before the grid.
                 "clock.place" => self.clock_cells = cells(v),
@@ -1040,6 +1052,7 @@ mod tests {
             "buttons.ink",
             "buttons.opacity",
             "buttons.show",
+            "buttons.idle",
             "clock.show",
             "clock.format",
             "clock.ink",
@@ -1084,7 +1097,7 @@ mod tests {
         }
         assert_eq!(
             written.len(),
-            66,
+            67,
             "and nothing but what the face reads and the line for a list"
         );
     }

@@ -500,8 +500,9 @@ pub fn tile_label(tile: Tile, meta: &Metadata) -> &'static str {
 }
 
 /// Whether the bar is on the glass, and how much of it: playing, it is
-/// hidden until a touch and leaves by itself; not playing, it stays.
-/// Times are the display's clock in milliseconds.
+/// hidden until a touch and leaves by itself; not playing, it stays,
+/// unless the look says the bar leaves the idle screen too, when it goes
+/// the same way. Times are the display's clock in milliseconds.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Presence {
     visible: bool,
@@ -509,18 +510,27 @@ pub struct Presence {
     changed_at: Option<u64>,
     leave_at: Option<u64>,
     playing: bool,
+    /// The look's word: the bar leaves while the player stands still too.
+    idle_leaves: bool,
 }
 
 impl Presence {
-    /// As the face starts: the bar there, settled, until playback says
-    /// otherwise.
+    /// As the face starts: the bar there, settled, until playback or the
+    /// look says otherwise.
     pub fn new() -> Self {
         Self {
             visible: true,
             changed_at: None,
             leave_at: None,
             playing: false,
+            idle_leaves: false,
         }
+    }
+
+    /// Whether the bar is one that leaves: while music plays, and on the
+    /// idle screen when the look says so.
+    fn leaves(&self) -> bool {
+        self.playing || self.idle_leaves
     }
 
     fn set(&mut self, visible: bool, now: u64) {
@@ -535,19 +545,24 @@ impl Presence {
         }
     }
 
-    /// Every frame: playback beginning sends the bar away after a moment;
-    /// playback ending brings it back; a linger that ran out sends it away.
-    pub fn tick(&mut self, now: u64, playing: bool) {
-        if playing != self.playing {
-            self.playing = playing;
-            if playing {
+    /// Every frame: the bar becoming one that leaves (playback beginning,
+    /// or the look saying the idle screen loses it too) sends it away
+    /// after a moment; becoming one that stays brings it back; a linger
+    /// that ran out sends it away.
+    pub fn tick(&mut self, now: u64, playing: bool, idle_leaves: bool) {
+        let was = self.leaves();
+        self.playing = playing;
+        self.idle_leaves = idle_leaves;
+        let leaves = self.leaves();
+        if leaves != was {
+            if leaves {
                 self.leave_at = Some(now + AFTER_PLAY_MS);
             } else {
                 self.leave_at = None;
                 self.set(true, now);
             }
         }
-        if self.playing {
+        if leaves {
             if let Some(at) = self.leave_at {
                 if now >= at {
                     self.leave_at = None;
@@ -559,15 +574,15 @@ impl Presence {
 
     /// A touch on the bar keeps it a while longer.
     pub fn kept(&mut self, now: u64) {
-        if self.playing {
+        if self.leaves() {
             self.leave_at = Some(now + LINGER_MS);
         }
     }
 
     /// A touch on the picture away from the bar: brings the bar when it is
-    /// away, sends it away when it is there and the player plays.
+    /// away, sends it away when it is there and it is one that leaves.
     pub fn touched(&mut self, now: u64) {
-        if !self.playing {
+        if !self.leaves() {
             return;
         }
         if self.visible {
@@ -2656,7 +2671,8 @@ impl Face {
         // A change of track is not the player standing still: the bar does
         // not come up for it, and the clock does not show.
         let playing = self.playing.settle(now, meta);
-        self.presence.tick(now, playing);
+        let idle_leaves = self.tokens(view).theme.buttons_idle_leaves;
+        self.presence.tick(now, playing, idle_leaves);
         // A finger resting on volume down: mute, once, and no step on its lift.
         if self.pressed == Some(Button::VolumeDown)
             && !self.held
@@ -3757,38 +3773,70 @@ mod tests {
     #[test]
     fn the_bar_leaves_when_playback_begins_and_comes_back_for_a_touch_while_playing() {
         let mut p = Presence::new();
-        p.tick(1000, false);
+        p.tick(1000, false, false);
         assert!(p.visible(), "stopped: the bar stays");
         assert_eq!(p.alpha(1000), 255);
-        p.tick(2000, true);
+        p.tick(2000, true, false);
         assert!(p.visible(), "playback began: the bar has a moment yet");
-        p.tick(2000 + AFTER_PLAY_MS, true);
+        p.tick(2000 + AFTER_PLAY_MS, true, false);
         assert!(!p.visible(), "then it leaves");
         assert_eq!(p.alpha(2000 + AFTER_PLAY_MS + FADE_MS), 0, "faded out");
         p.touched(10_000);
         assert!(p.visible(), "a touch on the picture brings it");
         assert_eq!(p.alpha(10_000 + FADE_MS / 2), 127, "half way in");
-        p.tick(10_000 + LINGER_MS - 1, true);
+        p.tick(10_000 + LINGER_MS - 1, true, false);
         assert!(p.visible(), "it lingers");
         p.kept(10_000 + LINGER_MS - 1);
-        p.tick(10_000 + LINGER_MS + 1, true);
+        p.tick(10_000 + LINGER_MS + 1, true, false);
         assert!(p.visible(), "a touch on the bar keeps it longer");
-        p.tick(10_000 + 2 * LINGER_MS + 1, true);
+        p.tick(10_000 + 2 * LINGER_MS + 1, true, false);
         assert!(!p.visible(), "and it leaves again");
         p.touched(30_000);
         p.touched(30_500);
         assert!(!p.visible(), "a second tap on the picture sends it away");
-        p.tick(40_000, false);
+        p.tick(40_000, false, false);
         assert!(p.visible(), "playback ended: the bar is back and stays");
         p.touched(41_000);
         assert!(p.visible(), "a tap while stopped changes nothing");
     }
 
     #[test]
+    fn with_the_look_saying_so_the_bar_leaves_the_idle_screen_too() {
+        let mut p = Presence::new();
+        p.tick(1000, false, true);
+        assert!(
+            p.visible(),
+            "stopped, the look says leave: the bar has a moment yet"
+        );
+        p.tick(1000 + AFTER_PLAY_MS, false, true);
+        assert!(!p.visible(), "then it leaves, as it does while playing");
+        p.touched(5000);
+        assert!(p.visible(), "a touch on the picture brings it");
+        p.tick(5000 + LINGER_MS - 1, false, true);
+        assert!(p.visible(), "it lingers");
+        p.tick(5000 + LINGER_MS + 1, false, true);
+        assert!(!p.visible(), "and leaves again after the linger");
+        p.tick(9000, true, true);
+        assert!(
+            !p.visible(),
+            "playback beginning changes nothing: it is away already"
+        );
+        p.tick(12_000, false, true);
+        assert!(!p.visible(), "playback ending neither");
+        // The look put back to stay: the bar comes back and stays, as before.
+        p.tick(13_000, false, false);
+        assert!(p.visible(), "stay: the bar is back");
+        p.tick(13_000 + 2 * LINGER_MS, false, false);
+        assert!(p.visible(), "and stays");
+        p.touched(20_000);
+        assert!(p.visible(), "a tap while stopped changes nothing");
+    }
+
+    #[test]
     fn a_fade_reversed_half_way_starts_where_it_stands() {
         let mut p = Presence::new();
-        p.tick(0, true);
-        p.tick(AFTER_PLAY_MS, true); // leaves at AFTER_PLAY_MS
+        p.tick(0, true, false);
+        p.tick(AFTER_PLAY_MS, true, false); // leaves at AFTER_PLAY_MS
         let mid = AFTER_PLAY_MS + FADE_MS / 2;
         assert_eq!(p.alpha(mid), 128, "half way out");
         p.touched(mid);

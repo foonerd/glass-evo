@@ -44,6 +44,10 @@ frost = auto
 # Whether the bar of controls and its sheet are drawn at all: off for a
 # screen no finger reaches. The clock, the date and the forecast stay.
 show = on
+# While the player stands still: "stay" keeps the bar on the screen;
+# "leave" sends it away as while music plays, six seconds after the last
+# touch, a touch bringing it back.
+idle = stay
 # The icons on their own: a colour, or "ink" for the theme's ink.
 ink = ink
 opacity = 1.0
