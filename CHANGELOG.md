@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.33] - 2026-10-17
+
+- Built on Glass 0.10.33, in step with it: a Glass or glass-evo release zip given alone by file is kept on the player for the other of the pair and the two go in together when it comes; nothing of the face changes, and this glass-evo needs Glass 0.10.33.
+
 ## [0.10.32] - 2026-10-17
 
 - Built on Glass 0.10.32, in step with it: the gallery's previews keep their own shape, read into a box of the tile's width and a 16:9 height instead of a square, the names under them in view again; this glass-evo needs Glass 0.10.32, which names it as the least it works with.
