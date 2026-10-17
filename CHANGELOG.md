@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.32] - 2026-10-17
+
+- Built on Glass 0.10.32, in step with it: the gallery's previews keep their own shape, read into a box of the tile's width and a 16:9 height instead of a square, the names under them in view again; this glass-evo needs Glass 0.10.32, which names it as the least it works with.
+
 ## [0.10.31] - 2026-10-17
 
 - Built on Glass 0.10.31, in step with it: a themes row at the top of the More sheet, the previous and next theme applied at once and a gallery of the installed themes with the Manager's previews, three a row, the one on show framed, a theme or one variant applied; the Power page redraws by itself while its ring fills or its question counts down; this glass-evo needs Glass 0.10.31, which answers the gallery and names it as the least it works with.
