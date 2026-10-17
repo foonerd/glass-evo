@@ -35,6 +35,7 @@ pub mod icon;
 pub mod lists;
 pub mod look;
 pub mod lucide;
+pub mod power;
 pub mod theme;
 pub mod when;
 use icon::Icon;
@@ -176,14 +177,18 @@ pub enum Tile {
     Queue,
     /// A search of the player's sources, typed on the face's keyboard.
     Search,
+    /// The player's power: off, reboot, standby where the board has it,
+    /// on a page that asks before it acts.
+    Power,
 }
 
 /// The sheet's tiles in their order: the modes on the first row, the
 /// places on the second.
-const TILES: [Tile; 7] = [
+const TILES: [Tile; 8] = [
     Tile::Repeat,
     Tile::Random,
     Tile::Mute,
+    Tile::Power,
     Tile::Favourite,
     Tile::Browse,
     Tile::Queue,
@@ -192,7 +197,7 @@ const TILES: [Tile; 7] = [
 /// The sheet's rows: the player's modes above, the library below; the
 /// columns follow from the longest row, a shorter row's last cell empty.
 const TILE_ROWS: [&[Tile]; 2] = [
-    &[Tile::Repeat, Tile::Random, Tile::Mute],
+    &[Tile::Repeat, Tile::Random, Tile::Mute, Tile::Power],
     &[Tile::Favourite, Tile::Browse, Tile::Queue, Tile::Search],
 ];
 
@@ -428,7 +433,7 @@ pub fn mute_command(muted: bool) -> Command {
 pub fn tile_command(tile: Tile, meta: &Metadata) -> Option<Command> {
     Some(match tile {
         // The places open their views; they send the player nothing.
-        Tile::Queue | Tile::Browse | Tile::Search => return None,
+        Tile::Queue | Tile::Browse | Tile::Search | Tile::Power => return None,
         Tile::Repeat => {
             let next = match (meta.repeat, meta.repeat_single) {
                 (false, _) => "all",
@@ -446,7 +451,7 @@ pub fn tile_command(tile: Tile, meta: &Metadata) -> Option<Command> {
 /// Whether a tile is lit: its mode is on in the player.
 pub fn tile_lit(tile: Tile, meta: &Metadata) -> bool {
     match tile {
-        Tile::Queue | Tile::Browse | Tile::Search => false,
+        Tile::Queue | Tile::Browse | Tile::Search | Tile::Power => false,
         Tile::Repeat => meta.repeat,
         Tile::Random => meta.random,
         Tile::Mute => meta.mute,
@@ -481,6 +486,7 @@ pub fn tile_icon(tile: Tile, meta: &Metadata) -> Icon {
         Tile::Favourite => Icon::Heart,
         Tile::Browse => Icon::Browse,
         Tile::Search => Icon::Search,
+        Tile::Power => Icon::Power,
     }
 }
 
@@ -496,6 +502,7 @@ pub fn tile_label(tile: Tile, meta: &Metadata) -> &'static str {
         Tile::Browse => "Browse",
         Tile::Queue => "Queue",
         Tile::Search => "Search",
+        Tile::Power => "Power",
     }
 }
 
@@ -647,6 +654,8 @@ pub struct Face {
     queue: lists::QueueView,
     /// The player's library browsed over the theme, and a search.
     browse: browse::BrowseView,
+    /// The player's power, on a page that asks before it acts.
+    power: power::PowerView,
     /// What was last drawn, as `stamp` puts it; none when nothing was.
     drawn: Option<u64>,
     /// The folders face themes are kept in, where the face was told them;
@@ -2673,6 +2682,17 @@ impl Face {
         let playing = self.playing.settle(now, meta);
         let idle_leaves = self.tokens(view).theme.buttons_idle_leaves;
         self.presence.tick(now, playing, idle_leaves);
+        // The Power page: how the look asks and what the player offers,
+        // and a hold that ran out is the action, once.
+        if self.power.open {
+            let ask = self.tokens(view).theme.power_ask;
+            self.power.set(ask, view.input.standby);
+            if let Some(kind) = self.power.tick(now) {
+                self.pending
+                    .push(Command::with("power", serde_json::json!(kind.word())));
+                self.power.close();
+            }
+        }
         // A finger resting on volume down: mute, once, and no step on its lift.
         if self.pressed == Some(Button::VolumeDown)
             && !self.held
@@ -2888,6 +2908,7 @@ impl Overlay for Face {
             && !dark
             && !self.queue.open
             && !self.browse.open
+            && !self.power.open
             && self.black(view.now_ms) == 0
         {
             self.drawn = None;
@@ -3011,6 +3032,40 @@ impl Overlay for Face {
                     [255, 255, 255, share(theme.hairline, alpha)],
                 );
             };
+            // The Power page, as the queue: over the theme and under the
+            // bar, in the shape the look names, its way out by the shape.
+            if self.power.open {
+                let panel = lists::Panel::place(
+                    theme.lists_shape,
+                    view.width,
+                    view.height,
+                    bar.h,
+                    view.scale,
+                );
+                let m = lists::Measure::at(view.scale);
+                if frosted {
+                    self.frost
+                        .apply(frame, panel.x, panel.y, panel.w, panel.h, alpha);
+                }
+                glass(frame, panel.x, panel.y, panel.w, panel.h, theme.sheet);
+                let leave = Some(icons.get(match panel.shape {
+                    theme::ListShape::Sheet => Icon::Down,
+                    theme::ListShape::Drawer => Icon::Right,
+                    _ => Icon::Back,
+                }));
+                self.power.draw(
+                    frame,
+                    view.fonts,
+                    &panel,
+                    &m,
+                    theme.ink,
+                    look.accent,
+                    leave,
+                    alpha,
+                    view.now_ms,
+                );
+                self.presence.kept(view.now_ms);
+            }
             // The queue over the theme and under the bar, in the shape the
             // look names; the bar stays while it is open.
             if self.queue.open {
@@ -3278,6 +3333,22 @@ impl Overlay for Face {
             self.presence.kept(now);
             return true;
         }
+        if self.power.open && bar.button_at(x, y).is_none() {
+            let shape = self.tokens(view).theme.lists_shape;
+            let panel = lists::Panel::place(shape, view.width, view.height, bar.h, view.scale);
+            let m = lists::Measure::at(view.scale);
+            match self.power.pointer(kind, x, y, &panel, &m, now) {
+                power::Action::Do(what) => {
+                    self.pending
+                        .push(Command::with("power", serde_json::json!(what.word())));
+                    self.power.close();
+                }
+                power::Action::Close => self.power.close(),
+                power::Action::Taken => {}
+            }
+            self.presence.kept(now);
+            return true;
+        }
         if self.queue.open && bar.button_at(x, y).is_none() {
             let shape = self.tokens(view).theme.lists_shape;
             let panel = lists::Panel::place(shape, view.width, view.height, bar.h, view.scale);
@@ -3339,9 +3410,15 @@ impl Overlay for Face {
                 }
                 if let Some(tile) = was_tile {
                     if on_sheet == Some(tile) {
-                        if tile == Tile::Queue {
+                        if tile == Tile::Power {
+                            self.sheet_open = false;
+                            self.queue.close();
+                            self.browse.close();
+                            self.power.open();
+                        } else if tile == Tile::Queue {
                             self.sheet_open = false;
                             self.browse.close();
+                            self.power.close();
                             self.queue.open();
                         } else if tile == Tile::Browse {
                             self.sheet_open = false;
@@ -3550,8 +3627,8 @@ mod tests {
         assert_eq!(sheet.tile_at(960, 500), Some(Tile::Mute));
         assert_eq!(
             sheet.tile_at(1200, 500),
-            None,
-            "the modes row's last cell is empty"
+            Some(Tile::Power),
+            "the modes row's last cell is the player's power"
         );
         assert_eq!(sheet.tile_at(500, 600), Some(Tile::Favourite));
         assert_eq!(sheet.tile_at(750, 600), Some(Tile::Browse));

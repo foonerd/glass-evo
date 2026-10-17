@@ -38,9 +38,11 @@ pub enum Icon {
     Browse,
     /// Lucide's `search`: a search of the player's sources.
     Search,
+    /// Lucide's `power`: the player's power, off, reboot or standby.
+    Power,
 }
 
-const ICONS: [Icon; 20] = [
+const ICONS: [Icon; 21] = [
     Icon::Previous,
     Icon::Play,
     Icon::Pause,
@@ -61,6 +63,7 @@ const ICONS: [Icon; 20] = [
     Icon::Heart,
     Icon::Browse,
     Icon::Search,
+    Icon::Power,
 ];
 
 use crate::lucide::{self, Shape};
@@ -194,7 +197,8 @@ fn distance(icon: Icon, p: Point) -> f32 {
         | Icon::Right
         | Icon::Heart
         | Icon::Browse
-        | Icon::Search => lucide_distance(&flatten(lucide_shapes(icon).unwrap_or(&[])), p),
+        | Icon::Search
+        | Icon::Power => lucide_distance(&flatten(lucide_shapes(icon).unwrap_or(&[])), p),
     }
 }
 
@@ -210,6 +214,7 @@ fn lucide_shapes(icon: Icon) -> Option<&'static [Shape]> {
         Icon::Heart => Some(lucide::HEART),
         Icon::Browse => Some(lucide::LIBRARY_BIG),
         Icon::Search => Some(lucide::SEARCH),
+        Icon::Power => Some(lucide::POWER),
         _ => None,
     }
 }

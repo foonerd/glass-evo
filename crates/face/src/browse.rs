@@ -1313,7 +1313,7 @@ impl BrowseView {
 
 /// A fill with rounded corners of radius `r`, held to a clip box: the
 /// rows through the corners are shorter by the circle's inset.
-fn rounded(
+pub(crate) fn rounded(
     frame: &mut Frame,
     x: i32,
     y: i32,

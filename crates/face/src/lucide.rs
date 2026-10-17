@@ -68,6 +68,9 @@ pub const CAST: &[Shape] = &[
     Shape::Line(0.0, 0.0, 0.0, 0.0),
 ];
 
+/// Lucide's `check`.
+pub const CHECK: &[Shape] = &[Shape::Path("M20 6 9 17l-5-5")];
+
 /// Lucide's `chevron-down`.
 pub const CHEVRON_DOWN: &[Shape] = &[Shape::Path("m6 9 6 6 6-6")];
 
@@ -146,6 +149,14 @@ pub const HEART: &[Shape] = &[
     Shape::Path("M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5"),
 ];
 
+/// Lucide's `layout-grid`.
+pub const LAYOUT_GRID: &[Shape] = &[
+    Shape::Rect(3.0, 3.0, 7.0, 7.0, 1.0),
+    Shape::Rect(14.0, 3.0, 7.0, 7.0, 1.0),
+    Shape::Rect(14.0, 14.0, 7.0, 7.0, 1.0),
+    Shape::Rect(3.0, 14.0, 7.0, 7.0, 1.0),
+];
+
 /// Lucide's `library-big`.
 pub const LIBRARY_BIG: &[Shape] = &[
     Shape::Rect(3.0, 3.0, 8.0, 18.0, 1.0),
@@ -222,11 +233,23 @@ pub const MIC: &[Shape] = &[
     Shape::Line(0.0, 0.0, 0.0, 0.0),
 ];
 
+/// Lucide's `moon`.
+pub const MOON: &[Shape] = &[Shape::Path("M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z")];
+
 /// Lucide's `music`.
 pub const MUSIC: &[Shape] = &[
     Shape::Path("M9 18V5l12-2v13"),
     Shape::Circle(6.0, 18.0, 3.0),
     Shape::Circle(18.0, 16.0, 3.0),
+];
+
+/// Lucide's `palette`.
+pub const PALETTE: &[Shape] = &[
+    Shape::Circle(13.5, 6.5, 0.5),
+    Shape::Circle(17.5, 10.5, 0.5),
+    Shape::Circle(8.5, 7.5, 0.5),
+    Shape::Circle(6.5, 12.5, 0.5),
+    Shape::Path("M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"),
 ];
 
 /// Lucide's `play`.
@@ -237,6 +260,12 @@ pub const PLAY: &[Shape] = &[Shape::Path(
 /// Lucide's `plus`.
 pub const PLUS: &[Shape] = &[Shape::Path("M5 12h14"), Shape::Path("M12 5v14")];
 
+/// Lucide's `power`.
+pub const POWER: &[Shape] = &[
+    Shape::Path("M12 2v10"),
+    Shape::Path("M18.4 6.6a9 9 0 1 1-12.77.04"),
+];
+
 /// Lucide's `radio`.
 pub const RADIO: &[Shape] = &[
     Shape::Path("M16.247 7.761a6 6 0 0 1 0 8.478"),
@@ -244,6 +273,12 @@ pub const RADIO: &[Shape] = &[
     Shape::Path("M4.925 19.067a10 10 0 0 1 0-14.134"),
     Shape::Path("M7.753 16.239a6 6 0 0 1 0-8.478"),
     Shape::Circle(12.0, 12.0, 2.0),
+];
+
+/// Lucide's `rotate-ccw`.
+pub const ROTATE_CCW: &[Shape] = &[
+    Shape::Path("M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"),
+    Shape::Path("M3 3v5h5"),
 ];
 
 /// Lucide's `search`.
@@ -309,6 +344,7 @@ pub const X: &[Shape] = &[Shape::Path("M18 6 6 18"), Shape::Path("m6 6 12 12")];
 /// Every icon here by its Lucide name.
 pub const ALL: &[(&str, &[Shape])] = &[
     ("cast", CAST),
+    ("check", CHECK),
     ("chevron-down", CHEVRON_DOWN),
     ("chevron-left", CHEVRON_LEFT),
     ("chevron-right", CHEVRON_RIGHT),
@@ -322,6 +358,7 @@ pub const ALL: &[(&str, &[Shape])] = &[
     ("hard-drive", HARD_DRIVE),
     ("heart-pulse", HEART_PULSE),
     ("heart", HEART),
+    ("layout-grid", LAYOUT_GRID),
     ("library-big", LIBRARY_BIG),
     ("list-end", LIST_END),
     ("list-music", LIST_MUSIC),
@@ -331,10 +368,14 @@ pub const ALL: &[(&str, &[Shape])] = &[
     ("list", LIST),
     ("map-pin", MAP_PIN),
     ("mic", MIC),
+    ("moon", MOON),
     ("music", MUSIC),
+    ("palette", PALETTE),
     ("play", PLAY),
     ("plus", PLUS),
+    ("power", POWER),
     ("radio", RADIO),
+    ("rotate-ccw", ROTATE_CCW),
     ("search", SEARCH),
     ("server", SERVER),
     ("star", STAR),

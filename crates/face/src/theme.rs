@@ -17,6 +17,17 @@ pub enum Paint {
 /// The shape the queue and the browser take on the screen: by the screen
 /// (a sheet on a wide screen, the whole screen on one taller than wide), a
 /// sheet rising over the theme, a drawer at the right, or the whole screen.
+/// How the Power page asks before it acts (`power.ask`): on a second
+/// screen with a large Power off and a Cancel that cancels by itself, the
+/// default, since a finger held while driving is unlawful on a car dash;
+/// or by a tile held for two seconds, a ring filling around its glyph.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PowerAsk {
+    #[default]
+    Screen,
+    Hold,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ListShape {
     #[default]
@@ -187,6 +198,9 @@ pub struct Theme {
     /// screen (a sheet on a wide screen, the whole screen on a portrait
     /// one), a sheet, a drawer at the right, or the whole screen.
     pub lists_shape: ListShape,
+    /// `power.ask`: how the Power page asks before it acts: on a second
+    /// screen that cancels by itself, or by a tile held for two seconds.
+    pub power_ask: PowerAsk,
     /// `glass.frost`: `auto`, `on` or `off`.
     pub frost: Frost,
     /// `buttons.ink`, `buttons.opacity`: the icons, when they have their own.
@@ -352,6 +366,7 @@ impl Default for Theme {
             sheet: 0.78,
             hairline: 0.12,
             lists_shape: ListShape::Auto,
+            power_ask: PowerAsk::Screen,
             frost: Frost::Auto,
             buttons_ink: None,
             buttons_opacity: 1.0,
@@ -555,6 +570,13 @@ impl Theme {
                         "drawer" => ListShape::Drawer,
                         "screen" | "full" | "whole" => ListShape::Screen,
                         _ => self.lists_shape,
+                    }
+                }
+                "power.ask" => {
+                    self.power_ask = match v.trim().to_ascii_lowercase().as_str() {
+                        "screen" | "second screen" | "ask" => PowerAsk::Screen,
+                        "hold" | "holding" | "held" => PowerAsk::Hold,
+                        _ => self.power_ask,
                     }
                 }
                 "glass.frost" => {
@@ -1053,6 +1075,7 @@ mod tests {
             "buttons.opacity",
             "buttons.show",
             "buttons.idle",
+            "power.ask",
             "clock.show",
             "clock.format",
             "clock.ink",
@@ -1097,7 +1120,7 @@ mod tests {
         }
         assert_eq!(
             written.len(),
-            67,
+            68,
             "and nothing but what the face reads and the line for a list"
         );
     }

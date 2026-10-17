@@ -57,6 +57,13 @@ opacity = 1.0
 glass = bar
 tint = tint
 
+[power]
+# How the Power page asks before it acts, so no touch shuts the player by
+# accident: "screen", a second screen with a large Power off and a Cancel
+# that cancels by itself after eight seconds; or "hold", the tile held for
+# two seconds while a ring fills. Screen is the one for a car dash.
+ask = screen
+
 [clock]
 # The clock shows when nothing plays: on or off.
 show = on
