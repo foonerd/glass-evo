@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.30] - 2026-10-17
+
+- Built on Glass 0.10.30, in step with it: power from the More sheet, a Power tile beside Mute opening a page with Power off, Reboot and Standby where the board has it, each through Volumio's own action, asking before it acts on a second screen or by a two-second hold as the look's power.ask says; this glass-evo needs Glass 0.10.30, whose plugin runs the power command and tells the face what the board offers, and which names it as the least it works with.
+
 ## [0.10.29] - 2026-10-16
 
 - Built on Glass 0.10.29, in step with it, nothing of the face's own changing: this glass-evo needs Glass 0.10.29, which names this glass-evo, the one whose display fades the backlight, as the least it works with.
