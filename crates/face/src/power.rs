@@ -547,9 +547,9 @@ fn ring(
             let colour = if a <= progress * turn { on } else { off };
             let a8 = (alpha as f32 * cover) as u32;
             let i = ((y as u32 * frame.width + x as u32) * 4) as usize;
-            for c in 0..3 {
+            for (c, &value) in colour.iter().enumerate() {
                 let dst = frame.rgba[i + c] as u32;
-                frame.rgba[i + c] = ((colour[c] as u32 * a8 + dst * (255 - a8)) / 255) as u8;
+                frame.rgba[i + c] = ((value as u32 * a8 + dst * (255 - a8)) / 255) as u8;
             }
             frame.rgba[i + 3] = frame.rgba[i + 3].max(a8 as u8);
         }
