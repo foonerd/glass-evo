@@ -424,7 +424,7 @@ impl ThemesView {
             let inner = (m.pad / 2) as i32;
             let (px, py) = (x + inner, y + inner);
             let side = w.saturating_sub(2 * inner as u32);
-            match self.covers.get(&item.art_file, side) {
+            match self.covers.get_box(&item.art_file, side, thumb_h) {
                 Some(cover) => {
                     let cx = px + (side as i32 - cover.width as i32) / 2;
                     let cy = py + (thumb_h as i32 - cover.height as i32) / 2;

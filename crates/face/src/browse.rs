@@ -75,18 +75,20 @@ struct CoverReading(std::sync::mpsc::Receiver<Option<Frame>>);
 struct CoverReading(Option<Frame>);
 
 impl CoverReading {
+    /// A cover read into a box of `w` by `h`: a square for a row's cover,
+    /// a theme's own shape for a preview.
     #[cfg(not(target_arch = "wasm32"))]
-    fn of(path: String, size: u32) -> Self {
+    fn of(path: String, w: u32, h: u32) -> Self {
         let (send, receive) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let _ = send.send(read_art(Path::new(&path), size, size, None));
+            let _ = send.send(read_art(Path::new(&path), w, h, None));
         });
         CoverReading(receive)
     }
 
     #[cfg(target_arch = "wasm32")]
-    fn of(path: String, size: u32) -> Self {
-        CoverReading(read_art(Path::new(&path), size, size, None))
+    fn of(path: String, w: u32, h: u32) -> Self {
+        CoverReading(read_art(Path::new(&path), w, h, None))
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -109,11 +111,12 @@ enum Cover {
     Done(Option<Frame>),
 }
 
-/// The covers read for the rows, by file and side; let go all at once
-/// when there are too many. The queue's rows share the kind.
+/// The covers read for the rows, by file and box; let go all at once
+/// when there are too many. The queue's rows and the themes' gallery share
+/// the kind.
 #[derive(Default)]
 pub(crate) struct Covers {
-    have: HashMap<(String, u32), Cover>,
+    have: HashMap<(String, u32, u32), Cover>,
 }
 
 /// Lucide's glyphs rastered by name, side and ink, once each; an unknown
@@ -152,18 +155,24 @@ const COVERS_MOST: usize = 96;
 impl Covers {
     /// The cover of a file at a side, once read; reading starts at the
     /// first ask.
+    /// A cover in a square of `size`, as a row wears it.
     pub(crate) fn get(&mut self, file: &str, size: u32) -> Option<&Frame> {
+        self.get_box(file, size, size)
+    }
+
+    /// A cover in a box of `w` by `h`, as a theme's preview keeps its shape.
+    pub(crate) fn get_box(&mut self, file: &str, w: u32, h: u32) -> Option<&Frame> {
         if file.is_empty() {
             return None;
         }
         if self.have.len() > COVERS_MOST {
             self.have.clear();
         }
-        let key = (file.to_string(), size);
+        let key = (file.to_string(), w, h);
         let slot = self
             .have
             .entry(key)
-            .or_insert_with(|| Cover::Reading(CoverReading::of(file.to_string(), size)));
+            .or_insert_with(|| Cover::Reading(CoverReading::of(file.to_string(), w, h)));
         if let Cover::Reading(reading) = slot {
             if let Some(found) = reading.done() {
                 *slot = Cover::Done(found);
