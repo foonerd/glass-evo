@@ -302,6 +302,26 @@ impl PowerView {
         self.holding.is_some() || self.asking.is_some()
     }
 
+    /// What the page draws from, for the face's stamp: a ring filling
+    /// counts in tenths of a second, a question counting down in seconds.
+    pub fn stamp(&self, now: u64, h: &mut impl std::hash::Hasher) {
+        use std::hash::Hash;
+        self.open.hash(h);
+        if !self.open {
+            return;
+        }
+        self.standby.hash(h);
+        self.hold.hash(h);
+        format!("{:?}", self.pressed).hash(h);
+        format!("{:?}", self.asking).hash(h);
+        format!("{:?}", self.holding).hash(h);
+        if self.holding.is_some() {
+            (now / 100).hash(h);
+        } else if self.asking.is_some() {
+            (now / 1000).hash(h);
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn draw(
         &mut self,

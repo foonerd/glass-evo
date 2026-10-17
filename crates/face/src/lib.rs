@@ -37,6 +37,7 @@ pub mod look;
 pub mod lucide;
 pub mod power;
 pub mod theme;
+pub mod themes;
 pub mod when;
 use icon::Icon;
 use look::Look;
@@ -180,11 +181,20 @@ pub enum Tile {
     /// The player's power: off, reboot, standby where the board has it,
     /// on a page that asks before it acts.
     Power,
+    /// The theme before this one, in the Manager's order, applied at once.
+    ThemePrev,
+    /// The theme after this one, applied at once.
+    ThemeNext,
+    /// The installed themes as a gallery of the Manager's previews.
+    Themes,
 }
 
 /// The sheet's tiles in their order: the modes on the first row, the
 /// places on the second.
-const TILES: [Tile; 8] = [
+const TILES: [Tile; 11] = [
+    Tile::ThemePrev,
+    Tile::ThemeNext,
+    Tile::Themes,
     Tile::Repeat,
     Tile::Random,
     Tile::Mute,
@@ -194,9 +204,11 @@ const TILES: [Tile; 8] = [
     Tile::Queue,
     Tile::Search,
 ];
-/// The sheet's rows: the player's modes above, the library below; the
-/// columns follow from the longest row, a shorter row's last cell empty.
-const TILE_ROWS: [&[Tile]; 2] = [
+/// The sheet's rows: the themes at the top, the player's modes with the
+/// power under them, the library below; the columns follow from the
+/// longest row, a shorter row's last cell empty.
+const TILE_ROWS: [&[Tile]; 3] = [
+    &[Tile::ThemePrev, Tile::ThemeNext, Tile::Themes],
     &[Tile::Repeat, Tile::Random, Tile::Mute, Tile::Power],
     &[Tile::Favourite, Tile::Browse, Tile::Queue, Tile::Search],
 ];
@@ -433,7 +445,9 @@ pub fn mute_command(muted: bool) -> Command {
 pub fn tile_command(tile: Tile, meta: &Metadata) -> Option<Command> {
     Some(match tile {
         // The places open their views; they send the player nothing.
-        Tile::Queue | Tile::Browse | Tile::Search | Tile::Power => return None,
+        Tile::Queue | Tile::Browse | Tile::Search | Tile::Power | Tile::Themes => return None,
+        Tile::ThemePrev => Command::with("theme", serde_json::json!("previous")),
+        Tile::ThemeNext => Command::with("theme", serde_json::json!("next")),
         Tile::Repeat => {
             let next = match (meta.repeat, meta.repeat_single) {
                 (false, _) => "all",
@@ -451,7 +465,13 @@ pub fn tile_command(tile: Tile, meta: &Metadata) -> Option<Command> {
 /// Whether a tile is lit: its mode is on in the player.
 pub fn tile_lit(tile: Tile, meta: &Metadata) -> bool {
     match tile {
-        Tile::Queue | Tile::Browse | Tile::Search | Tile::Power => false,
+        Tile::Queue
+        | Tile::Browse
+        | Tile::Search
+        | Tile::Power
+        | Tile::ThemePrev
+        | Tile::ThemeNext
+        | Tile::Themes => false,
         Tile::Repeat => meta.repeat,
         Tile::Random => meta.random,
         Tile::Mute => meta.mute,
@@ -487,6 +507,9 @@ pub fn tile_icon(tile: Tile, meta: &Metadata) -> Icon {
         Tile::Browse => Icon::Browse,
         Tile::Search => Icon::Search,
         Tile::Power => Icon::Power,
+        Tile::ThemePrev => Icon::Back,
+        Tile::ThemeNext => Icon::Right,
+        Tile::Themes => Icon::Themes,
     }
 }
 
@@ -503,6 +526,9 @@ pub fn tile_label(tile: Tile, meta: &Metadata) -> &'static str {
         Tile::Queue => "Queue",
         Tile::Search => "Search",
         Tile::Power => "Power",
+        Tile::ThemePrev => "Previous theme",
+        Tile::ThemeNext => "Next theme",
+        Tile::Themes => "Themes",
     }
 }
 
@@ -656,6 +682,8 @@ pub struct Face {
     browse: browse::BrowseView,
     /// The player's power, on a page that asks before it acts.
     power: power::PowerView,
+    /// The installed themes as a gallery, and a theme's variants.
+    themes: themes::ThemesView,
     /// What was last drawn, as `stamp` puts it; none when nothing was.
     drawn: Option<u64>,
     /// The folders face themes are kept in, where the face was told them;
@@ -2848,6 +2876,8 @@ impl Face {
             self.sheet_open.hash(&mut h);
             self.queue.stamp(view.input, &mut h);
             self.browse.stamp(view.input, &mut h);
+            self.power.stamp(view.now_ms, &mut h);
+            self.themes.stamp(view.input, &mut h);
             for button in BUTTONS {
                 (button_icon(button, meta) as u8).hash(&mut h);
             }
@@ -2909,6 +2939,7 @@ impl Overlay for Face {
             && !self.queue.open
             && !self.browse.open
             && !self.power.open
+            && !self.themes.open
             && self.black(view.now_ms) == 0
         {
             self.drawn = None;
@@ -3032,6 +3063,40 @@ impl Overlay for Face {
                     [255, 255, 255, share(theme.hairline, alpha)],
                 );
             };
+            // The themes' gallery, as the browser: over the theme and under
+            // the bar, in the shape the look names, its way out by the shape.
+            if self.themes.open {
+                let panel = lists::Panel::place(
+                    theme.lists_shape,
+                    view.width,
+                    view.height,
+                    bar.h,
+                    view.scale,
+                );
+                let m = lists::Measure::at(view.scale);
+                if frosted {
+                    self.frost
+                        .apply(frame, panel.x, panel.y, panel.w, panel.h, alpha);
+                }
+                glass(frame, panel.x, panel.y, panel.w, panel.h, theme.sheet);
+                let leave = Some(icons.get(match panel.shape {
+                    theme::ListShape::Sheet => Icon::Down,
+                    theme::ListShape::Drawer => Icon::Right,
+                    _ => Icon::Back,
+                }));
+                self.themes.draw(
+                    frame,
+                    view.fonts,
+                    view.input,
+                    &panel,
+                    &m,
+                    theme.ink,
+                    look.accent,
+                    leave,
+                    alpha,
+                );
+                self.presence.kept(view.now_ms);
+            }
             // The Power page, as the queue: over the theme and under the
             // bar, in the shape the look names, its way out by the shape.
             if self.power.open {
@@ -3333,6 +3398,18 @@ impl Overlay for Face {
             self.presence.kept(now);
             return true;
         }
+        if self.themes.open && bar.button_at(x, y).is_none() {
+            let shape = self.tokens(view).theme.lists_shape;
+            let panel = lists::Panel::place(shape, view.width, view.height, bar.h, view.scale);
+            let m = lists::Measure::at(view.scale);
+            match self.themes.pointer(kind, x, y, &panel, &m, view.input) {
+                themes::Action::Send(command) => self.pending.push(command),
+                themes::Action::Close => self.themes.close(),
+                themes::Action::Taken => {}
+            }
+            self.presence.kept(now);
+            return true;
+        }
         if self.power.open && bar.button_at(x, y).is_none() {
             let shape = self.tokens(view).theme.lists_shape;
             let panel = lists::Panel::place(shape, view.width, view.height, bar.h, view.scale);
@@ -3414,7 +3491,15 @@ impl Overlay for Face {
                             self.sheet_open = false;
                             self.queue.close();
                             self.browse.close();
+                            self.themes.close();
                             self.power.open();
+                        } else if tile == Tile::Themes {
+                            self.sheet_open = false;
+                            self.queue.close();
+                            self.browse.close();
+                            self.power.close();
+                            let ask = self.themes.open();
+                            self.pending.push(ask);
                         } else if tile == Tile::Queue {
                             self.sheet_open = false;
                             self.browse.close();
@@ -3614,13 +3699,20 @@ mod tests {
             sheet,
             Sheet {
                 x: 428,
-                y: 472,
+                y: 384,
                 w: 852,
-                h: 176,
+                h: 264,
                 cols: 4,
                 tw: 213,
                 th: 88
             }
+        );
+        assert_eq!(sheet.tile_at(500, 420), Some(Tile::ThemePrev));
+        assert_eq!(sheet.tile_at(960, 420), Some(Tile::Themes));
+        assert_eq!(
+            sheet.tile_at(1200, 420),
+            None,
+            "the themes row's last cell is empty"
         );
         assert_eq!(sheet.tile_at(500, 500), Some(Tile::Repeat));
         assert_eq!(sheet.tile_at(750, 500), Some(Tile::Random));
@@ -3640,8 +3732,17 @@ mod tests {
             "left of the sheet is the theme's"
         );
         assert_eq!(sheet.tile_at(960, 660), None, "below it is the bar");
-        assert_eq!(sheet.tile_rect(1), (641, 472, 213, 88));
-        assert_eq!(sheet.tile_rect(6), (854, 560, 213, 88));
+        assert_eq!(sheet.tile_rect(1), (641, 384, 213, 88));
+        assert_eq!(
+            sheet.tile_rect(6),
+            (854, 472, 213, 88),
+            "the second row's third cell is Mute"
+        );
+        assert_eq!(
+            sheet.tile_rect(10),
+            (854, 560, 213, 88),
+            "the third row's third cell is Queue"
+        );
     }
 
     #[test]
@@ -5653,7 +5754,7 @@ mod tests {
             let (tx, ty, tw, th) = bar.sheet().tile_rect(i);
             (tx + tw as i32 / 2, ty + th as i32 / 2)
         };
-        let (cx, cy) = tile(5);
+        let (cx, cy) = tile(9);
         assert!(face.pointer(PointerKind::Down, cx, cy, &view(&input, &fonts, 2000)));
         assert!(face.pointer(PointerKind::Up, cx, cy, &view(&input, &fonts, 2050)));
         assert!(face.browse.open, "the browser opens");
@@ -5669,7 +5770,7 @@ mod tests {
         // Search: the keys, and nothing asked.
         assert!(face.pointer(PointerKind::Down, 1200, 700, &view(&input, &fonts, 4000)));
         assert!(face.pointer(PointerKind::Up, 1200, 700, &view(&input, &fonts, 4050)));
-        let (sx, sy) = tile(7);
+        let (sx, sy) = tile(11);
         assert!(face.pointer(PointerKind::Down, sx, sy, &view(&input, &fonts, 5000)));
         assert!(face.pointer(PointerKind::Up, sx, sy, &view(&input, &fonts, 5050)));
         assert!(face.browse.open && !face.sheet_open());
@@ -5699,7 +5800,7 @@ mod tests {
         assert!(face.pointer(PointerKind::Up, 1200, 700, &view(&input, &fonts, 1050)));
         assert!(face.sheet_open());
         let bar = Bar::for_picture(1280, 720, 1.0);
-        let (tx, ty, tw, th) = bar.sheet().tile_rect(6);
+        let (tx, ty, tw, th) = bar.sheet().tile_rect(10);
         let (cx, cy) = (tx + tw as i32 / 2, ty + th as i32 / 2);
         assert!(face.pointer(PointerKind::Down, cx, cy, &view(&input, &fonts, 2000)));
         assert!(face.pointer(PointerKind::Up, cx, cy, &view(&input, &fonts, 2050)));
