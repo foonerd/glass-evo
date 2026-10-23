@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.34] - 2026-10-23
+
+- Built on Glass 0.10.34, in step with it: a remote shows the theme at a share of its own size, placed, with a backdrop of its own; nothing of the face changes, and this glass-evo needs Glass 0.10.34, which names it as the least it works with since the pane the face draws through changed.
+
 ## [0.10.33] - 2026-10-17
 
 - Built on Glass 0.10.33, in step with it: a Glass or glass-evo release zip given alone by file is kept on the player for the other of the pair and the two go in together when it comes; nothing of the face changes, and this glass-evo needs Glass 0.10.33.
