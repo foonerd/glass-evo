@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.35] - 2026-10-23
+
+- Built on Glass 0.10.35, in step with it: a theme placed at an edge or in a corner of a remote's screen keeps a margin off the edges; nothing of the face changes, and this glass-evo needs Glass 0.10.35, which names it as the least it works with since the pane changed.
+
 ## [0.10.34] - 2026-10-23
 
 - Built on Glass 0.10.34, in step with it: a remote shows the theme at a share of its own size, placed, with a backdrop of its own; nothing of the face changes, and this glass-evo needs Glass 0.10.34, which names it as the least it works with since the pane the face draws through changed.
