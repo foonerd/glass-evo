@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.36] - 2026-10-24
+
+- Built on Glass 0.10.36, in step with it: names from a source that writes web markup into them show as words on the face and on every other surface, cleared where they enter the channel; nothing of the face changes, and this glass-evo needs Glass 0.10.36.
+
 ## [0.10.35] - 2026-10-23
 
 - Built on Glass 0.10.35, in step with it: a theme placed at an edge or in a corner of a remote's screen keeps a margin off the edges; nothing of the face changes, and this glass-evo needs Glass 0.10.35, which names it as the least it works with since the pane changed.
