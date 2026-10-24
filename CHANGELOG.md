@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.38] - 2026-10-24
+
+- Built on Glass 0.10.38, in step with it: the source words of the player's edition tag rules cover their families, Radio for every radio plugin, FM and DAB for the tuner, Spotify for both ways it plays; nothing of the face changes, and this glass-evo needs Glass 0.10.38.
+
 ## [0.10.37] - 2026-10-24
 
 - Built on Glass 0.10.37, in step with it: where an album or folder name carries no edition tag, the source the music plays from stands in for it on the player, by a word or by the service id; nothing of the face changes, and this glass-evo needs Glass 0.10.37.
