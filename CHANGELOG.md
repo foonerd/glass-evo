@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.39] - 2026-10-31
+
+- Built on Glass 0.10.39, in step with it: a theme fitted to a larger screen or shown at a share of itself is scaled smoothly on the face as on every other surface; nothing of the face changes, and this glass-evo needs Glass 0.10.39, which names it as the least it works with since the pane the face draws through changed.
+
 ## [0.10.38] - 2026-10-24
 
 - Built on Glass 0.10.38, in step with it: the source words of the player's edition tag rules cover their families, Radio for every radio plugin, FM and DAB for the tuner, Spotify for both ways it plays; nothing of the face changes, and this glass-evo needs Glass 0.10.38.
