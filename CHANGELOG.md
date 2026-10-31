@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.40] - 2026-10-31
+
+- Built on Glass 0.10.40, in step with it: the theme on the player's screen at a share of its own size, placed, with a margin, drawn by the display the face runs through; nothing of the face changes, and this glass-evo needs Glass 0.10.40, which names it as the least it works with since the display's placement changed.
+
 ## [0.10.39] - 2026-10-31
 
 - Built on Glass 0.10.39, in step with it: a theme fitted to a larger screen or shown at a share of itself is scaled smoothly on the face as on every other surface; nothing of the face changes, and this glass-evo needs Glass 0.10.39, which names it as the least it works with since the pane the face draws through changed.
