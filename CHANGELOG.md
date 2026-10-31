@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.42] - 2026-10-31
+
+- Built on Glass 0.10.42, in step with it: the player's state the face draws is made whole from the player's own sources where it lacked a field; nothing of the face changes, and this glass-evo needs Glass 0.10.42.
+
 ## [0.10.41] - 2026-10-31
 
 - Built on Glass 0.10.41, in step with it: a fitted theme fills the screen inset by the margins on the face as on every other surface; nothing of the face changes, and this glass-evo needs Glass 0.10.41, which names it as the least it works with since the display's placement changed.
