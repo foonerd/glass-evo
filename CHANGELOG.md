@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.45] - 2026-10-31
+
+- Built on Glass 0.10.45, in step with it: the Manager's look panel likeness places the theme's frame as the player's display does, with its Scale, Place and Margin, and Find a problem says the placement in force.
+
 ## [0.10.44] - 2026-10-31
 
 - Built on Glass 0.10.44, in step with it: a track browsed from a media server keeps its names on the face while it plays; nothing of the face changes, and this glass-evo needs Glass 0.10.44.
