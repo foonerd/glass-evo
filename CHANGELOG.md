@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.43] - 2026-10-31
+
+- Built on Glass 0.10.43, in step with it: a remote's screen and meter reports are taken quietly by the player; nothing of the face changes, and this glass-evo needs Glass 0.10.43.
+
 ## [0.10.42] - 2026-10-31
 
 - Built on Glass 0.10.42, in step with it: the player's state the face draws is made whole from the player's own sources where it lacked a field; nothing of the face changes, and this glass-evo needs Glass 0.10.42.
