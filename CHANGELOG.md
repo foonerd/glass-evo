@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.46] - 2026-10-31
+
+- Built on Glass 0.10.46, in step with it: a track streamed from JRiver keeps its names and its type on the face while it plays.
+
 ## [0.10.45] - 2026-10-31
 
 - Built on Glass 0.10.45, in step with it: the Manager's look panel likeness places the theme's frame as the player's display does, with its Scale, Place and Margin, and Find a problem says the placement in force.
