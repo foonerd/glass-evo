@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.48] - 2026-11-01
+
+- Built on Glass 0.10.48, in step with it: the release workflows name the audio ring's reader; nothing of the face changed.
+
 ## [0.10.47] - 2026-11-01
 
 - Built on Glass 0.10.47, in step with it: the Manager's Audio rings row reads the tap's new audio ring beside the measurements.
