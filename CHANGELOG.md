@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.54] - 2026-11-01
+
+- Built on Glass 0.10.54, in step with it: evotap's notes speak of the evo framework, nothing of the face moved.
+
 ## [0.10.53] - 2026-11-01
 
 - Built on Glass 0.10.53, in step with it: evotap carries a version of its own, nothing of the face moved.
