@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.47] - 2026-11-01
+
+- Built on Glass 0.10.47, in step with it: the Manager's Audio rings row reads the tap's new audio ring beside the measurements.
+
 ## [0.10.46] - 2026-10-31
 
 - Built on Glass 0.10.46, in step with it: a track streamed from JRiver keeps its names and its type on the face while it plays.
