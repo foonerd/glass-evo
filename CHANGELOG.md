@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.10.50] - 2026-11-01
+
+- Built on Glass 0.10.50, in step with it: the face reads the tap's rings under their evo names and the old ones alike; nothing of the face itself changed.
+
 ## [0.10.49] - 2026-11-01
 
 - Built on Glass 0.10.49, in step with it: the face's meters no longer go dark for Soloist or AirPlay after a shell session as volumio closes: the tap's rings come back by themselves.
