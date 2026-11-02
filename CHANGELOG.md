@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.8] - 2026-11-02
+
+- Built on Glass 0.11.8, in step with it: the display is not started without a theme to show, so the kiosk keeps the screen, and the Manager says which theme is missing.
+
 ## [0.11.7] - 2026-11-02
 
 - Built on Glass 0.11.7, in step with it: a theme's transparent areas show what is behind it, the album art blurred where that is on, else the dark colour, instead of the colour an editor left under them.
