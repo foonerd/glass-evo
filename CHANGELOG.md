@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.4] - 2026-11-02
+
+- Built on Glass 0.11.4, in step with it: a remote can be left from its own screen; nothing of the face moved.
+
 ## [0.11.3] - 2026-11-02
 
 - Built on Glass 0.11.3, in step with it: a remote starts again after an upgrade however it was started; nothing of the face moved.
