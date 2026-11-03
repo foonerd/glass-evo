@@ -1664,7 +1664,7 @@ impl ForecastLine {
                 .take(7)
                 .map(|d| {
                     (
-                        when::day_name(d.weekday, true).to_string(),
+                        when::day_name(d.weekday, true),
                         vec![
                             (degrees(d.low), Some(d.low)),
                             (" / ".to_string(), None),
@@ -2975,6 +2975,8 @@ impl Overlay for Face {
     }
 
     fn draw(&mut self, frame: &mut Frame, view: &View) -> bool {
+        // The names of the days and the months follow the player's language.
+        when::use_language(&view.input.language);
         let meta = &view.input.metadata;
         let (alpha, clock, picture, dark) = self.advance(view);
         if view.screen_off {

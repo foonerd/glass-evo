@@ -13,39 +13,770 @@
 
 use overlay::Wall;
 
-const DAYS: [&str; 7] = [
-    "Sunday",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
+/// The names of the days and the months, per language the player may be
+/// set to (Volumio's own list), English where a language is not here or
+/// none is said. Sunday first; January first.
+struct Names {
+    code: &'static str,
+    days: [&'static str; 7],
+    months: [&'static str; 12],
+}
+
+const ENGLISH: Names = Names {
+    code: "en",
+    days: [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+    ],
+    months: [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ],
+};
+
+const NAMES: &[Names] = &[
+    ENGLISH,
+    Names {
+        code: "de",
+        days: [
+            "Sonntag",
+            "Montag",
+            "Dienstag",
+            "Mittwoch",
+            "Donnerstag",
+            "Freitag",
+            "Samstag",
+        ],
+        months: [
+            "Januar",
+            "Februar",
+            "März",
+            "April",
+            "Mai",
+            "Juni",
+            "Juli",
+            "August",
+            "September",
+            "Oktober",
+            "November",
+            "Dezember",
+        ],
+    },
+    Names {
+        code: "fr",
+        days: [
+            "dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi",
+        ],
+        months: [
+            "janvier",
+            "février",
+            "mars",
+            "avril",
+            "mai",
+            "juin",
+            "juillet",
+            "août",
+            "septembre",
+            "octobre",
+            "novembre",
+            "décembre",
+        ],
+    },
+    Names {
+        code: "it",
+        days: [
+            "domenica",
+            "lunedì",
+            "martedì",
+            "mercoledì",
+            "giovedì",
+            "venerdì",
+            "sabato",
+        ],
+        months: [
+            "gennaio",
+            "febbraio",
+            "marzo",
+            "aprile",
+            "maggio",
+            "giugno",
+            "luglio",
+            "agosto",
+            "settembre",
+            "ottobre",
+            "novembre",
+            "dicembre",
+        ],
+    },
+    Names {
+        code: "es",
+        days: [
+            "domingo",
+            "lunes",
+            "martes",
+            "miércoles",
+            "jueves",
+            "viernes",
+            "sábado",
+        ],
+        months: [
+            "enero",
+            "febrero",
+            "marzo",
+            "abril",
+            "mayo",
+            "junio",
+            "julio",
+            "agosto",
+            "septiembre",
+            "octubre",
+            "noviembre",
+            "diciembre",
+        ],
+    },
+    Names {
+        code: "ca",
+        days: [
+            "diumenge",
+            "dilluns",
+            "dimarts",
+            "dimecres",
+            "dijous",
+            "divendres",
+            "dissabte",
+        ],
+        months: [
+            "gener", "febrer", "març", "abril", "maig", "juny", "juliol", "agost", "setembre",
+            "octubre", "novembre", "desembre",
+        ],
+    },
+    Names {
+        code: "pt",
+        days: [
+            "domingo",
+            "segunda-feira",
+            "terça-feira",
+            "quarta-feira",
+            "quinta-feira",
+            "sexta-feira",
+            "sábado",
+        ],
+        months: [
+            "janeiro",
+            "fevereiro",
+            "março",
+            "abril",
+            "maio",
+            "junho",
+            "julho",
+            "agosto",
+            "setembro",
+            "outubro",
+            "novembro",
+            "dezembro",
+        ],
+    },
+    Names {
+        code: "nl",
+        days: [
+            "zondag",
+            "maandag",
+            "dinsdag",
+            "woensdag",
+            "donderdag",
+            "vrijdag",
+            "zaterdag",
+        ],
+        months: [
+            "januari",
+            "februari",
+            "maart",
+            "april",
+            "mei",
+            "juni",
+            "juli",
+            "augustus",
+            "september",
+            "oktober",
+            "november",
+            "december",
+        ],
+    },
+    Names {
+        code: "da",
+        days: [
+            "søndag", "mandag", "tirsdag", "onsdag", "torsdag", "fredag", "lørdag",
+        ],
+        months: [
+            "januar",
+            "februar",
+            "marts",
+            "april",
+            "maj",
+            "juni",
+            "juli",
+            "august",
+            "september",
+            "oktober",
+            "november",
+            "december",
+        ],
+    },
+    Names {
+        code: "no",
+        days: [
+            "søndag", "mandag", "tirsdag", "onsdag", "torsdag", "fredag", "lørdag",
+        ],
+        months: [
+            "januar",
+            "februar",
+            "mars",
+            "april",
+            "mai",
+            "juni",
+            "juli",
+            "august",
+            "september",
+            "oktober",
+            "november",
+            "desember",
+        ],
+    },
+    Names {
+        code: "sv",
+        days: [
+            "söndag", "måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag",
+        ],
+        months: [
+            "januari",
+            "februari",
+            "mars",
+            "april",
+            "maj",
+            "juni",
+            "juli",
+            "augusti",
+            "september",
+            "oktober",
+            "november",
+            "december",
+        ],
+    },
+    Names {
+        code: "fi",
+        days: [
+            "sunnuntai",
+            "maanantai",
+            "tiistai",
+            "keskiviikko",
+            "torstai",
+            "perjantai",
+            "lauantai",
+        ],
+        months: [
+            "tammikuu",
+            "helmikuu",
+            "maaliskuu",
+            "huhtikuu",
+            "toukokuu",
+            "kesäkuu",
+            "heinäkuu",
+            "elokuu",
+            "syyskuu",
+            "lokakuu",
+            "marraskuu",
+            "joulukuu",
+        ],
+    },
+    Names {
+        code: "pl",
+        days: [
+            "niedziela",
+            "poniedziałek",
+            "wtorek",
+            "środa",
+            "czwartek",
+            "piątek",
+            "sobota",
+        ],
+        months: [
+            "stycznia",
+            "lutego",
+            "marca",
+            "kwietnia",
+            "maja",
+            "czerwca",
+            "lipca",
+            "sierpnia",
+            "września",
+            "października",
+            "listopada",
+            "grudnia",
+        ],
+    },
+    Names {
+        code: "cs",
+        days: [
+            "neděle",
+            "pondělí",
+            "úterý",
+            "středa",
+            "čtvrtek",
+            "pátek",
+            "sobota",
+        ],
+        months: [
+            "ledna",
+            "února",
+            "března",
+            "dubna",
+            "května",
+            "června",
+            "července",
+            "srpna",
+            "září",
+            "října",
+            "listopadu",
+            "prosince",
+        ],
+    },
+    Names {
+        code: "sk",
+        days: [
+            "nedeľa", "pondelok", "utorok", "streda", "štvrtok", "piatok", "sobota",
+        ],
+        months: [
+            "januára",
+            "februára",
+            "marca",
+            "apríla",
+            "mája",
+            "júna",
+            "júla",
+            "augusta",
+            "septembra",
+            "októbra",
+            "novembra",
+            "decembra",
+        ],
+    },
+    Names {
+        code: "hu",
+        days: [
+            "vasárnap",
+            "hétfő",
+            "kedd",
+            "szerda",
+            "csütörtök",
+            "péntek",
+            "szombat",
+        ],
+        months: [
+            "január",
+            "február",
+            "március",
+            "április",
+            "május",
+            "június",
+            "július",
+            "augusztus",
+            "szeptember",
+            "október",
+            "november",
+            "december",
+        ],
+    },
+    Names {
+        code: "hr",
+        days: [
+            "nedjelja",
+            "ponedjeljak",
+            "utorak",
+            "srijeda",
+            "četvrtak",
+            "petak",
+            "subota",
+        ],
+        months: [
+            "siječnja",
+            "veljače",
+            "ožujka",
+            "travnja",
+            "svibnja",
+            "lipnja",
+            "srpnja",
+            "kolovoza",
+            "rujna",
+            "listopada",
+            "studenoga",
+            "prosinca",
+        ],
+    },
+    Names {
+        code: "sr",
+        days: [
+            "nedelja",
+            "ponedeljak",
+            "utorak",
+            "sreda",
+            "četvrtak",
+            "petak",
+            "subota",
+        ],
+        months: [
+            "januar",
+            "februar",
+            "mart",
+            "april",
+            "maj",
+            "jun",
+            "jul",
+            "avgust",
+            "septembar",
+            "oktobar",
+            "novembar",
+            "decembar",
+        ],
+    },
+    Names {
+        code: "si",
+        days: [
+            "nedelja",
+            "ponedeljek",
+            "torek",
+            "sreda",
+            "četrtek",
+            "petek",
+            "sobota",
+        ],
+        months: [
+            "januar",
+            "februar",
+            "marec",
+            "april",
+            "maj",
+            "junij",
+            "julij",
+            "avgust",
+            "september",
+            "oktober",
+            "november",
+            "december",
+        ],
+    },
+    Names {
+        code: "lt",
+        days: [
+            "sekmadienis",
+            "pirmadienis",
+            "antradienis",
+            "trečiadienis",
+            "ketvirtadienis",
+            "penktadienis",
+            "šeštadienis",
+        ],
+        months: [
+            "sausio",
+            "vasario",
+            "kovo",
+            "balandžio",
+            "gegužės",
+            "birželio",
+            "liepos",
+            "rugpjūčio",
+            "rugsėjo",
+            "spalio",
+            "lapkričio",
+            "gruodžio",
+        ],
+    },
+    Names {
+        code: "ru",
+        days: [
+            "воскресенье",
+            "понедельник",
+            "вторник",
+            "среда",
+            "четверг",
+            "пятница",
+            "суббота",
+        ],
+        months: [
+            "января",
+            "февраля",
+            "марта",
+            "апреля",
+            "мая",
+            "июня",
+            "июля",
+            "августа",
+            "сентября",
+            "октября",
+            "ноября",
+            "декабря",
+        ],
+    },
+    Names {
+        code: "ua",
+        days: [
+            "неділя",
+            "понеділок",
+            "вівторок",
+            "середа",
+            "четвер",
+            "п’ятниця",
+            "субота",
+        ],
+        months: [
+            "січня",
+            "лютого",
+            "березня",
+            "квітня",
+            "травня",
+            "червня",
+            "липня",
+            "серпня",
+            "вересня",
+            "жовтня",
+            "листопада",
+            "грудня",
+        ],
+    },
+    Names {
+        code: "gr",
+        days: [
+            "Κυριακή",
+            "Δευτέρα",
+            "Τρίτη",
+            "Τετάρτη",
+            "Πέμπτη",
+            "Παρασκευή",
+            "Σάββατο",
+        ],
+        months: [
+            "Ιανουαρίου",
+            "Φεβρουαρίου",
+            "Μαρτίου",
+            "Απριλίου",
+            "Μαΐου",
+            "Ιουνίου",
+            "Ιουλίου",
+            "Αυγούστου",
+            "Σεπτεμβρίου",
+            "Οκτωβρίου",
+            "Νοεμβρίου",
+            "Δεκεμβρίου",
+        ],
+    },
+    Names {
+        code: "tr",
+        days: [
+            "Pazar",
+            "Pazartesi",
+            "Salı",
+            "Çarşamba",
+            "Perşembe",
+            "Cuma",
+            "Cumartesi",
+        ],
+        months: [
+            "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül",
+            "Ekim", "Kasım", "Aralık",
+        ],
+    },
+    Names {
+        code: "ja",
+        days: [
+            "日曜日",
+            "月曜日",
+            "火曜日",
+            "水曜日",
+            "木曜日",
+            "金曜日",
+            "土曜日",
+        ],
+        months: [
+            "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月",
+        ],
+    },
+    Names {
+        code: "zh",
+        days: [
+            "星期日",
+            "星期一",
+            "星期二",
+            "星期三",
+            "星期四",
+            "星期五",
+            "星期六",
+        ],
+        months: [
+            "一月",
+            "二月",
+            "三月",
+            "四月",
+            "五月",
+            "六月",
+            "七月",
+            "八月",
+            "九月",
+            "十月",
+            "十一月",
+            "十二月",
+        ],
+    },
+    Names {
+        code: "zh_TW",
+        days: [
+            "星期日",
+            "星期一",
+            "星期二",
+            "星期三",
+            "星期四",
+            "星期五",
+            "星期六",
+        ],
+        months: [
+            "一月",
+            "二月",
+            "三月",
+            "四月",
+            "五月",
+            "六月",
+            "七月",
+            "八月",
+            "九月",
+            "十月",
+            "十一月",
+            "十二月",
+        ],
+    },
+    Names {
+        code: "ko",
+        days: [
+            "일요일",
+            "월요일",
+            "화요일",
+            "수요일",
+            "목요일",
+            "금요일",
+            "토요일",
+        ],
+        months: [
+            "1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월",
+        ],
+    },
+    Names {
+        code: "th",
+        days: [
+            "วันอาทิตย์",
+            "วันจันทร์",
+            "วันอังคาร",
+            "วันพุธ",
+            "วันพฤหัสบดี",
+            "วันศุกร์",
+            "วันเสาร์",
+        ],
+        months: [
+            "มกราคม",
+            "กุมภาพันธ์",
+            "มีนาคม",
+            "เมษายน",
+            "พฤษภาคม",
+            "มิถุนายน",
+            "กรกฎาคม",
+            "สิงหาคม",
+            "กันยายน",
+            "ตุลาคม",
+            "พฤศจิกายน",
+            "ธันวาคม",
+        ],
+    },
+    Names {
+        code: "vi",
+        days: [
+            "Chủ Nhật",
+            "Thứ Hai",
+            "Thứ Ba",
+            "Thứ Tư",
+            "Thứ Năm",
+            "Thứ Sáu",
+            "Thứ Bảy",
+        ],
+        months: [
+            "tháng 1",
+            "tháng 2",
+            "tháng 3",
+            "tháng 4",
+            "tháng 5",
+            "tháng 6",
+            "tháng 7",
+            "tháng 8",
+            "tháng 9",
+            "tháng 10",
+            "tháng 11",
+            "tháng 12",
+        ],
+    },
 ];
-/// A weekday's name, 0 Sunday to 6 Saturday, whole or its first three letters.
-pub fn day_name(weekday: u8, short: bool) -> &'static str {
-    let name = DAYS[(weekday as usize) % 7];
-    if short {
-        &name[..3]
+
+/// The language the names are given in, by its index in [`NAMES`]; English
+/// until the player says.
+static LANGUAGE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Use the names of this language code from now on (`en`, `de`, `zh_TW`,
+/// ...); a code not here, or none, is English. Cheap to call every frame.
+pub fn use_language(code: &str) {
+    let code = code.trim();
+    let index = NAMES
+        .iter()
+        .position(|n| n.code.eq_ignore_ascii_case(code))
+        .unwrap_or(0);
+    LANGUAGE.store(index, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn names() -> &'static Names {
+    &NAMES[LANGUAGE
+        .load(std::sync::atomic::Ordering::Relaxed)
+        .min(NAMES.len() - 1)]
+}
+
+/// The first three letters of a name, whole characters; a name of three
+/// or fewer stays whole (the CJK names are one word each).
+fn short(name: &str) -> String {
+    name.chars().take(3).collect()
+}
+
+/// A weekday's name, 0 Sunday to 6 Saturday, whole or its first three
+/// letters, in the player's language.
+pub fn day_name(weekday: u8, short_form: bool) -> String {
+    let name = names().days[(weekday as usize) % 7];
+    if short_form {
+        short(name)
     } else {
-        name
+        name.to_string()
     }
 }
 
-const MONTHS: [&str; 12] = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-];
+/// A month's name, 1 to 12, in the player's language.
+pub fn month_name(month: u8) -> &'static str {
+    names().months[((month.clamp(1, 12)) - 1) as usize]
+}
 
 /// The flags and the width between a `%` and its conversion.
 #[derive(Clone, Copy, Default)]
@@ -138,8 +869,8 @@ fn convert(out: &mut String, letter: char, spec: Spec, wall: &Wall) -> bool {
         0 => 12,
         h => h,
     };
-    let day = DAYS[(wall.weekday % 7) as usize];
-    let month = MONTHS[((wall.month.clamp(1, 12)) - 1) as usize];
+    let day = names().days[(wall.weekday % 7) as usize];
+    let month = month_name(wall.month as u8);
     // A conversion made of others: set by its own pattern, then as words.
     let made = |out: &mut String, pattern: &str| {
         let mut inner = String::new();
@@ -147,9 +878,9 @@ fn convert(out: &mut String, letter: char, spec: Spec, wall: &Wall) -> bool {
         words(out, &inner, false, spec);
     };
     match letter {
-        'a' => words(out, &day[..3], spec.swap, spec),
+        'a' => words(out, &short(day), spec.swap, spec),
         'A' => words(out, day, spec.swap, spec),
-        'b' | 'h' => words(out, &month[..3], spec.swap, spec),
+        'b' | 'h' => words(out, &short(month), spec.swap, spec),
         'B' => words(out, month, spec.swap, spec),
         'c' => made(out, "%a %b %e %H:%M:%S %Y"),
         'C' => number(out, i64::from(wall.year.div_euclid(100)), 2, '0', spec),
