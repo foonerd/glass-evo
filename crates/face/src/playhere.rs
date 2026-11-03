@@ -11,7 +11,8 @@
 //! page's asks never go to the player: they are `play-here` commands the
 //! host keeps.
 
-use crate::browse::{rounded, Glyphs};
+use crate::browse::rounded;
+use crate::icon;
 use crate::lists::{Measure, Panel};
 use overlay::face::{ui, Fonts, Frame, PointerKind, TextStyle};
 
@@ -56,7 +57,8 @@ pub struct PlayHereView {
     pressed: Option<Press>,
     closing: bool,
     touched_at: u64,
-    glyphs: Glyphs,
+    /// The headset at the card's size in the card's colour, rastered once a size.
+    glyph: Option<(u32, Frame)>,
 }
 
 impl PlayHereView {
@@ -388,14 +390,17 @@ impl PlayHereView {
             )
         };
         rounded(frame, cx, cy, cw, ch, m.pad * 2 / 3, fill, clip);
+        // The headset, a shaded picture in its own greys whatever the word's
+        // colour, drawn once a size.
         let glyph_size = (m.title * 5).min(cw * 2 / 3);
-        let g = self
-            .glyphs
-            .get("headphones", glyph_size, word_colour)
-            .clone();
-        let gx = cx + (cw as i32 - g.width as i32) / 2;
-        let gy = cy + ch as i32 * 2 / 5 - g.height as i32 / 2;
-        ui::blit(frame, &g, gx, gy, alpha);
+        if self.glyph.as_ref().is_none_or(|(s, _)| *s != glyph_size) {
+            self.glyph = Some((glyph_size, icon::headset(glyph_size)));
+        }
+        if let Some((_, g)) = &self.glyph {
+            let gx = cx + (cw as i32 - g.width as i32) / 2;
+            let gy = cy + ch as i32 * 2 / 5 - g.height as i32 / 2;
+            ui::blit(frame, g, gx, gy, alpha);
+        }
         if let Some(line) = ui::line(fonts, TextStyle::Bold, m.title * 9 / 5, word_colour, word) {
             ui::blit(
                 frame,
@@ -626,5 +631,54 @@ mod tests {
         }
         let mut h = std::collections::hash_map::DefaultHasher::new();
         view.stamp(&mut h);
+    }
+
+    #[test]
+    fn the_page_pictured_for_the_journal_when_asked() {
+        let Ok(dir) = std::env::var("FACE_PICTURE_DIR") else {
+            return;
+        };
+        let (panel, m) = panel(ListShape::Sheet);
+        let mut view = PlayHereView::default();
+        view.open(0);
+        view.set(true, 69);
+        let fonts = Fonts::default();
+        let mut frame = blank();
+        for px in frame.rgba.chunks_mut(4) {
+            px.copy_from_slice(&[22, 22, 26, 255]);
+        }
+        view.draw(
+            &mut frame,
+            &fonts,
+            &panel,
+            &m,
+            [235, 235, 240],
+            [255, 138, 0],
+            None,
+            255,
+        );
+        let mut out = format!("P6 {} {} 255\n", frame.width, frame.height).into_bytes();
+        for px in frame.rgba.chunks(4) {
+            let a = px[3] as u32;
+            out.extend(
+                [22, 22, 26]
+                    .iter()
+                    .zip(px)
+                    .map(|(b, c)| ((*c as u32 * a + *b as u32 * (255 - a)) / 255) as u8),
+            );
+        }
+        std::fs::write(format!("{dir}/play-here-page.ppm"), out).unwrap();
+        let glyph = icon::headset(220);
+        let mut out = format!("P6 {} {} 255\n", glyph.width, glyph.height).into_bytes();
+        for px in glyph.rgba.chunks(4) {
+            let a = px[3] as u32;
+            out.extend(
+                [240, 240, 244]
+                    .iter()
+                    .zip(px)
+                    .map(|(b, c)| ((*c as u32 * a + *b as u32 * (255 - a)) / 255) as u8),
+            );
+        }
+        std::fs::write(format!("{dir}/headset.ppm"), out).unwrap();
     }
 }

@@ -131,6 +131,101 @@ fn arc(p: Point, c: Point, radius: f32, spread: f32, half: f32) -> f32 {
     }
 }
 
+/// The distance to a box with rounded corners, centred at `c`, `half` to
+/// its sides, its corners of radius `r`.
+fn rounded_box(p: Point, c: Point, half: (f32, f32), r: f32) -> f32 {
+    let q = (
+        (p.0 - c.0).abs() - (half.0 - r),
+        (p.1 - c.1).abs() - (half.1 - r),
+    );
+    q.0.max(0.0).hypot(q.1.max(0.0)) + q.0.max(q.1).min(0.0) - r
+}
+
+/// A picture `size` pixels square from coloured parts, each a colour with
+/// its alpha and the distance to its shape, laid in order: the headset is
+/// drawn this way in its own greys, the skies through their palette.
+fn raster_coloured(size: u32, parts: &[([u8; 3], u8, &dyn Fn(Point) -> f32)]) -> Frame {
+    let size = size.max(1);
+    let step = SPAN / size as f32;
+    let mut rgba = vec![0u8; (size * size * 4) as usize];
+    for (colour, alpha, distance) in parts {
+        for y in 0..size {
+            for x in 0..size {
+                let p = (2.0 + (x as f32 + 0.5) * step, 2.0 + (y as f32 + 0.5) * step);
+                let cover = (0.5 - distance(p) / step).clamp(0.0, 1.0) * *alpha as f32 / 255.0;
+                if cover <= 0.0 {
+                    continue;
+                }
+                let i = ((y * size + x) * 4) as usize;
+                let under = rgba[i + 3] as f32 / 255.0;
+                let out = cover + under * (1.0 - cover);
+                for c in 0..3 {
+                    let mixed = (colour[c] as f32 * cover
+                        + rgba[i + c] as f32 * under * (1.0 - cover))
+                        / out.max(1e-6);
+                    rgba[i + c] = mixed.round().clamp(0.0, 255.0) as u8;
+                }
+                rgba[i + 3] = (out * 255.0).round() as u8;
+            }
+        }
+    }
+    Frame {
+        blend: Default::default(),
+        width: size,
+        height: size,
+        rgba,
+    }
+}
+
+/// A headset as a picture, `size` pixels square: a slender band arched
+/// over the top with a highlight along it, hinges, and two tall rounded
+/// cups in dark grey with a lighter pad and a darker centre in each, as a
+/// shaded picture of one reads at a glance on the Play here card. Drawn
+/// by the face in its own greys, in any size.
+pub fn headset(size: u32) -> Frame {
+    const DARK: [u8; 3] = [58, 58, 62];
+    const BODY: [u8; 3] = [92, 92, 97];
+    const LIGHT: [u8; 3] = [128, 128, 134];
+    const PAD: [u8; 3] = [112, 112, 118];
+    const DEEP: [u8; 3] = [52, 52, 56];
+    let c = (12.0, 13.4);
+    let band = |p: Point, radius: f32, half: f32| {
+        (((p.0 - c.0).hypot(p.1 - c.1) - radius).abs() - half).max(p.1 - c.1)
+    };
+    let band_body = |p: Point| band(p, 8.3, 1.25);
+    let band_edge = |p: Point| band(p, 8.3, 1.55);
+    // The highlight runs along the band's outer top only.
+    let band_light = |p: Point| band(p, 8.85, 0.4).max(p.1 - 7.6);
+    let hinge = |p: Point| {
+        rounded_box(p, (4.3, 12.9), (0.95, 1.5), 0.5).min(rounded_box(
+            p,
+            (19.7, 12.9),
+            (0.95, 1.5),
+            0.5,
+        ))
+    };
+    let cups = |p: Point, half: (f32, f32), r: f32| {
+        rounded_box(p, (4.6, 16.4), half, r).min(rounded_box(p, (19.4, 16.4), half, r))
+    };
+    let cup_edge = |p: Point| cups(p, (2.85, 4.05), 2.1);
+    let cup_body = |p: Point| cups(p, (2.55, 3.75), 1.9);
+    let cup_pad = |p: Point| cups(p, (1.75, 2.9), 1.5);
+    let cup_deep = |p: Point| cups(p, (0.95, 2.0), 0.9);
+    raster_coloured(
+        size,
+        &[
+            (DEEP, 255, &band_edge),
+            (BODY, 255, &band_body),
+            (LIGHT, 200, &band_light),
+            (DEEP, 255, &hinge),
+            (DEEP, 255, &cup_edge),
+            (DARK, 255, &cup_body),
+            (PAD, 255, &cup_pad),
+            (DEEP, 255, &cup_deep),
+        ],
+    )
+}
+
 /// The speaker's body: the box and the cone, facing right.
 fn speaker(p: Point) -> f32 {
     polygon(
@@ -714,7 +809,8 @@ fn raster_grid(
 }
 
 /// One icon rastered at a size in an ink: Lucide's from their shapes,
-/// flattened once; the face's own from their distance.
+/// flattened once; the face's own from their distance. A page that wants
+/// an icon larger than the set's rasters it here.
 fn raster(icon: Icon, size: u32, ink: [u8; 3]) -> Frame {
     match lucide_shapes(icon) {
         Some(shapes) => lucide(shapes, size, ink),
@@ -1048,37 +1144,14 @@ fn parts(sky: Sky, day: bool, hot: bool, heavy: bool, t: f32, flash: bool) -> Ve
 /// Parts laid down in order, each in its paint, at a size: a part's cover
 /// over what lies under it.
 fn raster_parts(size: u32, palette: &Palette, parts: &[Part]) -> Frame {
-    let size = size.max(1);
-    let step = SPAN / size as f32;
-    let mut rgba = vec![0u8; (size * size * 4) as usize];
-    for (paint, distance) in parts {
-        let (colour, alpha) = palette.of(*paint);
-        for y in 0..size {
-            for x in 0..size {
-                let p = (2.0 + (x as f32 + 0.5) * step, 2.0 + (y as f32 + 0.5) * step);
-                let cover = (0.5 - distance(p) / step).clamp(0.0, 1.0) * alpha as f32 / 255.0;
-                if cover <= 0.0 {
-                    continue;
-                }
-                let i = ((y * size + x) * 4) as usize;
-                let under = rgba[i + 3] as f32 / 255.0;
-                let out = cover + under * (1.0 - cover);
-                for c in 0..3 {
-                    let mixed = (colour[c] as f32 * cover
-                        + rgba[i + c] as f32 * under * (1.0 - cover))
-                        / out.max(1e-6);
-                    rgba[i + c] = mixed.round().clamp(0.0, 255.0) as u8;
-                }
-                rgba[i + 3] = (out * 255.0).round() as u8;
-            }
-        }
-    }
-    Frame {
-        blend: Default::default(),
-        width: size,
-        height: size,
-        rgba,
-    }
+    let coloured: Vec<([u8; 3], u8, &dyn Fn(Point) -> f32)> = parts
+        .iter()
+        .map(|(paint, distance)| {
+            let (colour, alpha) = palette.of(*paint);
+            (colour, alpha, &**distance as &dyn Fn(Point) -> f32)
+        })
+        .collect();
+    raster_coloured(size, &coloured)
 }
 
 /// A sky's picture at a frame of its cycle (and, for thunder, flashing or
