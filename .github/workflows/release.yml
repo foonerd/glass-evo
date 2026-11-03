@@ -180,7 +180,7 @@ jobs:
       # downloads anything.
       - name: The manifest as an asset
         run: |
-          unzip -p dist/glass-evo-*.zip manifest.json > dist/manifest.json
+          unzip -p "dist/glass-evo-${GITHUB_REF_NAME#v}.zip" manifest.json > dist/manifest.json
           grep -q '"version"' dist/manifest.json
       # Every asset's digest in SHA256SUMS, signed with the project's
       # release key (secret RELEASE_SIGNING_KEY, the Ed25519 private key as
