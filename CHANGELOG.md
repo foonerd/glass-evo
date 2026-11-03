@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.12] - 2026-11-03
+
+- Built on Glass 0.11.12, in step with it: the picture of the screen comes upright on a turned screen.
+
 ## [0.11.11] - 2026-11-03
 
 - Built on Glass 0.11.11, in step with it: the lead set for the meters reaches the tap.
