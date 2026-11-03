@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.15] - 2026-11-03
+
+- Built on Glass 0.11.15, in step with it: the Play here card's headset drawn as a shaded picture in its own greys, in place of the thin outline
+
 ## [0.11.14] - 2026-11-03
 
 - Built on Glass 0.11.14, in step with it: the Play here page laid out for a hand at arm's length: the volume slider thick across the left with a large knob and its number, one large Stop card at the right as the Power page's cards are
