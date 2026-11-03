@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.16] - 2026-11-03
+
+- Built on Glass 0.11.16, in step with it: the changer's sled on either side of its row, playback paused before every restart of the backend
+
 ## [0.11.15] - 2026-11-03
 
 - Built on Glass 0.11.15, in step with it: the look panel saves a look under a name; playback is paused before an upgrade restarts the backend.
