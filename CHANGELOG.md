@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.10] - 2026-11-03
+
+- Built on Glass 0.11.10, in step with it: the maintenance release: the face names the days and the months in the player's language, the release's manifest published as an asset, meters ahead of the sound, a picture of the screen, a look saved under a name, the changer's sled on either side of its row
+
 ## [0.11.8] - 2026-11-02
 
 - Built on Glass 0.11.8, in step with it: the display is not started without a theme to show, so the kiosk keeps the screen, and the Manager says which theme is missing.
