@@ -171,10 +171,17 @@ jobs:
           TRUSTED_SIGNING_PROFILE: ${{ vars.TRUSTED_SIGNING_PROFILE }}
       - name: The Windows bundle as one archive
         run: |
-          top=$(ls dist/windows | head -n1)
+          top=$(find dist/windows -mindepth 1 -maxdepth 1 -printf '%f\n' | head -n1)
           [ "$top" = "glass-evo-${GITHUB_REF_NAME#v}-windows-x64" ] || { echo "the bundle laid out is $top" >&2; exit 1; }
           (cd dist/windows && zip -qr "../$top.zip" "$top")
           ls -la "dist/$top.zip"
+      # The manifest as an asset of its own, beside the zip it came from, so a
+      # Manager reads what the release needs (the least Glass) before it
+      # downloads anything.
+      - name: The manifest as an asset
+        run: |
+          unzip -p dist/glass-evo-*.zip manifest.json > dist/manifest.json
+          grep -q '"version"' dist/manifest.json
       # Every asset's digest in SHA256SUMS, signed with the project's
       # release key (secret RELEASE_SIGNING_KEY, the Ed25519 private key as
       # PEM, the same key as Glass's) and checked against the public key the
@@ -209,5 +216,6 @@ jobs:
             dist/glass-evo-*.zip
             dist/glass-evo-*-*.tar.gz
             dist/glass-evo-*-android.apk
+            dist/manifest.json
             dist/SHA256SUMS
             dist/SHA256SUMS.sig
