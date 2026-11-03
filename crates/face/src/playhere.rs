@@ -1,13 +1,21 @@
 //! Play here from the More sheet: the player's sound on the device that
 //! draws the face, with the device's own volume on a page over the theme.
-//! The face draws the page and says what the finger asked; the host plays
-//! the sound (a page in a browser today) and tells the face back what it
-//! does, so the tile and the slider wear the truth. The page's asks never
-//! go to the player: they are `play-here` commands the host keeps.
+//! A tap on the sheet's tile starts the sound and opens the page: a header
+//! with the way out and a Stop button, and the slider, nothing else, laid
+//! in the panel's own height whatever shape the look names. The page
+//! leaves by itself eight seconds after the last touch; the sound plays
+//! on, and the tile on the sheet wears it. The face draws the page and
+//! says what the finger asked; the host plays (a page in a browser today)
+//! and tells the face back what it does. The page's asks never go to the
+//! player: they are `play-here` commands the host keeps.
 
-use crate::browse::{rounded, Glyphs};
+use crate::browse::rounded;
 use crate::lists::{Measure, Panel};
 use overlay::face::{ui, Fonts, Frame, PointerKind, TextStyle};
+
+/// Milliseconds the page stays after the last touch; then it leaves by
+/// itself, the sound untouched.
+pub const LINGER_MS: u64 = 8000;
 
 /// What a touch on the page asks of the host.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -29,7 +37,7 @@ pub enum Action {
 enum Press {
     Leave,
     Slider,
-    Tile,
+    Button,
 }
 
 #[derive(Default)]
@@ -43,15 +51,16 @@ pub struct PlayHereView {
     dragging: bool,
     pressed: Option<Press>,
     closing: bool,
-    glyphs: Glyphs,
+    touched_at: u64,
 }
 
 impl PlayHereView {
-    pub fn open(&mut self) {
+    pub fn open(&mut self, now: u64) {
         self.open = true;
         self.pressed = None;
         self.dragging = false;
         self.closing = false;
+        self.touched_at = now;
     }
 
     pub fn close(&mut self) {
@@ -69,24 +78,40 @@ impl PlayHereView {
         }
     }
 
-    /// The slider's track: across the page under its header and line.
-    pub(crate) fn track(&self, panel: &Panel, m: &Measure) -> (i32, i32, u32, u32) {
-        let pad = m.pad;
-        let top = panel.y + m.header as i32 + pad as i32 + m.small as i32 + pad as i32;
-        let label = m.title * 2;
-        let x = panel.x + pad as i32 * 2;
-        let w = panel.w.saturating_sub(pad * 4 + label).max(m.cell);
-        (x, top, w, m.row)
+    /// Every frame: the page leaves by itself once its linger has passed
+    /// without a touch, never under a finger. True when it went.
+    pub fn tick(&mut self, now: u64) -> bool {
+        if !self.open || self.dragging || self.pressed.is_some() {
+            return false;
+        }
+        if now.saturating_sub(self.touched_at) >= LINGER_MS {
+            self.close();
+            return true;
+        }
+        false
     }
 
-    /// The one tile under the slider: Play here, or Stop while playing.
-    pub(crate) fn tile(&self, panel: &Panel, m: &Measure) -> (i32, i32, u32, u32) {
-        let (_, ty, _, th) = self.track(panel, m);
-        let pad = m.pad;
-        let w = (panel.w.saturating_sub(pad * 2)).min(m.cell * 3);
-        let h = (w * 2 / 5).max(m.row * 2);
-        let x = panel.x + (panel.w as i32 - w as i32) / 2;
-        (x, ty + th as i32 + pad as i32 * 2, w, h)
+    /// The Stop button (Play while stopped): at the header's right end,
+    /// inside the header's height as the way out is at its left.
+    pub(crate) fn button(&self, panel: &Panel, m: &Measure) -> (i32, i32, u32, u32) {
+        let h = m.header * 2 / 3;
+        let w = (m.cell * 4 / 5).max(h * 2);
+        let x = panel.x + panel.w as i32 - m.pad as i32 - w as i32;
+        let y = panel.y + (m.header as i32 - h as i32) / 2;
+        (x, y, w, h)
+    }
+
+    /// The slider's track: across the page, in the middle of what the
+    /// header leaves, with a number's room at its right; never past the
+    /// panel's bottom, whatever shape the look names.
+    pub(crate) fn track(&self, panel: &Panel, m: &Measure) -> (i32, i32, u32, u32) {
+        let number = m.title * 2;
+        let x = panel.x + m.pad as i32 * 2;
+        let w = panel.w.saturating_sub(m.pad * 4 + number).max(m.cell);
+        let rest = panel.h.saturating_sub(m.header).max(1);
+        let h = m.row.min(rest);
+        let y = panel.y + m.header as i32 + (rest as i32 - h as i32) / 2;
+        (x, y, w, h)
     }
 
     fn within((x0, y0, w, h): (i32, i32, u32, u32), x: i32, y: i32) -> bool {
@@ -97,13 +122,12 @@ impl PlayHereView {
         if Self::within(panel.leave_rect(m), x, y) {
             return Some(Press::Leave);
         }
-        // The slider takes a finger a row above or below its track too.
-        let (tx, ty, tw, th) = self.track(panel, m);
-        if Self::within((tx, ty - th as i32, tw, th * 3), x, y) {
-            return Some(Press::Slider);
+        if Self::within(self.button(panel, m), x, y) {
+            return Some(Press::Button);
         }
-        if Self::within(self.tile(panel, m), x, y) {
-            return Some(Press::Tile);
+        // The slider takes a finger anywhere under the header, across the panel.
+        if y >= panel.y + m.header as i32 && panel.contains(x, y) {
+            return Some(Press::Slider);
         }
         None
     }
@@ -125,7 +149,9 @@ impl PlayHereView {
         y: i32,
         panel: &Panel,
         m: &Measure,
+        now: u64,
     ) -> Action {
+        self.touched_at = now;
         if !panel.contains(x, y) && !self.dragging {
             // A tap beside the page shuts it, as beside the queue.
             match kind {
@@ -175,8 +201,8 @@ impl PlayHereView {
                 }
                 match was {
                     Some(Press::Leave) => Action::Close,
-                    Some(Press::Tile) if self.on => Action::Stop,
-                    Some(Press::Tile) => Action::Start(self.gain),
+                    Some(Press::Button) if self.on => Action::Stop,
+                    Some(Press::Button) => Action::Start(self.gain),
                     _ => Action::Taken,
                 }
             }
@@ -197,7 +223,7 @@ impl PlayHereView {
 
     #[allow(clippy::too_many_arguments)]
     pub fn draw(
-        &mut self,
+        &self,
         frame: &mut Frame,
         fonts: &Fonts,
         panel: &Panel,
@@ -207,9 +233,9 @@ impl PlayHereView {
         leave: Option<&Frame>,
         alpha: u8,
     ) {
-        let dim = [ink[0] / 2 + 48, ink[1] / 2 + 48, ink[2] / 2 + 48];
         let clip = (panel.x, panel.y, panel.w, panel.h);
-        // The header, as the queue's and the Power page's.
+        // The header, as the queue's and the Power page's: the way out, the
+        // title, and the Stop button at the right.
         let hx = panel.x + m.pad as i32;
         let hy = panel.y + (m.header as i32 - m.title as i32 * 13 / 10) / 2;
         let mut title_x = hx;
@@ -220,27 +246,40 @@ impl PlayHereView {
             ui::blit(frame, leave, x, y, alpha);
             title_x = lx + lw as i32 + m.pad as i32 / 4;
         }
-        if let Some(line) = ui::line(fonts, TextStyle::Bold, m.title * 13 / 10, ink, "Play here") {
+        let title = if self.on { "Playing here" } else { "Play here" };
+        if let Some(line) = ui::line(fonts, TextStyle::Bold, m.title * 13 / 10, ink, title) {
             ui::blit(frame, &line, title_x, hy, alpha);
         }
-        let centred = |frame: &mut Frame, text: &str, style, size, colour, cx: i32, y: i32| {
-            if let Some(line) = ui::line(fonts, style, size, colour, text) {
-                ui::blit(frame, &line, cx - line.width as i32 / 2, y, alpha);
-            }
+        let (bx, by, bw, bh) = self.button(panel, m);
+        let lit = self.pressed == Some(Press::Button);
+        let fill = if self.on {
+            [
+                accent[0],
+                accent[1],
+                accent[2],
+                if lit { alpha / 2 } else { alpha / 4 },
+            ]
+        } else {
+            [255, 255, 255, if lit { alpha / 5 } else { alpha / 10 }]
         };
-        let cx = panel.x + panel.w as i32 / 2;
-        // The line under the header: what this is.
-        centred(
-            frame,
-            "The player's sound on this device, a few tenths of a second behind the room.",
-            TextStyle::Regular,
-            m.small,
-            dim,
-            cx,
-            panel.y + m.header as i32 + m.pad as i32 / 2,
-        );
-        // The slider: a track, the part up to the gain in the accent, a knob,
-        // and the number beside it.
+        rounded(frame, bx, by, bw, bh, bh / 2, fill, clip);
+        if let Some(line) = ui::line(
+            fonts,
+            TextStyle::Bold,
+            m.title,
+            ink,
+            if self.on { "Stop" } else { "Play" },
+        ) {
+            ui::blit(
+                frame,
+                &line,
+                bx + (bw as i32 - line.width as i32) / 2,
+                by + (bh as i32 - line.height as i32) / 2,
+                alpha,
+            );
+        }
+        // The slider: a track, the part up to the gain in the accent, a
+        // knob, and the number at its right.
         let (tx, ty, tw, th) = self.track(panel, m);
         let bar_h = (th / 4).max(4);
         let bar_y = ty + (th as i32 - bar_h as i32) / 2;
@@ -267,7 +306,7 @@ impl PlayHereView {
                 clip,
             );
         }
-        let knob = th * 3 / 4;
+        let knob = (th * 3 / 4).max(8);
         let kx = tx + filled as i32 - knob as i32 / 2;
         let ky = ty + (th as i32 - knob as i32) / 2;
         let knob_fill = if self.dragging {
@@ -286,54 +325,6 @@ impl PlayHereView {
                 alpha,
             );
         }
-        // The tile: Play here, or Stop while the host plays.
-        let rect = self.tile(panel, m);
-        let lit = self.pressed == Some(Press::Tile);
-        let fill = if self.on {
-            [
-                accent[0],
-                accent[1],
-                accent[2],
-                if lit { alpha / 3 } else { alpha / 5 },
-            ]
-        } else {
-            [255, 255, 255, if lit { alpha / 5 } else { alpha / 10 }]
-        };
-        rounded(
-            frame,
-            rect.0,
-            rect.1,
-            rect.2,
-            rect.3,
-            m.pad * 2 / 3,
-            fill,
-            clip,
-        );
-        let glyph_size = m.title * 2;
-        let g = self.glyphs.get("headphones", glyph_size, ink).clone();
-        let gx = rect.0 + rect.2 as i32 / 2 - g.width as i32 / 2;
-        let gy = rect.1 + rect.3 as i32 * 2 / 5 - g.height as i32 / 2;
-        ui::blit(frame, &g, gx, gy, alpha);
-        centred(
-            frame,
-            if self.on { "Stop" } else { "Play here" },
-            TextStyle::Bold,
-            m.title * 11 / 10,
-            ink,
-            rect.0 + rect.2 as i32 / 2,
-            rect.1 + rect.3 as i32 * 2 / 3,
-        );
-        // The foot: where the level comes from.
-        let foot_y = panel.y + panel.h as i32 - m.pad as i32 - m.small as i32;
-        centred(
-            frame,
-            "At the player's full level, before its volume; the slider is this device's own.",
-            TextStyle::Regular,
-            m.small,
-            dim,
-            cx,
-            foot_y,
-        );
     }
 }
 
@@ -342,75 +333,115 @@ mod tests {
     use super::*;
     use crate::theme::ListShape;
 
-    fn panel() -> (Panel, Measure) {
-        (
-            Panel::place(ListShape::Sheet, 1280, 720, 72, 1.0),
-            Measure::at(1.0),
-        )
+    fn panel(shape: ListShape) -> (Panel, Measure) {
+        (Panel::place(shape, 1280, 720, 72, 1.0), Measure::at(1.0))
+    }
+
+    fn blank() -> Frame {
+        Frame {
+            width: 1280,
+            height: 720,
+            rgba: vec![0; 1280 * 720 * 4],
+            blend: Default::default(),
+        }
     }
 
     #[test]
-    fn a_tap_on_the_tile_starts_at_the_gain_and_stops_while_playing() {
-        let (panel, m) = panel();
+    fn everything_sits_inside_the_panel_in_every_shape() {
+        for shape in [ListShape::Sheet, ListShape::Drawer, ListShape::Screen] {
+            let (panel, m) = panel(shape);
+            let view = PlayHereView::default();
+            for (name, (x, y, w, h)) in [
+                ("button", view.button(&panel, &m)),
+                ("track", view.track(&panel, &m)),
+            ] {
+                assert!(
+                    x >= panel.x && y >= panel.y,
+                    "{shape:?} {name} starts inside"
+                );
+                assert!(
+                    x + w as i32 <= panel.x + panel.w as i32
+                        && y + h as i32 <= panel.y + panel.h as i32,
+                    "{shape:?} {name} ends inside: {:?} in {:?}",
+                    (x, y, w, h),
+                    (panel.x, panel.y, panel.w, panel.h)
+                );
+            }
+            let (_, by, _, bh) = view.button(&panel, &m);
+            assert!(
+                by + bh as i32 <= panel.y + m.header as i32,
+                "{shape:?}: the button is in the header"
+            );
+            let (_, ty, _, _) = view.track(&panel, &m);
+            assert!(
+                ty >= panel.y + m.header as i32,
+                "{shape:?}: the slider is under the header"
+            );
+        }
+    }
+
+    #[test]
+    fn a_tap_on_the_button_starts_at_the_gain_and_stops_while_playing() {
+        let (panel, m) = panel(ListShape::Sheet);
         let mut view = PlayHereView::default();
-        view.open();
+        view.open(0);
         view.set(false, 80);
-        let (x, y, w, h) = view.tile(&panel, &m);
+        let (x, y, w, h) = view.button(&panel, &m);
         let (cx, cy) = (x + w as i32 / 2, y + h as i32 / 2);
         assert_eq!(
-            view.pointer(PointerKind::Down, cx, cy, &panel, &m),
+            view.pointer(PointerKind::Down, cx, cy, &panel, &m, 100),
             Action::Taken
         );
         assert_eq!(
-            view.pointer(PointerKind::Up, cx, cy, &panel, &m),
+            view.pointer(PointerKind::Up, cx, cy, &panel, &m, 150),
             Action::Start(80)
         );
         view.set(true, 80);
         assert_eq!(
-            view.pointer(PointerKind::Down, cx, cy, &panel, &m),
+            view.pointer(PointerKind::Down, cx, cy, &panel, &m, 200),
             Action::Taken
         );
         assert_eq!(
-            view.pointer(PointerKind::Up, cx, cy, &panel, &m),
+            view.pointer(PointerKind::Up, cx, cy, &panel, &m, 250),
             Action::Stop
         );
-        // A finger that leaves the tile before lifting does nothing.
+        // A finger that leaves the button before lifting does nothing.
         assert_eq!(
-            view.pointer(PointerKind::Down, cx, cy, &panel, &m),
+            view.pointer(PointerKind::Down, cx, cy, &panel, &m, 300),
             Action::Taken
         );
         assert_eq!(
-            view.pointer(PointerKind::Up, cx, cy + h as i32 * 2, &panel, &m),
+            view.pointer(PointerKind::Up, 5, 5, &panel, &m, 350),
             Action::Taken
         );
     }
 
     #[test]
     fn a_finger_on_the_slider_sets_the_gain_as_it_moves_and_keeps_it_from_the_host_meanwhile() {
-        let (panel, m) = panel();
+        let (panel, m) = panel(ListShape::Sheet);
         let mut view = PlayHereView::default();
-        view.open();
+        view.open(0);
         view.set(true, 50);
         let (tx, ty, tw, th) = view.track(&panel, &m);
         let cy = ty + th as i32 / 2;
         assert_eq!(
-            view.pointer(PointerKind::Down, tx + tw as i32 / 4, cy, &panel, &m),
+            view.pointer(PointerKind::Down, tx + tw as i32 / 4, cy, &panel, &m, 100),
             Action::Gain(25)
         );
         // The host's word does not move the knob under the finger.
         view.set(true, 90);
         assert_eq!(view.gain, 25);
         assert_eq!(
-            view.pointer(PointerKind::Move, tx + tw as i32 / 2, cy, &panel, &m),
+            view.pointer(PointerKind::Move, tx + tw as i32 / 2, cy, &panel, &m, 200),
             Action::Gain(50)
         );
         assert_eq!(
-            view.pointer(PointerKind::Move, tx + tw as i32 / 2, cy, &panel, &m),
+            view.pointer(PointerKind::Move, tx + tw as i32 / 2, cy, &panel, &m, 300),
             Action::Taken,
             "the same place again says nothing"
         );
         assert_eq!(
-            view.pointer(PointerKind::Up, tx + tw as i32 + 500, cy, &panel, &m),
+            view.pointer(PointerKind::Up, tx + tw as i32 + 500, cy, &panel, &m, 400),
             Action::Gain(100),
             "past the end is the end"
         );
@@ -420,43 +451,58 @@ mod tests {
     }
 
     #[test]
-    fn a_tap_beside_the_page_or_on_leave_shuts_it() {
-        let (panel, m) = panel();
+    fn the_page_leaves_by_itself_after_the_linger_but_never_under_a_finger() {
+        let (panel, m) = panel(ListShape::Sheet);
         let mut view = PlayHereView::default();
-        view.open();
+        view.open(1000);
+        assert!(!view.tick(1000 + LINGER_MS - 1));
+        assert!(view.open);
+        let (tx, ty, tw, th) = view.track(&panel, &m);
+        let (cx, cy) = (tx + tw as i32 / 2, ty + th as i32 / 2);
+        view.pointer(PointerKind::Down, cx, cy, &panel, &m, 5000);
+        assert!(
+            !view.tick(5000 + LINGER_MS + 1),
+            "a finger on the slider holds the page"
+        );
+        view.pointer(PointerKind::Up, cx, cy, &panel, &m, 6000);
+        assert!(!view.tick(6000 + LINGER_MS - 1));
+        assert!(view.tick(6000 + LINGER_MS));
+        assert!(!view.open);
+    }
+
+    #[test]
+    fn a_tap_beside_the_page_or_on_leave_shuts_it() {
+        let (panel, m) = panel(ListShape::Sheet);
+        let mut view = PlayHereView::default();
+        view.open(0);
         assert_eq!(
-            view.pointer(PointerKind::Down, 5, 5, &panel, &m),
+            view.pointer(PointerKind::Down, 5, 5, &panel, &m, 10),
             Action::Taken
         );
         assert_eq!(
-            view.pointer(PointerKind::Up, 5, 5, &panel, &m),
+            view.pointer(PointerKind::Up, 5, 5, &panel, &m, 20),
             Action::Close
         );
         let (lx, ly, lw, lh) = panel.leave_rect(&m);
         let (cx, cy) = (lx + lw as i32 / 2, ly + lh as i32 / 2);
         assert_eq!(
-            view.pointer(PointerKind::Down, cx, cy, &panel, &m),
+            view.pointer(PointerKind::Down, cx, cy, &panel, &m, 30),
             Action::Taken
         );
         assert_eq!(
-            view.pointer(PointerKind::Up, cx, cy, &panel, &m),
+            view.pointer(PointerKind::Up, cx, cy, &panel, &m, 40),
             Action::Close
         );
     }
 
     #[test]
-    fn the_page_draws_its_track_its_knob_and_its_tile() {
-        let (panel, m) = panel();
+    fn the_page_draws_its_track_its_knob_and_its_button_inside_the_panel() {
+        let (panel, m) = panel(ListShape::Sheet);
         let mut view = PlayHereView::default();
-        view.open();
+        view.open(0);
         view.set(true, 70);
         let fonts = Fonts::default();
-        let mut frame = Frame {
-            width: 1280,
-            height: 720,
-            rgba: vec![0; 1280 * 720 * 4],
-            blend: Default::default(),
-        };
+        let mut frame = blank();
         view.draw(
             &mut frame,
             &fonts,
@@ -467,15 +513,23 @@ mod tests {
             None,
             255,
         );
-        let (tx, ty, tw, th) = view.track(&panel, &m);
         let inked =
             |x: i32, y: i32| frame.rgba[((y as u32 * frame.width + x as u32) * 4 + 3) as usize] > 0;
+        let (tx, ty, tw, th) = view.track(&panel, &m);
         assert!(
             inked(tx + tw as i32 / 4, ty + th as i32 / 2),
             "the filled part of the track"
         );
-        let (x, y, w, h) = view.tile(&panel, &m);
-        assert!(inked(x + w as i32 / 2, y + h as i32 / 2), "the tile");
+        let (x, y, w, h) = view.button(&panel, &m);
+        assert!(inked(x + w as i32 / 2, y + h as i32 / 2), "the button");
+        // Nothing drawn below the panel: the bar's room is the bar's.
+        let below = panel.y + panel.h as i32;
+        for x in (panel.x..panel.x + panel.w as i32).step_by(37) {
+            assert!(
+                !inked(x, below + 2),
+                "nothing past the panel's bottom at x {x}"
+            );
+        }
         let mut h = std::collections::hash_map::DefaultHasher::new();
         view.stamp(&mut h);
     }

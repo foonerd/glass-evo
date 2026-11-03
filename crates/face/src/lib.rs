@@ -2749,7 +2749,7 @@ impl Face {
         // and the slider; the page shuts where the player stops serving it.
         self.play_here
             .set(view.input.play_here.on, view.input.play_here.gain);
-        if self.play_here.open && !play_here_shown(view) {
+        if self.play_here.open && (!play_here_shown(view) || self.play_here.tick(now)) {
             self.play_here.close();
         }
         // A finger resting on volume down: mute, once, and no step on its lift.
@@ -3508,7 +3508,7 @@ impl Overlay for Face {
             let m = lists::Measure::at(view.scale);
             // The page's asks go to the host, never to the player: it plays
             // the sound here and tells the face what it does.
-            match self.play_here.pointer(kind, x, y, &panel, &m) {
+            match self.play_here.pointer(kind, x, y, &panel, &m, now) {
                 playhere::Action::Start(gain) => self.pending.push(Command::with(
                     "play-here",
                     serde_json::json!({ "on": true, "gain": gain }),
@@ -3603,7 +3603,15 @@ impl Overlay for Face {
                                 self.browse.close();
                                 self.themes.close();
                                 self.power.close();
-                                self.play_here.open();
+                                // The tap starts the sound as it opens the
+                                // page; a page opened while it plays only shows.
+                                self.play_here.open(now);
+                                if !self.play_here.on {
+                                    self.pending.push(Command::with(
+                                        "play-here",
+                                        serde_json::json!({ "on": true, "gain": self.play_here.gain }),
+                                    ));
+                                }
                             }
                         } else if tile == Tile::Themes {
                             self.sheet_open = false;
@@ -4224,12 +4232,12 @@ mod tests {
         // The page the host would see: opened by hand, its asks are the
         // host's and never the player's, and the host's word lights the tile.
         face.power.close();
-        face.play_here.open();
+        face.play_here.open(4000);
         face.play_here.set(false, 60);
         let shape = face.tokens(&view(&input, &fonts, 4000)).theme.lists_shape;
         let panel = lists::Panel::place(shape, 1280, 720, 72, 1.0);
         let m = lists::Measure::at(1.0);
-        let (x, y, w, h) = face.play_here.tile(&panel, &m);
+        let (x, y, w, h) = face.play_here.button(&panel, &m);
         let (cx, cy) = (x + w as i32 / 2, y + h as i32 / 2);
         assert!(face.pointer(PointerKind::Down, cx, cy, &view(&input, &fonts, 4100)));
         assert!(face.pointer(PointerKind::Up, cx, cy, &view(&input, &fonts, 4150)));
@@ -4248,6 +4256,14 @@ mod tests {
             &input.metadata,
             input.play_here.on
         ));
+        // The frame drawn on this host shut the page, since it cannot play
+        // (the page's own linger is the page's own test); the sound, the
+        // host's, was not touched.
+        assert!(
+            !face.play_here.open,
+            "no page stays on a host that cannot play"
+        );
+        assert!(input.play_here.on);
     }
 
     #[test]
