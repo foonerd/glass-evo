@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.11] - 2026-11-03
+
+- Built on Glass 0.11.11, in step with it: the lead set for the meters reaches the tap.
+
 ## [0.11.10] - 2026-11-03
 
 - Built on Glass 0.11.10, in step with it: meters ahead of the sound and a picture of the screen on the player's Screen tab, the maintenance release delivering the backlog.
