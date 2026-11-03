@@ -138,6 +138,11 @@ pub const HARD_DRIVE: &[Shape] = &[
     Shape::Path("M6 16h.01"),
 ];
 
+/// Lucide's `headphones`.
+pub const HEADPHONES: &[Shape] = &[
+    Shape::Path("M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"),
+];
+
 /// Lucide's `heart-pulse`.
 pub const HEART_PULSE: &[Shape] = &[
     Shape::Path("M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"),
@@ -356,6 +361,7 @@ pub const ALL: &[(&str, &[Shape])] = &[
     ("folder", FOLDER),
     ("globe", GLOBE),
     ("hard-drive", HARD_DRIVE),
+    ("headphones", HEADPHONES),
     ("heart-pulse", HEART_PULSE),
     ("heart", HEART),
     ("layout-grid", LAYOUT_GRID),

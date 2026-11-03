@@ -42,9 +42,12 @@ pub enum Icon {
     Power,
     /// Lucide's `layout-grid`: the installed themes as a gallery.
     Themes,
+    /// Lucide's `headphones`: Play here, the player's sound on the device
+    /// that draws the face.
+    Headphones,
 }
 
-const ICONS: [Icon; 22] = [
+const ICONS: [Icon; 23] = [
     Icon::Previous,
     Icon::Play,
     Icon::Pause,
@@ -67,6 +70,7 @@ const ICONS: [Icon; 22] = [
     Icon::Search,
     Icon::Power,
     Icon::Themes,
+    Icon::Headphones,
 ];
 
 use crate::lucide::{self, Shape};
@@ -202,7 +206,8 @@ fn distance(icon: Icon, p: Point) -> f32 {
         | Icon::Browse
         | Icon::Search
         | Icon::Power
-        | Icon::Themes => lucide_distance(&flatten(lucide_shapes(icon).unwrap_or(&[])), p),
+        | Icon::Themes
+        | Icon::Headphones => lucide_distance(&flatten(lucide_shapes(icon).unwrap_or(&[])), p),
     }
 }
 
@@ -220,6 +225,7 @@ fn lucide_shapes(icon: Icon) -> Option<&'static [Shape]> {
         Icon::Search => Some(lucide::SEARCH),
         Icon::Power => Some(lucide::POWER),
         Icon::Themes => Some(lucide::LAYOUT_GRID),
+        Icon::Headphones => Some(lucide::HEADPHONES),
         _ => None,
     }
 }

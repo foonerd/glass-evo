@@ -35,6 +35,7 @@ pub mod icon;
 pub mod lists;
 pub mod look;
 pub mod lucide;
+pub mod playhere;
 pub mod power;
 pub mod theme;
 pub mod themes;
@@ -187,31 +188,44 @@ pub enum Tile {
     ThemeNext,
     /// The installed themes as a gallery of the Manager's previews.
     Themes,
+    /// Play here: the player's sound on the device that draws the face,
+    /// with the device's own volume on a page. Only where the host can
+    /// play it and the player serves it (`play_here_shown`).
+    PlayHere,
 }
 
 /// The sheet's tiles in their order: the modes on the first row, the
 /// places on the second.
-const TILES: [Tile; 11] = [
+const TILES: [Tile; 12] = [
     Tile::ThemePrev,
     Tile::ThemeNext,
     Tile::Themes,
+    Tile::Power,
     Tile::Repeat,
     Tile::Random,
     Tile::Mute,
-    Tile::Power,
+    Tile::PlayHere,
     Tile::Favourite,
     Tile::Browse,
     Tile::Queue,
     Tile::Search,
 ];
-/// The sheet's rows: the themes at the top, the player's modes with the
-/// power under them, the library below; the columns follow from the
-/// longest row, a shorter row's last cell empty.
+/// The sheet's rows: the themes at the top with the player's power beside
+/// them, the player's modes under them with Play here beside mute (its
+/// cell empty where the host cannot play), the library below; the columns
+/// follow from the longest row.
 const TILE_ROWS: [&[Tile]; 3] = [
-    &[Tile::ThemePrev, Tile::ThemeNext, Tile::Themes],
-    &[Tile::Repeat, Tile::Random, Tile::Mute, Tile::Power],
+    &[Tile::ThemePrev, Tile::ThemeNext, Tile::Themes, Tile::Power],
+    &[Tile::Repeat, Tile::Random, Tile::Mute, Tile::PlayHere],
     &[Tile::Favourite, Tile::Browse, Tile::Queue, Tile::Search],
 ];
+
+/// Whether the sheet offers Play here: the host can play the sound (a
+/// page in a browser; the player's own screen never, a native remote not
+/// yet) and the player serves it (the plugin's switch, on its config line).
+pub fn play_here_shown(view: &View) -> bool {
+    cfg!(target_arch = "wasm32") && view.input.play_here.served
+}
 
 /// How far a volume button moves the volume, in points of a hundred.
 pub const VOLUME_STEP: u32 = 5;
@@ -445,7 +459,9 @@ pub fn mute_command(muted: bool) -> Command {
 pub fn tile_command(tile: Tile, meta: &Metadata) -> Option<Command> {
     Some(match tile {
         // The places open their views; they send the player nothing.
-        Tile::Queue | Tile::Browse | Tile::Search | Tile::Power | Tile::Themes => return None,
+        Tile::Queue | Tile::Browse | Tile::Search | Tile::Power | Tile::Themes | Tile::PlayHere => {
+            return None
+        }
         Tile::ThemePrev => Command::with("theme", serde_json::json!("previous")),
         Tile::ThemeNext => Command::with("theme", serde_json::json!("next")),
         Tile::Repeat => {
@@ -463,7 +479,9 @@ pub fn tile_command(tile: Tile, meta: &Metadata) -> Option<Command> {
 }
 
 /// Whether a tile is lit: its mode is on in the player.
-pub fn tile_lit(tile: Tile, meta: &Metadata) -> bool {
+/// Whether a tile wears the accent: a mode that is on, or Play here while
+/// the host plays the sound (`play_here_on`, the host's own word).
+pub fn tile_lit(tile: Tile, meta: &Metadata, play_here_on: bool) -> bool {
     match tile {
         Tile::Queue
         | Tile::Browse
@@ -476,6 +494,7 @@ pub fn tile_lit(tile: Tile, meta: &Metadata) -> bool {
         Tile::Random => meta.random,
         Tile::Mute => meta.mute,
         Tile::Favourite => meta.favourite,
+        Tile::PlayHere => play_here_on,
     }
 }
 
@@ -510,12 +529,15 @@ pub fn tile_icon(tile: Tile, meta: &Metadata) -> Icon {
         Tile::ThemePrev => Icon::Back,
         Tile::ThemeNext => Icon::Right,
         Tile::Themes => Icon::Themes,
+        Tile::PlayHere => Icon::Headphones,
     }
 }
 
 /// The word under a tile, saying what it is and, for a mode, how it stands.
-pub fn tile_label(tile: Tile, meta: &Metadata) -> &'static str {
+pub fn tile_label(tile: Tile, meta: &Metadata, play_here_on: bool) -> &'static str {
     match tile {
+        Tile::PlayHere if play_here_on => "Playing here",
+        Tile::PlayHere => "Play here",
         Tile::Repeat if meta.repeat && meta.repeat_single => "Repeat one",
         Tile::Repeat => "Repeat",
         Tile::Random => "Random",
@@ -682,6 +704,8 @@ pub struct Face {
     browse: browse::BrowseView,
     /// The player's power, on a page that asks before it acts.
     power: power::PowerView,
+    /// Play here: the device's own volume on a page, where the host plays.
+    play_here: playhere::PlayHereView,
     /// The installed themes as a gallery, and a theme's variants.
     themes: themes::ThemesView,
     /// What was last drawn, as `stamp` puts it; none when nothing was.
@@ -2721,6 +2745,13 @@ impl Face {
                 self.power.close();
             }
         }
+        // Play here: what the host says it does with the sound, for the tile
+        // and the slider; the page shuts where the player stops serving it.
+        self.play_here
+            .set(view.input.play_here.on, view.input.play_here.gain);
+        if self.play_here.open && !play_here_shown(view) {
+            self.play_here.close();
+        }
         // A finger resting on volume down: mute, once, and no step on its lift.
         if self.pressed == Some(Button::VolumeDown)
             && !self.held
@@ -2877,12 +2908,18 @@ impl Face {
             self.queue.stamp(view.input, &mut h);
             self.browse.stamp(view.input, &mut h);
             self.power.stamp(view.now_ms, &mut h);
+            self.play_here.stamp(&mut h);
+            play_here_shown(view).hash(&mut h);
             self.themes.stamp(view.input, &mut h);
             for button in BUTTONS {
                 (button_icon(button, meta) as u8).hash(&mut h);
             }
             for tile in TILES {
-                (tile_icon(tile, meta) as u8, tile_lit(tile, meta)).hash(&mut h);
+                (
+                    tile_icon(tile, meta) as u8,
+                    tile_lit(tile, meta, view.input.play_here.on),
+                )
+                    .hash(&mut h);
             }
         }
         if let (Some(tm), Some(tokens)) = (time, self.tokens.as_ref()) {
@@ -2939,6 +2976,7 @@ impl Overlay for Face {
             && !self.queue.open
             && !self.browse.open
             && !self.power.open
+            && !self.play_here.open
             && !self.themes.open
             && self.black(view.now_ms) == 0
         {
@@ -3133,6 +3171,38 @@ impl Overlay for Face {
                 );
                 self.presence.kept(view.now_ms);
             }
+            // The Play here page, as the Power page: the device's own volume.
+            if self.play_here.open {
+                let panel = lists::Panel::place(
+                    theme.lists_shape,
+                    view.width,
+                    view.height,
+                    bar.h,
+                    view.scale,
+                );
+                let m = lists::Measure::at(view.scale);
+                if frosted {
+                    self.frost
+                        .apply(frame, panel.x, panel.y, panel.w, panel.h, alpha);
+                }
+                glass(frame, panel.x, panel.y, panel.w, panel.h, theme.sheet);
+                let leave = Some(icons.get(match panel.shape {
+                    theme::ListShape::Sheet => Icon::Down,
+                    theme::ListShape::Drawer => Icon::Right,
+                    _ => Icon::Back,
+                }));
+                self.play_here.draw(
+                    frame,
+                    view.fonts,
+                    &panel,
+                    &m,
+                    theme.ink,
+                    look.accent,
+                    leave,
+                    alpha,
+                );
+                self.presence.kept(view.now_ms);
+            }
             // The queue over the theme and under the bar, in the shape the
             // look names; the bar stays while it is open.
             if self.queue.open {
@@ -3269,8 +3339,12 @@ impl Overlay for Face {
                         .map(move |(col, tile)| (row * sheet.cols + col, tile))
                 });
                 for (i, tile) in cells {
+                    // Play here's cell stays empty where the host cannot play.
+                    if *tile == Tile::PlayHere && !play_here_shown(view) {
+                        continue;
+                    }
                     let rect = sheet.tile_rect(i);
-                    let lit = tile_lit(*tile, meta);
+                    let lit = tile_lit(*tile, meta, view.input.play_here.on);
                     if lit {
                         ui::fill(
                             frame,
@@ -3318,7 +3392,7 @@ impl Overlay for Face {
                         TextStyle::Regular,
                         word_h,
                         theme.ink,
-                        tile_label(*tile, meta),
+                        tile_label(*tile, meta, view.input.play_here.on),
                     ) {
                         ui::blit(
                             frame,
@@ -3428,6 +3502,31 @@ impl Overlay for Face {
             self.presence.kept(now);
             return true;
         }
+        if self.play_here.open && bar.button_at(x, y).is_none() {
+            let shape = self.tokens(view).theme.lists_shape;
+            let panel = lists::Panel::place(shape, view.width, view.height, bar.h, view.scale);
+            let m = lists::Measure::at(view.scale);
+            // The page's asks go to the host, never to the player: it plays
+            // the sound here and tells the face what it does.
+            match self.play_here.pointer(kind, x, y, &panel, &m) {
+                playhere::Action::Start(gain) => self.pending.push(Command::with(
+                    "play-here",
+                    serde_json::json!({ "on": true, "gain": gain }),
+                )),
+                playhere::Action::Gain(gain) => self.pending.push(Command::with(
+                    "play-here",
+                    serde_json::json!({ "gain": gain }),
+                )),
+                playhere::Action::Stop => self.pending.push(Command::with(
+                    "play-here",
+                    serde_json::json!({ "on": false }),
+                )),
+                playhere::Action::Close => self.play_here.close(),
+                playhere::Action::Taken => {}
+            }
+            self.presence.kept(now);
+            return true;
+        }
         if self.queue.open && bar.button_at(x, y).is_none() {
             let shape = self.tokens(view).theme.lists_shape;
             let panel = lists::Panel::place(shape, view.width, view.height, bar.h, view.scale);
@@ -3489,12 +3588,23 @@ impl Overlay for Face {
                 }
                 if let Some(tile) = was_tile {
                     if on_sheet == Some(tile) {
+                        self.play_here.close();
                         if tile == Tile::Power {
                             self.sheet_open = false;
                             self.queue.close();
                             self.browse.close();
                             self.themes.close();
                             self.power.open();
+                        } else if tile == Tile::PlayHere {
+                            // Only where the host can play; an empty cell takes no tap.
+                            if play_here_shown(view) {
+                                self.sheet_open = false;
+                                self.queue.close();
+                                self.browse.close();
+                                self.themes.close();
+                                self.power.close();
+                                self.play_here.open();
+                            }
                         } else if tile == Tile::Themes {
                             self.sheet_open = false;
                             self.queue.close();
@@ -3713,16 +3823,16 @@ mod tests {
         assert_eq!(sheet.tile_at(960, 420), Some(Tile::Themes));
         assert_eq!(
             sheet.tile_at(1200, 420),
-            None,
-            "the themes row's last cell is empty"
+            Some(Tile::Power),
+            "the themes row ends with the player's power"
         );
         assert_eq!(sheet.tile_at(500, 500), Some(Tile::Repeat));
         assert_eq!(sheet.tile_at(750, 500), Some(Tile::Random));
         assert_eq!(sheet.tile_at(960, 500), Some(Tile::Mute));
         assert_eq!(
             sheet.tile_at(1200, 500),
-            Some(Tile::Power),
-            "the modes row's last cell is the player's power"
+            Some(Tile::PlayHere),
+            "the modes row ends with Play here, beside mute"
         );
         assert_eq!(sheet.tile_at(500, 600), Some(Tile::Favourite));
         assert_eq!(sheet.tile_at(750, 600), Some(Tile::Browse));
@@ -3832,10 +3942,21 @@ mod tests {
         );
         assert_eq!(tile_icon(Tile::Favourite, &meta), Icon::Heart);
         assert!(
-            tile_lit(Tile::Repeat, &meta)
-                && tile_lit(Tile::Mute, &meta)
-                && tile_lit(Tile::Favourite, &meta)
-                && !tile_lit(Tile::Random, &meta)
+            tile_lit(Tile::Repeat, &meta, false)
+                && tile_lit(Tile::Mute, &meta, false)
+                && tile_lit(Tile::Favourite, &meta, false)
+                && !tile_lit(Tile::Random, &meta, false)
+        );
+        assert!(
+            !tile_lit(Tile::PlayHere, &meta, false) && tile_lit(Tile::PlayHere, &meta, true),
+            "Play here wears the host's word, not the player's"
+        );
+        assert_eq!(tile_label(Tile::PlayHere, &meta, false), "Play here");
+        assert_eq!(tile_label(Tile::PlayHere, &meta, true), "Playing here");
+        assert_eq!(tile_icon(Tile::PlayHere, &meta), Icon::Headphones);
+        assert!(
+            tile_command(Tile::PlayHere, &meta).is_none(),
+            "Play here opens its page and sends the player nothing"
         );
         assert!(
             tile_command(Tile::Queue, &meta).is_none(),
@@ -4066,6 +4187,67 @@ mod tests {
         assert_eq!(sent[0].name, "toggle");
         face.draw(&mut frame, &view(&input, &fonts, 9600));
         assert!(face.presence().visible(), "kept by the touch");
+    }
+
+    #[test]
+    fn play_heres_cell_is_empty_where_the_host_cannot_play_and_takes_no_tap() {
+        // A native host (this test): the player may serve the sound, the
+        // face still offers nothing, since the display plays it already or
+        // a remote has no player for it yet.
+        let mut input = input("pause");
+        input.play_here.served = true;
+        let fonts = Fonts::default();
+        let mut frame = blank();
+        let mut face = Face::new();
+        face.draw(&mut frame, &view(&input, &fonts, 0));
+        assert!(!play_here_shown(&view(&input, &fonts, 0)));
+        assert!(face.pointer(PointerKind::Down, 1200, 700, &view(&input, &fonts, 1000)));
+        assert!(face.pointer(PointerKind::Up, 1200, 700, &view(&input, &fonts, 1050)));
+        assert!(face.sheet_open());
+        // The cell beside Mute: a press and a lift there open no page and send nothing.
+        assert!(face.pointer(PointerKind::Down, 1200, 500, &view(&input, &fonts, 2000)));
+        assert!(face.pointer(PointerKind::Up, 1200, 500, &view(&input, &fonts, 2050)));
+        assert!(!face.play_here.open, "no page on a host that cannot play");
+        assert!(face.commands().is_empty());
+        assert!(
+            face.sheet_open(),
+            "the sheet stays as for any tap that did nothing"
+        );
+        // The power tile moved up beside Themes: a tap there opens its page.
+        assert!(face.pointer(PointerKind::Down, 1200, 420, &view(&input, &fonts, 3000)));
+        assert!(face.pointer(PointerKind::Up, 1200, 420, &view(&input, &fonts, 3050)));
+        assert!(
+            face.power.open,
+            "the power page from the themes row's last cell"
+        );
+        assert!(!face.sheet_open());
+        // The page the host would see: opened by hand, its asks are the
+        // host's and never the player's, and the host's word lights the tile.
+        face.power.close();
+        face.play_here.open();
+        face.play_here.set(false, 60);
+        let shape = face.tokens(&view(&input, &fonts, 4000)).theme.lists_shape;
+        let panel = lists::Panel::place(shape, 1280, 720, 72, 1.0);
+        let m = lists::Measure::at(1.0);
+        let (x, y, w, h) = face.play_here.tile(&panel, &m);
+        let (cx, cy) = (x + w as i32 / 2, y + h as i32 / 2);
+        assert!(face.pointer(PointerKind::Down, cx, cy, &view(&input, &fonts, 4100)));
+        assert!(face.pointer(PointerKind::Up, cx, cy, &view(&input, &fonts, 4150)));
+        let sent = face.commands();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].name, "play-here");
+        assert_eq!(
+            sent[0].value,
+            Some(serde_json::json!({ "on": true, "gain": 60 }))
+        );
+        input.play_here.on = true;
+        face.draw(&mut frame, &view(&input, &fonts, 5000));
+        assert!(face.play_here.on, "the host's word reached the page");
+        assert!(tile_lit(
+            Tile::PlayHere,
+            &input.metadata,
+            input.play_here.on
+        ));
     }
 
     #[test]
