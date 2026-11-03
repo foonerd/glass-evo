@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.12] - 2026-11-03
+
+- Built on Glass 0.11.12, in step with it: a Play here tile in the More sheet with the device's volume on a page; the player's power beside Themes
+
 ## [0.11.11] - 2026-11-03
 
 - Built on Glass 0.11.11, in step with it: Play here, the player's sound on Anymote and the Face tab
