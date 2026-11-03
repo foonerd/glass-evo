@@ -4237,7 +4237,7 @@ mod tests {
         let shape = face.tokens(&view(&input, &fonts, 4000)).theme.lists_shape;
         let panel = lists::Panel::place(shape, 1280, 720, 72, 1.0);
         let m = lists::Measure::at(1.0);
-        let (x, y, w, h) = face.play_here.button(&panel, &m);
+        let (x, y, w, h) = face.play_here.card(&panel, &m);
         let (cx, cy) = (x + w as i32 / 2, y + h as i32 / 2);
         assert!(face.pointer(PointerKind::Down, cx, cy, &view(&input, &fonts, 4100)));
         assert!(face.pointer(PointerKind::Up, cx, cy, &view(&input, &fonts, 4150)));
