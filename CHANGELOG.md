@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.16] - 2026-11-03
+
+- Built on Glass 0.11.16, in step with it: the Play here tile and its page on a remote display, which plays the player's sound through its own audio output; the host says whether it plays the sound here (Input.play_here.here)
+
 ## [0.11.15] - 2026-11-03
 
 - Built on Glass 0.11.15, in step with it: the Play here card's headset drawn as a shaded picture in its own greys, in place of the thin outline
