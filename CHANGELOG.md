@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.14] - 2026-11-03
+
+- Built on Glass 0.11.14, in step with it: the look panel's likeness follows the bar leaving the idle screen; a remote's Status says its controls.
+
 ## [0.11.13] - 2026-11-03
 
 - Built on Glass 0.11.13, in step with it: the face names the days and the months in the player's language, on the player's screen and on remotes; the release's manifest published as an asset.
