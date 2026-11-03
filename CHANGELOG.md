@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.13] - 2026-11-03
+
+- Built on Glass 0.11.13, in step with it: the Play here page fits its panel in every list shape and leaves by itself eight seconds after the last touch; the sheet's tile starts the sound as it opens the page
+
 ## [0.11.12] - 2026-11-03
 
 - Built on Glass 0.11.12, in step with it: a Play here tile in the More sheet with the device's volume on a page; the player's power beside Themes
