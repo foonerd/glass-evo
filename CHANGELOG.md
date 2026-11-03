@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.15] - 2026-11-03
+
+- Built on Glass 0.11.15, in step with it: the look panel saves a look under a name; playback is paused before an upgrade restarts the backend.
+
 ## [0.11.14] - 2026-11-03
 
 - Built on Glass 0.11.14, in step with it: the look panel's likeness follows the bar leaving the idle screen; a remote's Status says its controls.
