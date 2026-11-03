@@ -2,34 +2,6 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
-## [0.11.16] - 2026-11-03
-
-- Built on Glass 0.11.16, in step with it: the changer's sled on either side of its row, playback paused before every restart of the backend
-
-## [0.11.15] - 2026-11-03
-
-- Built on Glass 0.11.15, in step with it: the look panel saves a look under a name; playback is paused before an upgrade restarts the backend.
-
-## [0.11.14] - 2026-11-03
-
-- Built on Glass 0.11.14, in step with it: the look panel's likeness follows the bar leaving the idle screen; a remote's Status says its controls.
-
-## [0.11.13] - 2026-11-03
-
-- Built on Glass 0.11.13, in step with it: the face names the days and the months in the player's language, on the player's screen and on remotes; the release's manifest published as an asset.
-
-## [0.11.12] - 2026-11-03
-
-- Built on Glass 0.11.12, in step with it: the picture of the screen comes upright on a turned screen.
-
-## [0.11.11] - 2026-11-03
-
-- Built on Glass 0.11.11, in step with it: the lead set for the meters reaches the tap.
-
-## [0.11.10] - 2026-11-03
-
-- Built on Glass 0.11.10, in step with it: meters ahead of the sound and a picture of the screen on the player's Screen tab, the maintenance release delivering the backlog.
-
 ## [0.11.8] - 2026-11-02
 
 - Built on Glass 0.11.8, in step with it: the display is not started without a theme to show, so the kiosk keeps the screen, and the Manager says which theme is missing.
