@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.11] - 2026-11-03
+
+- Built on Glass 0.11.11, in step with it: Play here, the player's sound on Anymote and the Face tab
+
 ## [0.11.10] - 2026-11-03
 
 - Built on Glass 0.11.10, in step with it: the maintenance release: the face names the days and the months in the player's language, the release's manifest published as an asset, meters ahead of the sound, a picture of the screen, a look saved under a name, the changer's sled on either side of its row
