@@ -221,10 +221,11 @@ const TILE_ROWS: [&[Tile]; 3] = [
 ];
 
 /// Whether the sheet offers Play here: the host can play the sound (a
-/// page in a browser; the player's own screen never, a native remote not
-/// yet) and the player serves it (the plugin's switch, on its config line).
+/// page in a browser, a remote display with an audio output; the player's
+/// own screen never: the host's word, `here`) and the player serves it
+/// (the plugin's switch, on its config line).
 pub fn play_here_shown(view: &View) -> bool {
-    cfg!(target_arch = "wasm32") && view.input.play_here.served
+    view.input.play_here.here && view.input.play_here.served
 }
 
 /// How far a volume button moves the volume, in points of a hundred.
@@ -4195,6 +4196,40 @@ mod tests {
         assert_eq!(sent[0].name, "toggle");
         face.draw(&mut frame, &view(&input, &fonts, 9600));
         assert!(face.presence().visible(), "kept by the touch");
+    }
+
+    #[test]
+    fn play_heres_cell_shows_where_the_host_plays_the_sound_here() {
+        // A remote display with an audio output says so (`here`), and the
+        // player serves the sound: the cell beside Mute is the tile, and a
+        // tap starts the sound as it opens the page.
+        let mut input = input("play");
+        input.play_here.served = true;
+        input.play_here.here = true;
+        input.play_here.gain = 70;
+        let fonts = Fonts::default();
+        let mut frame = blank();
+        let mut face = Face::new();
+        face.draw(&mut frame, &view(&input, &fonts, 0));
+        assert!(play_here_shown(&view(&input, &fonts, 0)));
+        assert!(face.pointer(PointerKind::Down, 1200, 700, &view(&input, &fonts, 1000)));
+        assert!(face.pointer(PointerKind::Up, 1200, 700, &view(&input, &fonts, 1050)));
+        assert!(face.sheet_open());
+        assert!(face.pointer(PointerKind::Down, 1200, 500, &view(&input, &fonts, 2000)));
+        assert!(face.pointer(PointerKind::Up, 1200, 500, &view(&input, &fonts, 2050)));
+        assert!(face.play_here.open, "the page opens on a host that plays");
+        let sent = face.commands();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0].name, "play-here");
+        assert_eq!(
+            sent[0].value,
+            Some(serde_json::json!({ "on": true, "gain": 70 }))
+        );
+        // The player's switch off takes the cell away and shuts the page.
+        input.play_here.served = false;
+        face.draw(&mut frame, &view(&input, &fonts, 3000));
+        assert!(!play_here_shown(&view(&input, &fonts, 3000)));
+        assert!(!face.play_here.open);
     }
 
     #[test]
