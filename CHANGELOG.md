@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.17] - 2026-11-04
+
+- Built on Glass 0.11.17, in step with it: the Language setting of Glass: the face's dates in the language chosen on the player or on a remote
+
 ## [0.11.16] - 2026-11-03
 
 - Built on Glass 0.11.16, in step with it: the Play here tile and its page on a remote display, which plays the player's sound through its own audio output; the host says whether it plays the sound here (Input.play_here.here)
