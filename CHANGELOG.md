@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.19] - 2026-11-04
+
+- Built on Glass 0.11.19, in step with it: a remote without a window ends on a termination signal while it plays the sound
+
 ## [0.11.18] - 2026-11-04
 
 - Built on Glass 0.11.18, in step with it: Play here bit-perfect on a Linux remote through an ALSA device named on its page
