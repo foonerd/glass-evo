@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.20] - 2026-11-04
+
+- Built on Glass 0.11.20, in step with it: the fanart, back covers and logos in their places after a meter switch (a picture slot kept by its file and its box)
+
 ## [0.11.19] - 2026-11-04
 
 - Built on Glass 0.11.19, in step with it: a remote without a window ends on a termination signal while it plays the sound
