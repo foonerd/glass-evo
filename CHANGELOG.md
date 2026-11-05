@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.21] - 2026-11-05
+
+- Built on Glass 0.11.21, in step with it: the Do not switch themes by edition tag switch of Glass's Theme settings
+
 ## [0.11.20] - 2026-11-04
 
 - Built on Glass 0.11.20, in step with it: the fanart, back covers and logos in their places after a meter switch (a picture slot kept by its file and its box)
