@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.22] - 2026-11-06
+
+- Built on Glass 0.11.22, in step with it: the movie's box is a hole in the theme while a picture shows and the face draws over it, on the player's screen and in the browser module (the page crate's set_hole and clear_hole exports); the player reads the movie's report with its decoder and its delay
+
 ## [0.11.21] - 2026-11-05
 
 - Built on Glass 0.11.21, in step with it: the Do not switch themes by edition tag switch of Glass's Theme settings
