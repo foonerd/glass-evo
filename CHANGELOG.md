@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.25] - 2026-11-06
+
+- Built on Glass 0.11.25, in step with it: the movie's hole bounded by its corners in the raster both modules share
+
 ## [0.11.24] - 2026-11-06
 
 - Built on Glass 0.11.24, in step with it: the Android app builds again; the player's movie line read by a remote display over the channel
