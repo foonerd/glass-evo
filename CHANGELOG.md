@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.27] - 2026-11-07
+
+- Built on Glass 0.11.27, in step with it: the Manager's settings sorted by kind, with a Video tab between Screen and System
+
 ## [0.11.26] - 2026-11-07
 
 - Built on Glass 0.11.26, in step with it: the packager's tile count on its command line
