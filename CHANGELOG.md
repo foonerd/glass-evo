@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.26] - 2026-11-07
+
+- Built on Glass 0.11.26, in step with it: the packager's tile count on its command line
+
 ## [0.11.25] - 2026-11-06
 
 - Built on Glass 0.11.25, in step with it: the movie's hole bounded by its corners in the raster both modules share
