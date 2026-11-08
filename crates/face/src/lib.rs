@@ -14,8 +14,9 @@
 //! theme leaves to the artwork are read from the cover, once per track.
 
 use overlay::face::{
-    blur, fit_art, host_picture, is_file, read_art, read_covering, read_frames, read_to_string,
-    sky_of, ui, Command, Fonts, Frame, Metadata, PointerKind, Sky, TextStyle, Weather,
+    blur, fit_art, host_picture_from, is_file, read_art, read_covering, read_frames,
+    read_to_string, sky_of, ui, Command, Fonts, Frame, Metadata, PictureLine, PointerKind, Sky,
+    TextStyle, Weather,
 };
 use overlay::{Cover, Overlay, View};
 
@@ -912,6 +913,65 @@ struct IdlePicture {
     key: Option<(String, u32, u32, u32)>,
     frame: Option<Frame>,
     pending: Option<PictureReading>,
+    /// The picture before, kept while the change to the new one is drawn,
+    /// and the moment the new one was asked for.
+    prev: Option<Frame>,
+    since: u64,
+    /// The change as the player's line said: 0 at once, 1 a fade out to the
+    /// ground and in, 2 the two crossed; and its length.
+    transition: u8,
+    ms: u32,
+    /// The motion while the picture shows, where the line asks: when it
+    /// began, how long the picture has, and which way it drifts. The zoom
+    /// comes in sixteen steps, each a read of the picture a little larger.
+    motion: Option<(u64, u32, u8)>,
+    now: u64,
+}
+
+/// How much of the picture before and of the new one show while the change
+/// is drawn, `elapsed` into a change of `ms`: a fade takes the old out to
+/// the ground over the first half and the new in over the second; a merge
+/// lays the new over the old by its share. None once the change is done,
+/// or where there is none.
+fn change_alphas(transition: u8, ms: u32, elapsed: u64) -> Option<(u8, u8)> {
+    if transition == 0 || ms == 0 || elapsed >= u64::from(ms) {
+        return None;
+    }
+    let t = elapsed as f32 / ms as f32;
+    Some(match transition {
+        1 if t < 0.5 => (((1.0 - 2.0 * t) * 255.0) as u8, 0),
+        1 => (0, ((2.0 * t - 1.0) * 255.0) as u8),
+        _ => (255, (t * 255.0) as u8),
+    })
+}
+
+/// The zoom's step, 0 to 15, `elapsed` into a showing of `span`: the
+/// picture is read a half per cent larger at each.
+fn zoom_step(span: u32, elapsed: u64) -> u8 {
+    if span == 0 {
+        return 0;
+    }
+    (elapsed.saturating_mul(16) / u64::from(span)).min(15) as u8
+}
+
+/// Where a picture `extra` wider and taller than the screen stands,
+/// `elapsed` into a showing of `span`, drifting `dir` (0 to 3) from one
+/// corner towards the opposite: the offset to draw it at, never positive.
+fn drift(extra: (u32, u32), span: u32, elapsed: u64, dir: u8) -> (i32, i32) {
+    if span == 0 {
+        return (0, 0);
+    }
+    let t = (elapsed as f32 / span as f32).clamp(0.0, 1.0);
+    let (tx, ty) = match dir & 3 {
+        0 => (t, t),
+        1 => (1.0 - t, t),
+        2 => (t, 1.0 - t),
+        _ => (1.0 - t, 1.0 - t),
+    };
+    (
+        -((extra.0 as f32 * tx) as i32),
+        -((extra.1 as f32 * ty) as i32),
+    )
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -975,28 +1035,103 @@ fn idle_file(folder: &str, name: &str) -> Option<PathBuf> {
 
 impl IdlePicture {
     /// Follow what is asked: the picture `file` for a screen of `w` by `h`,
-    /// darkened by `dim`, or none. Says whether a picture is in hand.
-    fn follow(&mut self, file: Option<PathBuf>, w: u32, h: u32, dim: f32) -> bool {
+    /// darkened by `dim`, or none; `line` is the player's word while the
+    /// pictures show in turn (the change to a new one, the motion while it
+    /// shows), `now` the clock in milliseconds. Says whether a picture is in
+    /// hand, the one before counting while the change to the new is drawn.
+    fn follow(
+        &mut self,
+        file: Option<PathBuf>,
+        w: u32,
+        h: u32,
+        dim: f32,
+        line: Option<&PictureLine>,
+        now: u64,
+    ) -> bool {
+        self.now = now;
         let Some(file) = file else {
             *self = Self::default();
             return false;
         };
-        let key = (
-            file.to_string_lossy().into_owned(),
-            w,
-            h,
-            (dim * 1000.0) as u32,
+        let name = file.to_string_lossy().into_owned();
+        let line = line.filter(|l| !l.name.trim().is_empty());
+        let other = self.key.as_ref().is_some_and(|k| k.0 != name);
+        if other || self.key.is_none() {
+            // A new picture: the one in hand stands while the change is drawn.
+            self.prev = if other { self.frame.take() } else { None };
+            self.since = now;
+            self.transition = match line.map(|l| l.transition.as_str()) {
+                Some("fade") => 1,
+                Some("merge") => 2,
+                _ => 0,
+            };
+            self.ms = line.map(|l| l.ms).unwrap_or(0);
+            self.motion = line.filter(|l| l.motion && l.span >= 1000).map(|l| {
+                (
+                    now,
+                    l.span,
+                    (name.len() as u8).wrapping_add(name.bytes().last().unwrap_or(0)) & 3,
+                )
+            });
+        }
+        if self.prev.is_some()
+            && change_alphas(self.transition, self.ms, now.saturating_sub(self.since)).is_none()
+        {
+            self.prev = None;
+        }
+        // The size read: the screen's, or a half per cent larger at each of the zoom's steps.
+        let step = self
+            .motion
+            .map(|(from, span, _)| zoom_step(span, now.saturating_sub(from)))
+            .unwrap_or(0);
+        let (rw, rh) = (
+            w.saturating_mul(1000 + 5 * u32::from(step)) / 1000,
+            h.saturating_mul(1000 + 5 * u32::from(step)) / 1000,
         );
+        let key = (name, rw, rh, (dim * 1000.0) as u32);
         if self.key.as_ref() != Some(&key) {
             self.key = Some(key);
-            self.frame = None;
-            self.pending = Some(PictureReading::of(file, w, h, dim));
+            // Another picture: nothing in hand until it is read; a larger
+            // read of the same: the one in hand stands until the new lands.
+            if other || self.frame.is_none() {
+                self.frame = None;
+            }
+            self.pending = Some(PictureReading::of(file, rw, rh, dim));
         }
         if let Some(found) = self.pending.as_mut().and_then(PictureReading::done) {
             self.pending = None;
-            self.frame = found;
+            if found.is_some() || self.frame.is_none() {
+                self.frame = found;
+            }
         }
-        self.frame.is_some()
+        self.frame.is_some() || self.prev.is_some()
+    }
+
+    /// Where the picture in hand is drawn: at the screen's corner, or
+    /// drifting where the motion carries it.
+    fn offset(&self, w: u32, h: u32) -> (i32, i32) {
+        let Some((from, span, dir)) = self.motion else {
+            return (0, 0);
+        };
+        let Some(own) = self.frame.as_ref() else {
+            return (0, 0);
+        };
+        drift(
+            (own.width.saturating_sub(w), own.height.saturating_sub(h)),
+            span,
+            self.now.saturating_sub(from),
+            dir,
+        )
+    }
+
+    /// The alphas of the picture before and of the new while the change is drawn.
+    fn change(&self) -> Option<(u8, u8)> {
+        self.prev.as_ref()?;
+        change_alphas(
+            self.transition,
+            self.ms,
+            self.now.saturating_sub(self.since),
+        )
     }
 }
 
@@ -2833,18 +2968,30 @@ impl Face {
         // The picture for when nothing plays, where one is chosen and read:
         // in a browser the page brings it (none until it is in), on a
         // machine it is read from the folder the launcher names.
+        // While the pictures show in turn the player's line names the one to
+        // show; the look's own choice stands otherwise.
+        let line = view
+            .input
+            .picture
+            .as_ref()
+            .filter(|p| !p.name.trim().is_empty());
+        let name = line.map(|p| p.name.trim().to_string()).unwrap_or(name);
         let file = if idle && !dark && !name.is_empty() {
-            host_picture(&name).map(PathBuf::from).or_else(|| {
-                let folder = match self.backgrounds.as_deref() {
-                    Some(folder) => Some(folder.to_string()),
-                    None => std::env::var("GLASS_BACKGROUNDS").ok(),
-                };
-                folder.and_then(|folder| idle_file(&folder, &name))
-            })
+            host_picture_from(&name, line.map(|p| p.url.as_str()).unwrap_or(""))
+                .map(PathBuf::from)
+                .or_else(|| {
+                    let folder = match self.backgrounds.as_deref() {
+                        Some(folder) => Some(folder.to_string()),
+                        None => std::env::var("GLASS_BACKGROUNDS").ok(),
+                    };
+                    folder.and_then(|folder| idle_file(&folder, &name))
+                })
         } else {
             None
         };
-        let picture = self.idle.follow(file, view.width, view.height, dim);
+        let picture = self
+            .idle
+            .follow(file, view.width, view.height, dim, line, now);
         (alpha, clock, picture, dark)
     }
 
@@ -2902,6 +3049,9 @@ impl Face {
             .as_ref()
             .and(self.idle.key.as_ref())
             .hash(&mut h);
+        // A change from the picture before, or a drift, moves every frame.
+        self.idle.change().hash(&mut h);
+        self.idle.offset(view.width, view.height).hash(&mut h);
         if alpha > 0 {
             self.pressed.map(|b| b as u8).hash(&mut h);
             self.pressed_tile.map(|t| t as u8).hash(&mut h);
@@ -3055,9 +3205,27 @@ impl Overlay for Face {
         // Nothing plays and a picture of the user's own is chosen: it stands
         // in the theme's place, under everything the face draws.
         if picture {
-            if let Some(own) = self.idle.frame.as_ref() {
-                ui::blit(frame, own, 0, 0, 255);
-                drawn = true;
+            let (ox, oy) = self.idle.offset(view.width, view.height);
+            match (self.idle.prev.as_ref(), self.idle.change()) {
+                // The change from the picture before: a fade through the
+                // ground, or the two crossed, by the line's word.
+                (Some(old), Some((of_old, of_new))) => {
+                    if of_old > 0 {
+                        ui::blit(frame, old, 0, 0, of_old);
+                    }
+                    if of_new > 0 {
+                        if let Some(own) = self.idle.frame.as_ref() {
+                            ui::blit(frame, own, ox, oy, of_new);
+                        }
+                    }
+                    drawn = true;
+                }
+                _ => {
+                    if let Some(own) = self.idle.frame.as_ref() {
+                        ui::blit(frame, own, ox, oy, 255);
+                        drawn = true;
+                    }
+                }
             }
         }
         // The clock and the date first, when the player stands still on the
@@ -3693,6 +3861,66 @@ impl Overlay for Face {
 
 #[cfg(test)]
 mod tests {
+    /// The change from one picture to the next as the line says: a fade
+    /// takes the old out over the first half and the new in over the
+    /// second, a merge crosses them, none is none, and a change done is
+    /// nothing.
+    #[test]
+    fn the_change_between_pictures_fades_or_merges_and_then_is_done() {
+        assert_eq!(change_alphas(0, 800, 100), None, "at once");
+        assert_eq!(change_alphas(1, 800, 0), Some((255, 0)));
+        assert_eq!(
+            change_alphas(1, 800, 200),
+            Some((127, 0)),
+            "the old half gone"
+        );
+        assert_eq!(
+            change_alphas(1, 800, 400),
+            Some((0, 0)),
+            "the ground alone between"
+        );
+        assert_eq!(
+            change_alphas(1, 800, 600),
+            Some((0, 127)),
+            "the new half in"
+        );
+        assert_eq!(change_alphas(2, 800, 0), Some((255, 0)));
+        assert_eq!(
+            change_alphas(2, 800, 400),
+            Some((255, 127)),
+            "crossed half way"
+        );
+        assert_eq!(change_alphas(2, 800, 800), None, "done");
+        assert_eq!(change_alphas(1, 0, 0), None, "no length is at once");
+    }
+
+    /// The motion while a picture shows: the zoom in sixteen steps over the
+    /// picture's time, the drift from one corner to the opposite, never
+    /// past the picture's edge, none without a span.
+    #[test]
+    fn the_motion_zooms_in_steps_and_drifts_corner_to_corner() {
+        assert_eq!(zoom_step(600_000, 0), 0);
+        assert_eq!(zoom_step(600_000, 300_000), 8);
+        assert_eq!(zoom_step(600_000, 599_999), 15);
+        assert_eq!(zoom_step(600_000, 900_000), 15, "held at the last step");
+        assert_eq!(zoom_step(0, 5), 0);
+        assert_eq!(drift((64, 36), 600_000, 0, 0), (0, 0));
+        assert_eq!(drift((64, 36), 600_000, 300_000, 0), (-32, -18));
+        assert_eq!(drift((64, 36), 600_000, 600_000, 0), (-64, -36));
+        assert_eq!(
+            drift((64, 36), 600_000, 0, 3),
+            (-64, -36),
+            "the other way round"
+        );
+        assert_eq!(drift((64, 36), 600_000, 300_000, 1), (-32, -18));
+        assert_eq!(
+            drift((64, 36), 600_000, 900_000, 2),
+            (-64, 0),
+            "held at the far corner"
+        );
+        assert_eq!(drift((64, 36), 0, 300_000, 0), (0, 0), "no span, no drift");
+    }
+
     use super::*;
     use overlay::face::Input;
 
