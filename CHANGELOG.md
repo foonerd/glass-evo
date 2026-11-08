@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.35] - 2026-11-08
+
+- Built on Glass 0.11.35, in step with it: the Manager's forecast falls back to MET Norway when Open-Meteo cannot be reached, the face reading the same WMO codes, unchanged
+
 ## [0.11.34] - 2026-11-08
 
 - Built on Glass 0.11.34, in step with it: the Manager brings glass-evo along with an upgrade of Glass to the release of the new Glass's own version, the face unchanged
