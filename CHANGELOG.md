@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.32] - 2026-11-08
+
+- Built on Glass 0.11.32, in step with it: the forecast's place in a backup
+
 ## [0.11.31] - 2026-11-08
 
 - Built on Glass 0.11.31, in step with it: the picture's address carries its stamp
