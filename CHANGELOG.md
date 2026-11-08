@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.37] - 2026-11-08
+
+- Built on Glass 0.11.37, in step with it: the display opens the movie's file again after a stop (the display is this binary), the face unchanged
+
 ## [0.11.36] - 2026-11-08
 
 - Built on Glass 0.11.36, in step with it: the face shifts the clock, the date and the forecast with their glass as one by the guard's few pixels every few minutes when the look asks (idle.guard, idle.guard.px, idle.guard.every), off unless said
