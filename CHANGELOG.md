@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.30] - 2026-11-08
+
+- Built on Glass 0.11.30, in step with it: the uninstall removes only what the plugin made
+
 ## [0.11.29] - 2026-11-08
 
 - Built on Glass 0.11.29, in step with it: the panel's dim at a start
