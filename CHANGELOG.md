@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.38] - 2026-11-08
+
+- Built on Glass 0.11.38, in step with it: the display brings the movie to the whole screen at a tap in its box and back at the next (the display is this binary), the face unchanged
+
 ## [0.11.37] - 2026-11-08
 
 - Built on Glass 0.11.37, in step with it: the display opens the movie's file again after a stop (the display is this binary), the face unchanged
