@@ -353,6 +353,17 @@ pub struct Theme {
     /// After Pause/Stop"), the theme standing with its countdown until the
     /// period ends; `none` (unless said) for the idle screen at once.
     pub idle_wait_persist: bool,
+    /// `idle.guard`: the burn-in guard for OLED and plasma panels: the
+    /// clock, the date and the forecast, with their glass, shift as one
+    /// by a few pixels every few minutes, so no bright pixel stands still
+    /// for long. Off unless said.
+    pub idle_guard: bool,
+    /// `idle.guard.px`: how far the shift may go on each axis, 1 to 16
+    /// pixels; 6 unless said.
+    pub idle_guard_px: u32,
+    /// `idle.guard.every`: minutes between one shift and the next, 1 to
+    /// 30; 3 unless said.
+    pub idle_guard_every: u32,
 }
 
 impl Default for Theme {
@@ -427,6 +438,9 @@ impl Default for Theme {
             idle_off_min: 0,
             idle_fade_ms: 500,
             idle_wait_persist: false,
+            idle_guard: false,
+            idle_guard_px: 6,
+            idle_guard_every: 3,
         }
     }
 }
@@ -550,6 +564,21 @@ impl Theme {
                         .unwrap_or(self.idle_off_min)
                 }
                 "idle.wait" => self.idle_wait_persist = v.trim().eq_ignore_ascii_case("persist"),
+                "idle.guard" => self.idle_guard = switch(v).unwrap_or(self.idle_guard),
+                "idle.guard.px" => {
+                    self.idle_guard_px = v
+                        .trim()
+                        .parse::<u32>()
+                        .map(|px| px.clamp(1, 16))
+                        .unwrap_or(self.idle_guard_px)
+                }
+                "idle.guard.every" => {
+                    self.idle_guard_every = v
+                        .trim()
+                        .parse::<u32>()
+                        .map(|m| m.clamp(1, 30))
+                        .unwrap_or(self.idle_guard_every)
+                }
                 "colours.tint" | "colors.tint" => self.tint = paint(v).unwrap_or(self.tint),
                 "colours.accent" | "colors.accent" => self.accent = paint(v).unwrap_or(self.accent),
                 "colours.ink" | "colors.ink" => self.ink = colour(v).unwrap_or(self.ink),

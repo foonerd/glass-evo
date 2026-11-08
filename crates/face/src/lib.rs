@@ -957,6 +957,29 @@ fn zoom_step(span: u32, elapsed: u64) -> u8 {
 /// Where a picture `extra` wider and taller than the screen stands,
 /// `elapsed` into a showing of `span`, drifting `dir` (0 to 3) from one
 /// corner towards the opposite: the offset to draw it at, never positive.
+/// The burn-in guard's shift of the idle pieces at an instant: none while
+/// the guard is off; else, every `every` minutes of the display's clock a
+/// new pair within `[-px, px]` on each axis, drawn from the step's number
+/// through a small integer mix so the positions spread over the whole
+/// square. The display's clock is its own (it starts with it), so each
+/// face walks its own path; what matters is that no bright pixel stands
+/// still for long on any one of them.
+fn guard_shift(on: bool, px: u32, every_min: u32, now_ms: u64) -> (i32, i32) {
+    if !on || px == 0 {
+        return (0, 0);
+    }
+    let step = now_ms / (every_min.max(1) as u64 * 60_000);
+    // splitmix64's mixing, enough to scatter consecutive steps.
+    let mut z = step.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^= z >> 31;
+    let span = 2 * px as u64 + 1;
+    let dx = (z % span) as i32 - px as i32;
+    let dy = ((z >> 16) % span) as i32 - px as i32;
+    (dx, dy)
+}
+
 fn drift(extra: (u32, u32), span: u32, elapsed: u64, dir: u8) -> (i32, i32) {
     if span == 0 {
         return (0, 0);
@@ -2533,6 +2556,7 @@ impl ClockFace {
         glass: &mut Glass,
         below: u32,
         wall: &Wall,
+        shift: (i32, i32),
     ) -> bool {
         let unit = view.height as f32 / 720.0 * view.scale.max(0.5);
         let px = |units: f32| (unit * units).round() as u32;
@@ -2590,7 +2614,7 @@ impl ClockFace {
         } else {
             None
         };
-        let layout = idle_layout(
+        let laid = idle_layout(
             (view.width, view.height),
             below,
             m,
@@ -2598,6 +2622,17 @@ impl ClockFace {
             date,
             theme.date_place,
         );
+        // The burn-in guard's shift moves the words and their glass as one.
+        let layout = IdleLayout {
+            top: laid
+                .top
+                .map(|(x, y, w, h)| (x + shift.0, y + shift.1, w, h)),
+            middle: laid
+                .middle
+                .map(|(x, y, w, h)| (x + shift.0, y + shift.1, w, h)),
+            clock_y: laid.clock_y.map(|y| y + shift.1),
+            date_y: laid.date_y.map(|y| y + shift.1),
+        };
         if let Some((x, y, w, h)) = layout.top {
             let about = (pad_about(view.width, w, pad.0, least.0), pad.1);
             glass.behind(
@@ -2745,6 +2780,8 @@ impl ClockFace {
                 align,
                 (margin + about.0, margin + about.1),
             );
+            // The burn-in guard's shift, the block and its glass as one.
+            let (x, y) = (x + shift.0, y + shift.1);
             let (strength, tint) = match first {
                 Piece::Clock => (theme.clock_glass, theme.clock_tint),
                 Piece::Date => (theme.date_glass, theme.date_tint),
@@ -3075,6 +3112,14 @@ impl Face {
         }
         if let (Some(tm), Some(tokens)) = (time, self.tokens.as_ref()) {
             let theme = &tokens.theme;
+            // The burn-in guard's shift: a new one is another picture.
+            guard_shift(
+                theme.idle_guard,
+                theme.idle_guard_px,
+                theme.idle_guard_every,
+                view.now_ms,
+            )
+            .hash(&mut h);
             if theme.clock_show {
                 format_time(&theme.clock_format, tm).hash(&mut h);
                 // A card on its way is another picture every frame.
@@ -3237,7 +3282,15 @@ impl Overlay for Face {
                     hairline: theme.hairline,
                     frost: frosted.then_some(&mut self.frost),
                 };
-                drawn |= self.clock.draw(frame, view, theme, &mut glass, bar.h, wall);
+                let shift = guard_shift(
+                    theme.idle_guard,
+                    theme.idle_guard_px,
+                    theme.idle_guard_every,
+                    view.now_ms,
+                );
+                drawn |= self
+                    .clock
+                    .draw(frame, view, theme, &mut glass, bar.h, wall, shift);
             }
         }
         if alpha > 0 {
@@ -3861,6 +3914,39 @@ impl Overlay for Face {
 
 #[cfg(test)]
 mod tests {
+    /// The burn-in guard's shift: none while off, within the bound on each
+    /// axis, the same throughout a step, and moving from step to step, so
+    /// no bright pixel stands still for long.
+    #[test]
+    fn the_guard_shifts_the_idle_pieces_within_the_bound_once_a_step() {
+        assert_eq!(guard_shift(false, 8, 3, 1_000_000), (0, 0), "off");
+        assert_eq!(guard_shift(true, 0, 3, 1_000_000), (0, 0), "no distance");
+        let step = 3 * 60_000u64;
+        let at = |ms: u64| guard_shift(true, 6, 3, ms);
+        assert_eq!(at(0), at(step - 1), "steady within a step");
+        assert_eq!(at(step), at(2 * step - 1));
+        let mut seen = std::collections::HashSet::new();
+        for i in 0..200u64 {
+            let (dx, dy) = at(i * step);
+            assert!(
+                dx.abs() <= 6 && dy.abs() <= 6,
+                "within the bound: {dx}, {dy}"
+            );
+            seen.insert((dx, dy));
+        }
+        assert!(
+            seen.len() > 60,
+            "spread over the square, not a line: {}",
+            seen.len()
+        );
+        assert_ne!(at(0), at(step), "a new shift at the step");
+        assert_ne!(
+            guard_shift(true, 16, 1, 60_000),
+            guard_shift(true, 16, 1, 120_000),
+            "every minute at one"
+        );
+    }
+
     /// The change from one picture to the next as the line says: a fade
     /// takes the old out over the first half and the new in over the
     /// second, a merge crosses them, none is none, and a change done is
