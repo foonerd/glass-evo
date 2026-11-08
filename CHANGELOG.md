@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.33] - 2026-11-08
+
+- Built on Glass 0.11.33, in step with it: the face follows the player's picture line live, the change between two pictures (a fade through the ground or the two merged) and the slow motion over one
+
 ## [0.11.32] - 2026-11-08
 
 - Built on Glass 0.11.32, in step with it: the forecast's place in a backup
