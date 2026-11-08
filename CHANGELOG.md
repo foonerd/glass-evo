@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.36] - 2026-11-08
+
+- Built on Glass 0.11.36, in step with it: the face shifts the clock, the date and the forecast with their glass as one by the guard's few pixels every few minutes when the look asks (idle.guard, idle.guard.px, idle.guard.every), off unless said
+
 ## [0.11.35] - 2026-11-08
 
 - Built on Glass 0.11.35, in step with it: the Manager's forecast falls back to MET Norway when Open-Meteo cannot be reached, the face reading the same WMO codes, unchanged
