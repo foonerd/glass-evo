@@ -67,6 +67,15 @@ grep -q "glass-evo.exe" "$GLASS_SRC/remote/windows/install.ps1" || { echo "ship-
 TOP=glass-evo-$VERSION-windows-x64
 rm -rf dist/windows && mkdir -p "dist/windows/$TOP/remote"
 cp -r bin/windows-x64 "dist/windows/$TOP/bin"
+# The movie's decoder beside the display, as Glass's Windows archive carries
+# it: evovpeg's Windows build at the version Glass's lock names, fetched and
+# verified by Glass's own script from the Glass this face is built on.
+[ -f "$GLASS_SRC/scripts/fetch-components.sh" ] && [ -f "$GLASS_SRC/components/evovpeg.lock" ] || { echo "ship-windows: the Glass this is built on carries no decoder lock (0.11.41 or later is needed)" >&2; exit 1; }
+COMPONENTS_ROOT="$ROOT" bash "$GLASS_SRC/scripts/fetch-components.sh" evovpeg
+DECODER=$(sed -n 's/^VERSION=//p' "$GLASS_SRC/components/evovpeg.lock")
+for p in evovpeg evovprobe; do
+  install -D -m 755 "$ROOT/target/components/evovpeg/windows-x64/evovpeg-$DECODER-windows-x64/bin/$p.exe" "dist/windows/$TOP/bin/$p.exe"
+done
 cp -r "$GLASS_SRC/remote/windows" "dist/windows/$TOP/remote/windows"
 cp "$GLASS_SRC/remote/README.md" "dist/windows/$TOP/remote/README.md"
 chmod -R u+w "dist/windows/$TOP"

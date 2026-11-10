@@ -72,10 +72,21 @@ let s = ""; process.stdin.on("data", (d) => s += d).on("end", () => {
 });')
 [ -n "$GLASS_SRC" ] && [ -f "$GLASS_SRC/remote/linux/install.sh" ] || { echo "package: Glass's remote installer was not found (looked under: $GLASS_SRC)" >&2; exit 1; }
 grep -q 'binary_named glass-evo' "$GLASS_SRC/remote/linux/install.sh" || { echo "package: the Glass this is built on has an installer that does not know the bundle (0.8.21 or later is needed)" >&2; exit 1; }
+# The movie's decoder beside the display in every bundle, as Glass's own
+# remote archives carry it: evovpeg at the version Glass's lock names,
+# fetched and verified by Glass's own script from the Glass this face is
+# built on, unpacked under this tree's target, so a remote of either
+# flavour shows the film out of the box with no ffmpeg on the machine.
+[ -f "$GLASS_SRC/scripts/fetch-components.sh" ] && [ -f "$GLASS_SRC/components/evovpeg.lock" ] || { echo "package: the Glass this is built on carries no decoder lock (0.11.41 or later is needed)" >&2; exit 1; }
+COMPONENTS_ROOT="$ROOT" bash "$GLASS_SRC/scripts/fetch-components.sh" evovpeg
+DECODER=$(sed -n 's/^VERSION=//p' "$GLASS_SRC/components/evovpeg.lock")
 for arch in arm armv7 armv8 x64; do
   top="glass-evo-$VERSION-$arch"
   rm -rf "$STAGE/remote-$arch" && mkdir -p "$STAGE/remote-$arch/$top/remote"
   install -D -m 755 "bin/$arch/glass-evo" "$STAGE/remote-$arch/$top/bin/$arch/glass-evo"
+  for p in evovpeg evovprobe; do
+    install -D -m 755 "$ROOT/target/components/evovpeg/$arch/evovpeg-$DECODER-$arch/bin/$p" "$STAGE/remote-$arch/$top/bin/$arch/$p"
+  done
   cp -r "$GLASS_SRC/remote/linux" "$STAGE/remote-$arch/$top/remote/linux"
   cp "$GLASS_SRC/remote/README.md" "$STAGE/remote-$arch/$top/remote/README.md"
   chmod +x "$STAGE/remote-$arch/$top/remote/linux/"*.sh
