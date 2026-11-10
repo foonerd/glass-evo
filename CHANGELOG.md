@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.43] - 2026-11-10
+
+- Built on Glass 0.11.43, in step with it: the display draws its window with SDL's own renderer where Windows has no graphics driver (the display is this binary); the face unchanged
+
 ## [0.11.42] - 2026-11-10
 
 - Built on Glass 0.11.42, in step with it: the display's own upgrade places the decoder beside it from a Windows zip as from a Linux tar (the display is this binary), the bundle's decoder programs signed with the display; the face unchanged
