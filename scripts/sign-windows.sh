@@ -37,14 +37,25 @@ token=$(az account get-access-token --resource https://codesigning.azure.net --q
 TOP=$(ls dist/windows | head -n1)
 [ -n "$TOP" ] && [ -f "dist/windows/$TOP/bin/glass-evo.exe" ] || { echo "sign-windows: no bundle laid out under dist/windows (scripts/ship-windows.sh makes it)" >&2; exit 1; }
 EXE=dist/windows/$TOP/bin/glass-evo.exe
-for file in "$EXE" "dist/windows/$TOP/remote/windows/install.ps1" "dist/windows/$TOP/remote/windows/uninstall.ps1"; do
+files="$EXE dist/windows/$TOP/remote/windows/install.ps1 dist/windows/$TOP/remote/windows/uninstall.ps1"
+# The movie's decoder beside the display, signed as the display is, when
+# the bundle carries it (a bundle without it signs the display alone).
+for p in evovpeg evovprobe; do
+  if [ -f "dist/windows/$TOP/bin/$p.exe" ]; then files="$files dist/windows/$TOP/bin/$p.exe"; fi
+done
+for file in $files; do
+  case "$file" in
+    */evovpeg.exe) name="Glass Remote: the movie's decoder" ;;
+    */evovprobe.exe) name="Glass Remote: the movie's prober" ;;
+    *) name="Glass Remote" ;;
+  esac
   echo "sign-windows: $file"
   jsign --storetype TRUSTEDSIGNING \
     --keystore "${TRUSTED_SIGNING_ENDPOINT#https://}" \
     --storepass "$token" \
     --alias "$TRUSTED_SIGNING_ACCOUNT/$TRUSTED_SIGNING_PROFILE" \
     --tsaurl http://timestamp.acs.microsoft.com --tsmode RFC3161 \
-    --name "Glass Remote" --url https://github.com/foonerd/glass-evo \
+    --name "$name" --url https://github.com/foonerd/glass-evo \
     "$file"
 done
 # The runner has no Microsoft root certificates, so osslsigncode cannot
@@ -53,11 +64,14 @@ done
 # Microsoft's public code signing CA, and a timestamp. osslsigncode before
 # 2.8 listed the timestamp authority's certificates ("Timestamping CA");
 # 2.8, which the runner installs fresh each time, says "Timestamp time".
-echo "sign-windows: verify"
-report=$(osslsigncode verify "$EXE" 2>&1 || true)
-echo "$report" | grep -E "Subject:|verification" | sed 's/^/sign-windows:   /'
-echo "$report" | grep -q "Microsoft ID Verified Code Signing PCA" \
-  || { echo "sign-windows: glass-evo.exe carries no signature under Microsoft's public code signing CA" >&2; exit 1; }
-echo "$report" | grep -qE "Timestamping CA|Timestamp time:" \
-  || { echo "sign-windows: glass-evo.exe carries no timestamp" >&2; echo "$report" | sed 's/^/sign-windows:   /' >&2; exit 1; }
+for exe in $files; do
+  case "$exe" in *.exe) ;; *) continue ;; esac
+  echo "sign-windows: verify $exe"
+  report=$(osslsigncode verify "$exe" 2>&1 || true)
+  echo "$report" | grep -E "Subject:|verification" | sed 's/^/sign-windows:   /'
+  echo "$report" | grep -q "Microsoft ID Verified Code Signing PCA" \
+    || { echo "sign-windows: $exe carries no signature under Microsoft's public code signing CA" >&2; exit 1; }
+  echo "$report" | grep -qE "Timestamping CA|Timestamp time:" \
+    || { echo "sign-windows: $exe carries no timestamp" >&2; echo "$report" | sed 's/^/sign-windows:   /' >&2; exit 1; }
+done
 echo "sign-windows: signed and timestamped"
