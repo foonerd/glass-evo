@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.42] - 2026-11-10
+
+- Built on Glass 0.11.42, in step with it: the display's own upgrade places the decoder beside it from a Windows zip as from a Linux tar (the display is this binary), the bundle's decoder programs signed with the display; the face unchanged
+
 ## [0.11.41] - 2026-11-10
 
 - Built on Glass 0.11.41, in step with it: the bundles for a remote carry the movie's decoder beside the display, as Glass's archives do, fetched and verified through Glass's component script from the Glass they are built on (the display is this binary); the face unchanged
