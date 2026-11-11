@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.44] - 2026-11-11
+
+- Built on Glass 0.11.44, in step with it: the player tells a remote its word on the movie at the hello and gives the film's address for every container (the plugin's change; the display is this binary unchanged); the face unchanged
+
 ## [0.11.43] - 2026-11-10
 
 - **Breaking change for Windows remotes.** A Windows bundle at 0.11.41 or earlier cannot bring itself to this release from its Version panel in one piece: the program that unpacks an upgrade is the one being upgraded from, and those releases read Linux archives only, so the movie's decoder is left out; and on a machine with no graphics driver the old display can stop answering Windows at its restart. Bring such a remote to this release once by running the installer from the bundle's zip (`remote\windows\install.ps1`), which keeps its settings, its players and its menu entries; from then on the Version panel's upgrades work as before and carry the decoder. Linux and Android remotes are not affected.
