@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.45] - 2026-11-12
+
+- Built on Glass 0.11.45, in step with it: the display counts the player's stand-in picture as no cover, so the colour shows behind the theme where a track has none (the display is this binary); the face unchanged
+
 ## [0.11.44] - 2026-11-11
 
 - Built on Glass 0.11.44, in step with it: the player tells a remote its word on the movie at the hello and gives the film's address for every container (the plugin's change; the display is this binary unchanged); the face unchanged
