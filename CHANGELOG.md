@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.46] - 2026-11-12
+
+- Built on Glass 0.11.46, in step with it: the display draws the album art or the fan art in a theme's video box while no film plays, where the theme's video.idle says so (the display is this binary); the face unchanged
+
 ## [0.11.45] - 2026-11-12
 
 - Built on Glass 0.11.45, in step with it: the display counts the player's stand-in picture as no cover, so the colour shows behind the theme where a track has none (the display is this binary); the face unchanged
