@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.47] - 2026-11-12
+
+- Built on Glass 0.11.47, in step with it: a film in a theme's video box with video.zorder = background lies over the theme's background and under its meters and foreground, as the fan art does, on the player's screen and on every remote (the display is this binary); the face unchanged
+
 ## [0.11.46] - 2026-11-12
 
 - Built on Glass 0.11.46, in step with it: the display draws the album art or the fan art in a theme's video box while no film plays, where the theme's video.idle says so (the display is this binary); the face unchanged
