@@ -43,7 +43,7 @@ pub mod themes;
 pub mod when;
 use icon::Icon;
 use look::Look;
-use theme::{Across, Align, Cells, DatePlace, Down, Span, Theme};
+use theme::{Across, Align, Arrows, Cells, DatePlace, Down, Span, Theme};
 
 pub use overlay::Wall;
 
@@ -183,10 +183,14 @@ pub enum Tile {
     /// The player's power: off, reboot, standby where the board has it,
     /// on a page that asks before it acts.
     Power,
-    /// The theme before this one, in the Manager's order, applied at once.
-    ThemePrev,
-    /// The theme after this one, applied at once.
-    ThemeNext,
+    /// The arrow back: as the look's `sheet.arrows` says, the meter before
+    /// the one on show, stepped as a theme's own `meter.previous` button
+    /// steps, or the theme before this one in the Manager's order, applied
+    /// at once.
+    ArrowPrev,
+    /// The arrow on: the meter after the one on show, or the theme after
+    /// this one.
+    ArrowNext,
     /// The installed themes as a gallery of the Manager's previews.
     Themes,
     /// Play here: the player's sound on the device that draws the face,
@@ -198,8 +202,8 @@ pub enum Tile {
 /// The sheet's tiles in their order: the modes on the first row, the
 /// places on the second.
 const TILES: [Tile; 12] = [
-    Tile::ThemePrev,
-    Tile::ThemeNext,
+    Tile::ArrowPrev,
+    Tile::ArrowNext,
     Tile::Themes,
     Tile::Power,
     Tile::Repeat,
@@ -211,12 +215,12 @@ const TILES: [Tile; 12] = [
     Tile::Queue,
     Tile::Search,
 ];
-/// The sheet's rows: the themes at the top with the player's power beside
-/// them, the player's modes under them with Play here beside mute (its
+/// The sheet's rows: the arrows (on the theme's meters, or on the themes)
+/// and the themes' gallery at the top with the player's power beside them, the player's modes under them with Play here beside mute (its
 /// cell empty where the host cannot play), the library below; the columns
 /// follow from the longest row.
 const TILE_ROWS: [&[Tile]; 3] = [
-    &[Tile::ThemePrev, Tile::ThemeNext, Tile::Themes, Tile::Power],
+    &[Tile::ArrowPrev, Tile::ArrowNext, Tile::Themes, Tile::Power],
     &[Tile::Repeat, Tile::Random, Tile::Mute, Tile::PlayHere],
     &[Tile::Favourite, Tile::Browse, Tile::Queue, Tile::Search],
 ];
@@ -458,14 +462,25 @@ pub fn mute_command(muted: bool) -> Command {
 
 /// The command a tile sends, given the player's state: repeat walks off,
 /// all, single and off again; random, mute and the favourite turn over.
-pub fn tile_command(tile: Tile, meta: &Metadata) -> Option<Command> {
+/// The arrows send what the look's `sheet.arrows` has them step: on the
+/// meters a theme's own words for its buttons, `meter.previous` and
+/// `meter.next`, which the display that draws the face carries out as it
+/// does a theme's button (the step, and the player told); on the themes
+/// the player's `theme` with `previous` or `next`.
+pub fn tile_command(tile: Tile, meta: &Metadata, arrows: Arrows) -> Option<Command> {
     Some(match tile {
         // The places open their views; they send the player nothing.
         Tile::Queue | Tile::Browse | Tile::Search | Tile::Power | Tile::Themes | Tile::PlayHere => {
             return None
         }
-        Tile::ThemePrev => Command::with("theme", serde_json::json!("previous")),
-        Tile::ThemeNext => Command::with("theme", serde_json::json!("next")),
+        Tile::ArrowPrev => match arrows {
+            Arrows::Meters => Command::new("meter.previous"),
+            Arrows::Themes => Command::with("theme", serde_json::json!("previous")),
+        },
+        Tile::ArrowNext => match arrows {
+            Arrows::Meters => Command::new("meter.next"),
+            Arrows::Themes => Command::with("theme", serde_json::json!("next")),
+        },
         Tile::Repeat => {
             let next = match (meta.repeat, meta.repeat_single) {
                 (false, _) => "all",
@@ -489,8 +504,8 @@ pub fn tile_lit(tile: Tile, meta: &Metadata, play_here_on: bool) -> bool {
         | Tile::Browse
         | Tile::Search
         | Tile::Power
-        | Tile::ThemePrev
-        | Tile::ThemeNext
+        | Tile::ArrowPrev
+        | Tile::ArrowNext
         | Tile::Themes => false,
         Tile::Repeat => meta.repeat,
         Tile::Random => meta.random,
@@ -528,15 +543,15 @@ pub fn tile_icon(tile: Tile, meta: &Metadata) -> Icon {
         Tile::Browse => Icon::Browse,
         Tile::Search => Icon::Search,
         Tile::Power => Icon::Power,
-        Tile::ThemePrev => Icon::Back,
-        Tile::ThemeNext => Icon::Right,
+        Tile::ArrowPrev => Icon::Back,
+        Tile::ArrowNext => Icon::Right,
         Tile::Themes => Icon::Themes,
         Tile::PlayHere => Icon::Headphones,
     }
 }
 
 /// The word under a tile, saying what it is and, for a mode, how it stands.
-pub fn tile_label(tile: Tile, meta: &Metadata, play_here_on: bool) -> &'static str {
+pub fn tile_label(tile: Tile, meta: &Metadata, play_here_on: bool, arrows: Arrows) -> &'static str {
     match tile {
         Tile::PlayHere if play_here_on => "Playing here",
         Tile::PlayHere => "Play here",
@@ -550,8 +565,14 @@ pub fn tile_label(tile: Tile, meta: &Metadata, play_here_on: bool) -> &'static s
         Tile::Queue => "Queue",
         Tile::Search => "Search",
         Tile::Power => "Power",
-        Tile::ThemePrev => "Previous theme",
-        Tile::ThemeNext => "Next theme",
+        Tile::ArrowPrev => match arrows {
+            Arrows::Meters => "Previous meter",
+            Arrows::Themes => "Previous theme",
+        },
+        Tile::ArrowNext => match arrows {
+            Arrows::Meters => "Next meter",
+            Arrows::Themes => "Next theme",
+        },
         Tile::Themes => "Themes",
     }
 }
@@ -3109,6 +3130,11 @@ impl Face {
                 )
                     .hash(&mut h);
             }
+            // The arrows' words follow what the look has them step.
+            self.tokens
+                .as_ref()
+                .map(|t| t.theme.sheet_arrows)
+                .hash(&mut h);
         }
         if let (Some(tm), Some(tokens)) = (time, self.tokens.as_ref()) {
             let theme = &tokens.theme;
@@ -3614,7 +3640,7 @@ impl Overlay for Face {
                         TextStyle::Regular,
                         word_h,
                         theme.ink,
-                        tile_label(*tile, meta, view.input.play_here.on),
+                        tile_label(*tile, meta, view.input.play_here.on, theme.sheet_arrows),
                     ) {
                         ui::blit(
                             frame,
@@ -3856,7 +3882,9 @@ impl Overlay for Face {
                             self.sheet_open = false;
                             self.queue.close();
                             self.browse.open_search();
-                        } else if let Some(command) = tile_command(tile, meta) {
+                        } else if let Some(command) =
+                            tile_command(tile, meta, self.tokens(view).theme.sheet_arrows)
+                        {
                             self.pending.push(command);
                         }
                     }
@@ -4142,7 +4170,7 @@ mod tests {
                 th: 88
             }
         );
-        assert_eq!(sheet.tile_at(500, 420), Some(Tile::ThemePrev));
+        assert_eq!(sheet.tile_at(500, 420), Some(Tile::ArrowPrev));
         assert_eq!(sheet.tile_at(960, 420), Some(Tile::Themes));
         assert_eq!(
             sheet.tile_at(1200, 420),
@@ -4226,40 +4254,40 @@ mod tests {
         );
         let mut meta = Metadata::default();
         assert_eq!(
-            pair(tile_command(Tile::Repeat, &meta).unwrap()),
+            pair(tile_command(Tile::Repeat, &meta, Arrows::Meters).unwrap()),
             ("repeat".to_string(), Some(serde_json::json!("all")))
         );
         meta.repeat = true;
         assert_eq!(
-            pair(tile_command(Tile::Repeat, &meta).unwrap()),
+            pair(tile_command(Tile::Repeat, &meta, Arrows::Meters).unwrap()),
             ("repeat".to_string(), Some(serde_json::json!("single")))
         );
         meta.repeat_single = true;
         assert_eq!(
-            pair(tile_command(Tile::Repeat, &meta).unwrap()),
+            pair(tile_command(Tile::Repeat, &meta, Arrows::Meters).unwrap()),
             ("repeat".to_string(), Some(serde_json::json!("off")))
         );
         assert_eq!(
-            pair(tile_command(Tile::Random, &meta).unwrap()),
+            pair(tile_command(Tile::Random, &meta, Arrows::Meters).unwrap()),
             ("random".to_string(), Some(serde_json::json!(true)))
         );
         assert_eq!(
-            pair(tile_command(Tile::Mute, &meta).unwrap()),
+            pair(tile_command(Tile::Mute, &meta, Arrows::Meters).unwrap()),
             ("volume".to_string(), Some(serde_json::json!("mute")))
         );
         meta.mute = true;
         assert_eq!(
-            pair(tile_command(Tile::Mute, &meta).unwrap()),
+            pair(tile_command(Tile::Mute, &meta, Arrows::Meters).unwrap()),
             ("volume".to_string(), Some(serde_json::json!("unmute")))
         );
         assert_eq!(
-            pair(tile_command(Tile::Favourite, &meta).unwrap()),
+            pair(tile_command(Tile::Favourite, &meta, Arrows::Meters).unwrap()),
             ("favourite".to_string(), Some(serde_json::json!(true))),
             "a track that is no favourite is made one"
         );
         meta.favourite = true;
         assert_eq!(
-            pair(tile_command(Tile::Favourite, &meta).unwrap()),
+            pair(tile_command(Tile::Favourite, &meta, Arrows::Meters).unwrap()),
             ("favourite".to_string(), Some(serde_json::json!(false))),
             "and one that is, is taken out"
         );
@@ -4274,17 +4302,90 @@ mod tests {
             !tile_lit(Tile::PlayHere, &meta, false) && tile_lit(Tile::PlayHere, &meta, true),
             "Play here wears the host's word, not the player's"
         );
-        assert_eq!(tile_label(Tile::PlayHere, &meta, false), "Play here");
-        assert_eq!(tile_label(Tile::PlayHere, &meta, true), "Playing here");
+        assert_eq!(
+            tile_label(Tile::PlayHere, &meta, false, Arrows::Meters),
+            "Play here"
+        );
+        assert_eq!(
+            tile_label(Tile::PlayHere, &meta, true, Arrows::Meters),
+            "Playing here"
+        );
         assert_eq!(tile_icon(Tile::PlayHere, &meta), Icon::Headphones);
         assert!(
-            tile_command(Tile::PlayHere, &meta).is_none(),
+            tile_command(Tile::PlayHere, &meta, Arrows::Meters).is_none(),
             "Play here opens its page and sends the player nothing"
         );
         assert!(
-            tile_command(Tile::Queue, &meta).is_none(),
+            tile_command(Tile::Queue, &meta, Arrows::Meters).is_none(),
             "the queue tile opens the list and sends nothing"
         );
+    }
+
+    /// The sheet's two arrows step what the look says: the meters of the
+    /// theme on show, in a theme's own words for its buttons, which the
+    /// display carries out; or the installed themes, by the player's
+    /// `theme`. Their words say which, their icons stay.
+    #[test]
+    fn the_arrows_step_the_meters_or_the_themes_as_the_look_says() {
+        let meta = Metadata::default();
+        let pair = |c: Command| (c.name, c.value);
+        assert_eq!(
+            pair(tile_command(Tile::ArrowPrev, &meta, Arrows::Meters).unwrap()),
+            ("meter.previous".to_string(), None),
+            "the display's own step, as a theme's button"
+        );
+        assert_eq!(
+            pair(tile_command(Tile::ArrowNext, &meta, Arrows::Meters).unwrap()),
+            ("meter.next".to_string(), None)
+        );
+        assert_eq!(
+            pair(tile_command(Tile::ArrowPrev, &meta, Arrows::Themes).unwrap()),
+            ("theme".to_string(), Some(serde_json::json!("previous")))
+        );
+        assert_eq!(
+            pair(tile_command(Tile::ArrowNext, &meta, Arrows::Themes).unwrap()),
+            ("theme".to_string(), Some(serde_json::json!("next")))
+        );
+        assert_eq!(
+            (
+                tile_label(Tile::ArrowPrev, &meta, false, Arrows::Meters),
+                tile_label(Tile::ArrowNext, &meta, false, Arrows::Meters)
+            ),
+            ("Previous meter", "Next meter")
+        );
+        assert_eq!(
+            (
+                tile_label(Tile::ArrowPrev, &meta, false, Arrows::Themes),
+                tile_label(Tile::ArrowNext, &meta, false, Arrows::Themes)
+            ),
+            ("Previous theme", "Next theme")
+        );
+        assert_eq!(
+            (
+                tile_icon(Tile::ArrowPrev, &meta),
+                tile_icon(Tile::ArrowNext, &meta)
+            ),
+            (Icon::Back, Icon::Right)
+        );
+        assert_eq!(
+            tile_label(Tile::Themes, &meta, false, Arrows::Meters),
+            "Themes",
+            "the gallery beside them, whatever they step"
+        );
+        // As the look comes, the meters; the word read as written, any other left.
+        let mut theme = Theme::default();
+        assert_eq!(theme.sheet_arrows, Arrows::Meters);
+        let said = |word: &str| {
+            [("sheet.arrows".to_string(), word.to_string())]
+                .into_iter()
+                .collect::<BTreeMap<String, String>>()
+        };
+        theme.apply(&said(" Themes "));
+        assert_eq!(theme.sheet_arrows, Arrows::Themes);
+        theme.apply(&said("looks"));
+        assert_eq!(theme.sheet_arrows, Arrows::Themes, "a word that is none");
+        theme.apply(&said("meters"));
+        assert_eq!(theme.sheet_arrows, Arrows::Meters);
     }
 
     #[test]

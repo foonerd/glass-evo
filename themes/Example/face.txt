@@ -64,6 +64,15 @@ tint = tint
 # two seconds while a ring fills. Screen is the one for a car dash.
 ask = screen
 
+[sheet]
+# What the two arrows at the top of the More sheet step: "meters", a tap
+# shows the meter before or after the one on show (in the list's order
+# where a list of meters is set, else in the theme's; where one meter is
+# set, the meter stepped to becomes that one); or "themes", a tap puts on
+# the installed theme before or after this one. The Themes tile beside
+# them opens the gallery either way.
+arrows = meters
+
 [clock]
 # The clock shows when nothing plays: on or off.
 show = on

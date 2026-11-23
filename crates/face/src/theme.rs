@@ -28,6 +28,18 @@ pub enum PowerAsk {
     Hold,
 }
 
+/// What the More sheet's two arrows step (`sheet.arrows`): the meters of
+/// the theme on show, the default, one tap to the meter before or after
+/// the one on show as a theme's own `meter.previous` and `meter.next`
+/// buttons step; or the installed themes, one tap to the theme before or
+/// after this one. The Themes tile beside them opens the gallery either way.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Arrows {
+    #[default]
+    Meters,
+    Themes,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ListShape {
     #[default]
@@ -201,6 +213,9 @@ pub struct Theme {
     /// `power.ask`: how the Power page asks before it acts: on a second
     /// screen that cancels by itself, or by a tile held for two seconds.
     pub power_ask: PowerAsk,
+    /// `sheet.arrows`: what the More sheet's two arrows step: the meters
+    /// of the theme on show, or the installed themes.
+    pub sheet_arrows: Arrows,
     /// `glass.frost`: `auto`, `on` or `off`.
     pub frost: Frost,
     /// `buttons.ink`, `buttons.opacity`: the icons, when they have their own.
@@ -378,6 +393,7 @@ impl Default for Theme {
             hairline: 0.12,
             lists_shape: ListShape::Auto,
             power_ask: PowerAsk::Screen,
+            sheet_arrows: Arrows::Meters,
             frost: Frost::Auto,
             buttons_ink: None,
             buttons_opacity: 1.0,
@@ -606,6 +622,13 @@ impl Theme {
                         "screen" | "second screen" | "ask" => PowerAsk::Screen,
                         "hold" | "holding" | "held" => PowerAsk::Hold,
                         _ => self.power_ask,
+                    }
+                }
+                "sheet.arrows" => {
+                    self.sheet_arrows = match v.trim().to_ascii_lowercase().as_str() {
+                        "meters" => Arrows::Meters,
+                        "themes" => Arrows::Themes,
+                        _ => self.sheet_arrows,
                     }
                 }
                 "glass.frost" => {
@@ -1105,6 +1128,7 @@ mod tests {
             "buttons.show",
             "buttons.idle",
             "power.ask",
+            "sheet.arrows",
             "clock.show",
             "clock.format",
             "clock.ink",
@@ -1149,7 +1173,7 @@ mod tests {
         }
         assert_eq!(
             written.len(),
-            68,
+            69,
             "and nothing but what the face reads and the line for a list"
         );
     }
