@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.50] - 2026-11-24
+
+- Built on Glass 0.11.50, in step with it: the movie's decoder goes in from a file where the player cannot fetch it, through the Manager's Install from a file (the Manager is Glass's); the face unchanged
+
 ## [0.11.49] - 2026-11-24
 
 - Built on Glass 0.11.49, in step with it: a download that breaks carries on from where it stood, the glass-evo component's among them (the Manager is Glass's); the face unchanged
