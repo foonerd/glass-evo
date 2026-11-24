@@ -2,6 +2,10 @@
 
 All notable changes to glass-evo are recorded here. The format follows Keep a Changelog; versions follow Semantic Versioning.
 
+## [0.11.49] - 2026-11-24
+
+- Built on Glass 0.11.49, in step with it: a download that breaks carries on from where it stood, the glass-evo component's among them (the Manager is Glass's); the face unchanged
+
 ## [0.11.48] - 2026-11-23
 
 - Built on Glass 0.11.48, in step with it: the More sheet's two arrows step the meters of the theme on show, one touch to the meter before or after the one on show as a theme's own buttons step, with the words Previous meter and Next meter; the look's new sheet.arrows key, set in the Manager's How the screen looks under More sheet, puts them back on the installed themes
